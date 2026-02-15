@@ -71,6 +71,12 @@ Beispiel-Logins nach Seed:
 
 1. `cp .env.example .env`
 2. `.env` Werte anpassen (Passwoerter/JWT)
+   - Wenn `3306` belegt ist: `MYSQL_PORT` auf freien Host-Port setzen (z.B. `3307`)
+   - Optional Admin-Startdaten:
+   - `ADMIN_LOGIN_NAME`
+   - `ADMIN_PASSWORD`
+   - `ADMIN_NAME`
+   - `ADMIN_EMAIL`
 3. Start:
    - `docker compose up --build -d`
 4. Aufruf:
@@ -79,9 +85,13 @@ Beispiel-Logins nach Seed:
    - Terminal API: `http://localhost:${TERMINAL_PORT}/api/terminal/punch`
 
 Hinweis zu Ports:
-- Die effektiven Docker-Ports kommen aus `.env` (`WEB_PORT`, `API_PORT`, `TERMINAL_PORT`).
+- Die effektiven Docker-Ports kommen aus `.env` (`WEB_PORT`, `API_PORT`, `TERMINAL_PORT`, `MYSQL_PORT`).
 - Die Portwerte im Admin-Webinterface sind Sollwerte in der Datenbank und aendern Docker nicht automatisch.
 - Nach Port-Aenderungen in `.env`: `docker compose up -d --build` erneut ausfuehren.
+
+Hinweis Admin-Bootstrap:
+- Beim API-Start wird ein Admin aus den `.env`-Werten automatisch angelegt/aktualisiert.
+- Aenderst du `ADMIN_LOGIN_NAME` oder `ADMIN_PASSWORD`, dann nach Rebuild/Restart mit den neuen Daten einloggen.
 
 ## Synology Docker
 
