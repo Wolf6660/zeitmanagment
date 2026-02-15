@@ -63,6 +63,17 @@ model User {
   updatedAt                 DateTime @updatedAt
 }
 
+model RfidTerminal {
+  id                String   @id @default(cuid())
+  name              String
+  location          String?
+  apiKey            String   @unique
+  isActive          Boolean  @default(true)
+  lastSeenAt        DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
 model TimeEntry {
   id                String          @id @default(cuid())
   userId            String
@@ -193,6 +204,9 @@ model SystemConfig {
 
   accountantMailEnabled             Boolean  @default(false)
   accountantEmail                   String?
+  webPort                           Int      @default(3000)
+  apiPort                           Int      @default(4000)
+  terminalPort                      Int      @default(4010)
 
   createdAt                         DateTime @default(now())
   updatedAt                         DateTime @updatedAt

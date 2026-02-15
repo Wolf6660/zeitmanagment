@@ -28,6 +28,8 @@ Komplettes Grundgeruest fuer ein Zeiterfassungssystem mit:
 - Dropdown-Werte pflegen
 - Krankmeldung eintragen (von/bis, optional stundenweise)
 - Admin-Konfiguration fuer Firma/System/Pausen/Farben
+- RFID-Terminals anlegen, deaktivieren/aktivieren, Key neu erzeugen
+- Port-Sollwerte (Web/API/Terminal) in Admin-Konfiguration pflegbar
 
 ### Verwaltung / Regeln (Basis)
 - MySQL Datenbank
@@ -72,8 +74,14 @@ Beispiel-Logins nach Seed:
 3. Start:
    - `docker compose up --build -d`
 4. Aufruf:
-   - Web: `http://localhost:3000`
-   - API Health: `http://localhost:4000/api/health`
+   - Web: `http://localhost:${WEB_PORT}`
+   - API Health: `http://localhost:${API_PORT}/api/health`
+   - Terminal API: `http://localhost:${TERMINAL_PORT}/api/terminal/punch`
+
+Hinweis zu Ports:
+- Die effektiven Docker-Ports kommen aus `.env` (`WEB_PORT`, `API_PORT`, `TERMINAL_PORT`).
+- Die Portwerte im Admin-Webinterface sind Sollwerte in der Datenbank und aendern Docker nicht automatisch.
+- Nach Port-Aenderungen in `.env`: `docker compose up -d --build` erneut ausfuehren.
 
 ## Synology Docker
 
@@ -103,11 +111,15 @@ Beispiel-Logins nach Seed:
 - `PATCH /api/admin/config`
 - `POST /api/admin/holidays`
 - `POST /api/admin/sick-leave`
+- `GET /api/admin/terminals`
+- `POST /api/admin/terminals`
+- `PATCH /api/admin/terminals/:id`
+- `POST /api/admin/terminals/:id/regenerate-key`
+- `POST /api/terminal/punch`
 
 ## Noch offen fuer die naechste Ausbaustufe
 
 - PDF-Export im finalen Stundenzettel-Design
-- RFID-Terminal Schnittstelle
 - SMTP-Mails bei Urlaubsantraegen und >12h Schicht final verdrahten
 - Exakte Regelabbildung fuer Feiertag/Gehaltsempfaenger/Urlaub-First-Resturlaub
 - Jahreswechsel-Automatisierung am 31.12 als geplanter Job

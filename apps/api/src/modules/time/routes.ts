@@ -123,7 +123,7 @@ timeRouter.get("/summary/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, 
     return;
   }
 
-  const targetUserId = req.params.userId;
+  const targetUserId = String(req.params.userId);
   if (req.auth.role === Role.EMPLOYEE && req.auth.userId !== targetUserId) {
     res.status(403).json({ message: "Keine Berechtigung." });
     return;

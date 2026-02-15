@@ -1,4 +1,5 @@
 import { Role } from "@prisma/client";
+import crypto from "node:crypto";
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../../db/prisma.js";
@@ -35,7 +36,10 @@ const configSchema = z.object({
   smtpPassword: z.string().nullable().optional(),
   smtpFrom: z.string().email().nullable().optional(),
   accountantMailEnabled: z.boolean().optional(),
-  accountantEmail: z.string().email().nullable().optional()
+  accountantEmail: z.string().email().nullable().optional(),
+  webPort: z.number().int().min(1).max(65535).optional(),
+  apiPort: z.number().int().min(1).max(65535).optional(),
+  terminalPort: z.number().int().min(1).max(65535).optional()
 });
 
 adminRouter.patch("/config", async (req, res) => {
@@ -94,8 +98,9 @@ adminRouter.post("/dropdown-options", async (req, res) => {
 });
 
 adminRouter.get("/dropdown-options/:category", async (req, res) => {
+  const category = String(req.params.category);
   const options = await prisma.dropdownOption.findMany({
-    where: { category: req.params.category, isActive: true },
+    where: { category, isActive: true },
     orderBy: { label: "asc" }
   });
   res.json(options);
@@ -179,4 +184,64 @@ adminRouter.post("/year-end-rollover/:year", async (_req, res) => {
   }
 
   res.json({ year, processedUsers: changes.length, changes });
+});
+
+const createTerminalSchema = z.object({
+  name: z.string().min(1),
+  location: z.string().max(255).optional()
+});
+
+adminRouter.post("/terminals", async (req, res) => {
+  const parsed = createTerminalSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: "Ungueltige Eingaben." });
+    return;
+  }
+
+  const terminal = await prisma.rfidTerminal.create({
+    data: {
+      name: parsed.data.name,
+      location: parsed.data.location,
+      apiKey: crypto.randomBytes(24).toString("hex")
+    }
+  });
+
+  res.status(201).json(terminal);
+});
+
+adminRouter.get("/terminals", async (_req, res) => {
+  const terminals = await prisma.rfidTerminal.findMany({
+    orderBy: { createdAt: "desc" }
+  });
+  res.json(terminals);
+});
+
+const updateTerminalSchema = z.object({
+  name: z.string().min(1).optional(),
+  location: z.string().max(255).nullable().optional(),
+  isActive: z.boolean().optional()
+});
+
+adminRouter.patch("/terminals/:id", async (req, res) => {
+  const parsed = updateTerminalSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: "Ungueltige Eingaben." });
+    return;
+  }
+
+  const terminalId = String(req.params.id);
+  const updated = await prisma.rfidTerminal.update({
+    where: { id: terminalId },
+    data: parsed.data
+  });
+  res.json(updated);
+});
+
+adminRouter.post("/terminals/:id/regenerate-key", async (req, res) => {
+  const terminalId = String(req.params.id);
+  const updated = await prisma.rfidTerminal.update({
+    where: { id: terminalId },
+    data: { apiKey: crypto.randomBytes(24).toString("hex") }
+  });
+  res.json(updated);
 });

@@ -81,8 +81,41 @@ export const api = {
   decideLeave: (payload: { leaveId: string; decision: "APPROVED" | "REJECTED"; decisionNote?: string }) =>
     request("/api/leave/decision", { method: "POST", body: JSON.stringify(payload) }),
 
-  getConfig: () => request<{ systemName: string; companyName: string; autoBreakMinutes: number; autoBreakAfterHours: number; colorApproved: string; colorRejected: string; colorManualCorrection: string; colorBreakCredit: string; colorSickLeave: string; colorHolidayOrWeekendWork: string; colorVacationWarning: string }>("/api/admin/config"),
+  getConfig: () =>
+    request<{
+      systemName: string;
+      companyName: string;
+      autoBreakMinutes: number;
+      autoBreakAfterHours: number;
+      colorApproved: string;
+      colorRejected: string;
+      colorManualCorrection: string;
+      colorBreakCredit: string;
+      colorSickLeave: string;
+      colorHolidayOrWeekendWork: string;
+      colorVacationWarning: string;
+      webPort: number;
+      apiPort: number;
+      terminalPort: number;
+    }>("/api/admin/config"),
 
   updateConfig: (payload: Record<string, unknown>) =>
-    request("/api/admin/config", { method: "PATCH", body: JSON.stringify(payload) })
+    request("/api/admin/config", { method: "PATCH", body: JSON.stringify(payload) }),
+
+  listTerminals: () =>
+    request<Array<{ id: string; name: string; location?: string; isActive: boolean; apiKey: string; lastSeenAt?: string }>>(
+      "/api/admin/terminals"
+    ),
+
+  createTerminal: (payload: { name: string; location?: string }) =>
+    request<{ id: string; name: string; location?: string; isActive: boolean; apiKey: string }>(
+      "/api/admin/terminals",
+      { method: "POST", body: JSON.stringify(payload) }
+    ),
+
+  updateTerminal: (id: string, payload: { name?: string; location?: string | null; isActive?: boolean }) =>
+    request(`/api/admin/terminals/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+
+  regenerateTerminalKey: (id: string) =>
+    request<{ id: string; apiKey: string }>(`/api/admin/terminals/${id}/regenerate-key`, { method: "POST" })
 };

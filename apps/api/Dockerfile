@@ -22,4 +22,5 @@ COPY --from=build /app/apps/api/prisma /app/apps/api/prisma
 
 WORKDIR /app/apps/api
 EXPOSE 4000
+EXPOSE 4010
 CMD ["sh", "-c", "npx prisma db push && node dist/index.js"]

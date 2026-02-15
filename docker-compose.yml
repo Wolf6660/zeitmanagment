@@ -24,6 +24,7 @@ services:
       TZ: ${TZ}
       NODE_ENV: production
       API_PORT: 4000
+      TERMINAL_PORT: 4010
       WEB_ORIGIN: http://localhost:${WEB_PORT}
       JWT_SECRET: ${JWT_SECRET}
       DATABASE_URL: mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE}
@@ -31,6 +32,7 @@ services:
       - db
     ports:
       - "${API_PORT}:4000"
+      - "${TERMINAL_PORT}:4010"
 
   web:
     build:

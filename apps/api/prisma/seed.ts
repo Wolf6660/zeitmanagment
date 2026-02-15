@@ -12,7 +12,10 @@ async function main() {
       systemName: "Zeitmanagment",
       defaultDailyHours: 8,
       autoBreakMinutes: 30,
-      autoBreakAfterHours: 6
+      autoBreakAfterHours: 6,
+      webPort: 3000,
+      apiPort: 4000,
+      terminalPort: 4010
     }
   });
 

@@ -124,9 +124,10 @@ employeesRouter.patch("/:id", requireRole([Role.SUPERVISOR, Role.ADMIN]), async 
     res.status(400).json({ message: "Ungueltige Eingaben." });
     return;
   }
+  const userId = String(req.params.id);
 
   const updated = await prisma.user.update({
-    where: { id: req.params.id },
+    where: { id: userId },
     data: parsed.data,
     select: {
       id: true,

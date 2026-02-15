@@ -9,6 +9,13 @@ async function bootstrap() {
     // eslint-disable-next-line no-console
     console.log(`API laeuft auf Port ${env.API_PORT}`);
   });
+
+  if (env.TERMINAL_PORT !== env.API_PORT) {
+    app.listen(env.TERMINAL_PORT, () => {
+      // eslint-disable-next-line no-console
+      console.log(`Terminal API laeuft auf Port ${env.TERMINAL_PORT}`);
+    });
+  }
 }
 
 bootstrap().catch(async (err) => {

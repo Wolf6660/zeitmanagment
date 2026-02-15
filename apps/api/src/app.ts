@@ -7,6 +7,7 @@ import { timeRouter } from "./modules/time/routes.js";
 import { leaveRouter } from "./modules/leave/routes.js";
 import { employeesRouter } from "./modules/employees/routes.js";
 import { adminRouter } from "./modules/admin/routes.js";
+import { terminalRouter } from "./modules/terminal/routes.js";
 import { env } from "./config/env.js";
 
 export function createApp() {
@@ -22,6 +23,7 @@ export function createApp() {
   app.use("/api/leave", leaveRouter);
   app.use("/api/employees", employeesRouter);
   app.use("/api/admin", adminRouter);
+  app.use("/api/terminal", terminalRouter);
 
   return app;
 }
