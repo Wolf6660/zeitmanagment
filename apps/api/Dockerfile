@@ -23,4 +23,4 @@ COPY --from=build /app/apps/api/prisma /app/apps/api/prisma
 WORKDIR /app/apps/api
 EXPOSE 4000
 EXPOSE 4010
-CMD ["sh", "-c", "npx prisma db push && node dist/index.js"]
+CMD ["sh", "-c", "until npx prisma db push; do echo 'Warte auf MySQL (db:3306)...'; sleep 3; done; node dist/index.js"]
