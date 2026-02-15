@@ -1,0 +1,199 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  EMPLOYEE
+  SUPERVISOR
+  ADMIN
+}
+
+enum TimeEntryType {
+  CLOCK_IN
+  CLOCK_OUT
+}
+
+enum TimeEntrySource {
+  WEB
+  RFID
+  MANUAL_CORRECTION
+}
+
+enum LeaveKind {
+  VACATION
+  OVERTIME
+}
+
+enum LeaveStatus {
+  SUBMITTED
+  APPROVED
+  REJECTED
+  CANCELED
+}
+
+model User {
+  id                        String   @id @default(cuid())
+  name                      String
+  email                     String   @unique
+  loginName                 String   @unique
+  passwordHash              String
+  role                      Role     @default(EMPLOYEE)
+  isActive                  Boolean  @default(true)
+  mailNotificationsEnabled  Boolean  @default(true)
+  annualVacationDays        Int      @default(30)
+  carryOverVacationDays     Float    @default(0)
+  rfidTag                   String?  @unique
+
+  timeEntries               TimeEntry[]         @relation("EmployeeTimeEntries")
+  leaveRequests             LeaveRequest[]      @relation("EmployeeLeaveRequests")
+  breakCredits              BreakCredit[]       @relation("EmployeeBreakCredits")
+  sickLeaves                SickLeave[]         @relation("EmployeeSickLeaves")
+  createdCorrections        TimeEntry[]         @relation("CorrectionAuthor")
+  createdBreakCredits       BreakCredit[]       @relation("BreakCreditAuthor")
+  approvedLeaveRequests     LeaveRequest[]      @relation("LeaveDecisionAuthor")
+  createdSickLeaves         SickLeave[]         @relation("SickLeaveAuthor")
+  vacationBalances          VacationBalance[]
+
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+}
+
+model TimeEntry {
+  id                String          @id @default(cuid())
+  userId            String
+  type              TimeEntryType
+  source            TimeEntrySource @default(WEB)
+  reasonCode        String?
+  reasonText        String?
+  isManualCorrection Boolean        @default(false)
+  correctionComment String?
+  occurredAt        DateTime
+  createdById       String?
+
+  user              User            @relation("EmployeeTimeEntries", fields: [userId], references: [id])
+  createdBy         User?           @relation("CorrectionAuthor", fields: [createdById], references: [id])
+
+  createdAt         DateTime        @default(now())
+
+  @@index([userId, occurredAt])
+}
+
+model BreakCredit {
+  id                String   @id @default(cuid())
+  userId            String
+  date              DateTime
+  minutes           Int
+  reason            String
+  createdById       String?
+
+  user              User     @relation("EmployeeBreakCredits", fields: [userId], references: [id])
+  createdBy         User?    @relation("BreakCreditAuthor", fields: [createdById], references: [id])
+
+  createdAt         DateTime @default(now())
+
+  @@index([userId, date])
+}
+
+model LeaveRequest {
+  id                String      @id @default(cuid())
+  userId            String
+  kind              LeaveKind
+  status            LeaveStatus @default(SUBMITTED)
+  startDate         DateTime
+  endDate           DateTime
+  note              String?
+  requestedAt       DateTime    @default(now())
+  decidedAt         DateTime?
+  decisionNote      String?
+  decidedById       String?
+
+  user              User        @relation("EmployeeLeaveRequests", fields: [userId], references: [id])
+  decidedBy         User?       @relation("LeaveDecisionAuthor", fields: [decidedById], references: [id])
+
+  @@index([userId, startDate, endDate])
+}
+
+model SickLeave {
+  id                String   @id @default(cuid())
+  userId            String
+  startDate         DateTime
+  endDate           DateTime
+  partialDayHours   Float?
+  note              String?
+  createdById       String?
+
+  user              User     @relation("EmployeeSickLeaves", fields: [userId], references: [id])
+  createdBy         User?    @relation("SickLeaveAuthor", fields: [createdById], references: [id])
+
+  createdAt         DateTime @default(now())
+
+  @@index([userId, startDate, endDate])
+}
+
+model Holiday {
+  id                String   @id @default(cuid())
+  date              DateTime @unique
+  name              String
+}
+
+model DropdownOption {
+  id                String   @id @default(cuid())
+  category          String
+  label             String
+  isActive          Boolean  @default(true)
+
+  createdAt         DateTime @default(now())
+
+  @@unique([category, label])
+}
+
+model VacationBalance {
+  id                String   @id @default(cuid())
+  userId            String
+  year              Int
+  carryOver         Float    @default(0)
+  annualEntitlement Float
+  usedCarryOver     Float    @default(0)
+  usedAnnual        Float    @default(0)
+
+  user              User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, year])
+}
+
+model SystemConfig {
+  id                                Int      @id
+  companyName                       String   @default("Meine Firma")
+  systemName                        String   @default("Zeitmanagment")
+  companyLogoUrl                    String?
+  defaultDailyHours                 Float    @default(8)
+  defaultWeeklyWorkingDays          String   @default("MON,TUE,WED,THU,FRI")
+  autoBreakMinutes                  Int      @default(30)
+  autoBreakAfterHours               Float    @default(6)
+
+  colorApproved                     String   @default("#22C55E")
+  colorRejected                     String   @default("#EF4444")
+  colorManualCorrection             String   @default("#DC2626")
+  colorBreakCredit                  String   @default("#EC4899")
+  colorSickLeave                    String   @default("#3B82F6")
+  colorHolidayOrWeekendWork         String   @default("#F97316")
+  colorVacationWarning              String   @default("#F59E0B")
+
+  smtpEnabled                       Boolean  @default(false)
+  smtpHost                          String?
+  smtpPort                          Int      @default(587)
+  smtpUser                          String?
+  smtpPassword                      String?
+  smtpFrom                          String?
+
+  accountantMailEnabled             Boolean  @default(false)
+  accountantEmail                   String?
+
+  createdAt                         DateTime @default(now())
+  updatedAt                         DateTime @updatedAt
+}

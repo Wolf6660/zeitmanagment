@@ -1,0 +1,182 @@
+import { Role } from "@prisma/client";
+import { Router } from "express";
+import { z } from "zod";
+import { prisma } from "../../db/prisma.js";
+import { AuthRequest, requireAuth, requireRole } from "../../utils/auth.js";
+import { sendMailIfEnabled } from "../../utils/mail.js";
+
+export const adminRouter = Router();
+
+adminRouter.use(requireAuth, requireRole([Role.SUPERVISOR, Role.ADMIN]));
+
+adminRouter.get("/config", async (_req, res) => {
+  const config = await prisma.systemConfig.findUnique({ where: { id: 1 } });
+  res.json(config);
+});
+
+const configSchema = z.object({
+  companyName: z.string().min(1).optional(),
+  systemName: z.string().min(1).optional(),
+  companyLogoUrl: z.string().url().nullable().optional(),
+  defaultDailyHours: z.number().min(1).max(24).optional(),
+  autoBreakMinutes: z.number().int().min(0).max(180).optional(),
+  autoBreakAfterHours: z.number().min(0).max(24).optional(),
+  colorApproved: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+  colorRejected: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+  colorManualCorrection: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+  colorBreakCredit: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+  colorSickLeave: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+  colorHolidayOrWeekendWork: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+  colorVacationWarning: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+  smtpEnabled: z.boolean().optional(),
+  smtpHost: z.string().nullable().optional(),
+  smtpPort: z.number().int().min(1).max(65535).optional(),
+  smtpUser: z.string().nullable().optional(),
+  smtpPassword: z.string().nullable().optional(),
+  smtpFrom: z.string().email().nullable().optional(),
+  accountantMailEnabled: z.boolean().optional(),
+  accountantEmail: z.string().email().nullable().optional()
+});
+
+adminRouter.patch("/config", async (req, res) => {
+  const parsed = configSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: "Ungueltige Eingaben." });
+    return;
+  }
+
+  const updated = await prisma.systemConfig.update({
+    where: { id: 1 },
+    data: parsed.data
+  });
+
+  res.json(updated);
+});
+
+const holidaySchema = z.object({
+  date: z.coerce.date(),
+  name: z.string().min(1)
+});
+
+adminRouter.post("/holidays", async (req, res) => {
+  const parsed = holidaySchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: "Ungueltige Eingaben." });
+    return;
+  }
+
+  const holiday = await prisma.holiday.create({
+    data: { date: parsed.data.date, name: parsed.data.name }
+  });
+
+  res.status(201).json(holiday);
+});
+
+adminRouter.get("/holidays", async (_req, res) => {
+  const holidays = await prisma.holiday.findMany({ orderBy: { date: "asc" } });
+  res.json(holidays);
+});
+
+const dropdownSchema = z.object({
+  category: z.string().min(1),
+  label: z.string().min(1)
+});
+
+adminRouter.post("/dropdown-options", async (req, res) => {
+  const parsed = dropdownSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: "Ungueltige Eingaben." });
+    return;
+  }
+
+  const option = await prisma.dropdownOption.create({ data: parsed.data });
+  res.status(201).json(option);
+});
+
+adminRouter.get("/dropdown-options/:category", async (req, res) => {
+  const options = await prisma.dropdownOption.findMany({
+    where: { category: req.params.category, isActive: true },
+    orderBy: { label: "asc" }
+  });
+  res.json(options);
+});
+
+const sickSchema = z.object({
+  userId: z.string().min(1),
+  startDate: z.coerce.date(),
+  endDate: z.coerce.date(),
+  partialDayHours: z.number().min(0).max(24).optional(),
+  note: z.string().max(1000).optional()
+});
+
+adminRouter.post("/sick-leave", async (req: AuthRequest, res) => {
+  const parsed = sickSchema.safeParse(req.body);
+  if (!parsed.success || !req.auth) {
+    res.status(400).json({ message: "Ungueltige Eingaben." });
+    return;
+  }
+
+  const sick = await prisma.sickLeave.create({
+    data: {
+      userId: parsed.data.userId,
+      startDate: parsed.data.startDate,
+      endDate: parsed.data.endDate,
+      partialDayHours: parsed.data.partialDayHours,
+      note: parsed.data.note,
+      createdById: req.auth.userId
+    },
+    include: { user: { select: { name: true } } }
+  });
+
+  const config = await prisma.systemConfig.findUnique({ where: { id: 1 } });
+  if (config?.accountantMailEnabled && config.accountantEmail) {
+    await sendMailIfEnabled({
+      to: config.accountantEmail,
+      subject: `Krankmeldung: ${sick.user.name}`,
+      text: `Krankheit eingetragen fuer ${sick.user.name} von ${sick.startDate.toISOString().slice(0, 10)} bis ${sick.endDate.toISOString().slice(0, 10)}.`
+    });
+  }
+
+  res.status(201).json(sick);
+});
+
+adminRouter.post("/year-end-rollover/:year", async (_req, res) => {
+  const year = Number(_req.params.year);
+  if (Number.isNaN(year)) {
+    res.status(400).json({ message: "Ungueltiges Jahr." });
+    return;
+  }
+
+  const users = await prisma.user.findMany({ where: { isActive: true } });
+  const changes = [] as { userId: string; carryOverVacationDays: number }[];
+
+  for (const user of users) {
+    const approved = await prisma.leaveRequest.findMany({
+      where: {
+        userId: user.id,
+        kind: "VACATION",
+        status: "APPROVED",
+        startDate: { gte: new Date(Date.UTC(year, 0, 1)) },
+        endDate: { lte: new Date(Date.UTC(year, 11, 31, 23, 59, 59)) }
+      }
+    });
+
+    const usedDays = approved.reduce((acc, request) => {
+      const days = Math.ceil((request.endDate.getTime() - request.startDate.getTime()) / 86400000) + 1;
+      return acc + Math.max(days, 0);
+    }, 0);
+
+    const remaining = Math.max(user.carryOverVacationDays + user.annualVacationDays - usedDays, 0);
+
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        carryOverVacationDays: remaining
+      }
+    });
+
+    changes.push({ userId: updated.id, carryOverVacationDays: updated.carryOverVacationDays });
+  }
+
+  res.json({ year, processedUsers: changes.length, changes });
+});
