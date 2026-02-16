@@ -10,6 +10,11 @@ export const timeRouter = Router();
 
 timeRouter.use(requireAuth);
 
+function zodFirstMessage(result: z.ZodSafeParseError<unknown>): string {
+  const issue = result.error.issues[0];
+  return issue?.message || "Ungueltige Eingaben.";
+}
+
 function parseWorkingDaySet(value?: string | null): Set<number> {
   const raw = (value || "MON,TUE,WED,THU,FRI").split(",").map((x) => x.trim().toUpperCase());
   const map: Record<string, number> = { SUN: 0, MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6 };
@@ -175,14 +180,18 @@ timeRouter.post("/break-credit", requireRole([Role.SUPERVISOR, Role.ADMIN]), asy
 const overtimeAdjustmentSchema = z.object({
   userId: z.string().min(1),
   date: z.coerce.date(),
-  hours: z.number().min(-500).max(500),
-  note: z.string().min(3)
+  hours: z.coerce.number().min(-500).max(500),
+  note: z.string().trim().min(3, "Notiz ist Pflicht.")
 });
 
 timeRouter.post("/overtime-adjustment", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
   const parsed = overtimeAdjustmentSchema.safeParse(req.body);
-  if (!parsed.success || !req.auth) {
-    res.status(400).json({ message: "Ungueltige Eingaben." });
+  if (!parsed.success) {
+    res.status(400).json({ message: zodFirstMessage(parsed) });
+    return;
+  }
+  if (!req.auth) {
+    res.status(401).json({ message: "Nicht authentifiziert." });
     return;
   }
 
@@ -223,8 +232,12 @@ const dayOverrideSchema = z.object({
 
 timeRouter.post("/day-override", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
   const parsed = dayOverrideSchema.safeParse(req.body);
-  if (!parsed.success || !req.auth) {
-    res.status(400).json({ message: "Ungueltige Eingaben. Notiz ist Pflicht." });
+  if (!parsed.success) {
+    res.status(400).json({ message: zodFirstMessage(parsed) });
+    return;
+  }
+  if (!req.auth) {
+    res.status(401).json({ message: "Nicht authentifiziert." });
     return;
   }
   const dayStart = new Date(`${parsed.data.date}T00:00:00`);
@@ -266,8 +279,12 @@ const selfDayOverrideSchema = z.object({
 
 timeRouter.post("/day-override-self", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
   const parsed = selfDayOverrideSchema.safeParse(req.body);
-  if (!parsed.success || !req.auth) {
-    res.status(400).json({ message: "Ungueltige Eingaben beim Nachtrag." });
+  if (!parsed.success) {
+    res.status(400).json({ message: zodFirstMessage(parsed) });
+    return;
+  }
+  if (!req.auth) {
+    res.status(401).json({ message: "Nicht authentifiziert." });
     return;
   }
   const cfg = await prisma.systemConfig.findUnique({ where: { id: 1 }, select: { selfCorrectionMaxDays: true } });
