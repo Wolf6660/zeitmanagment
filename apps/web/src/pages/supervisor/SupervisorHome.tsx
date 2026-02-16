@@ -1,18 +1,28 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../../api/client";
 
+function kindLabel(kind: string): string {
+  return kind === "VACATION" ? "Urlaub" : "Ueberstunden";
+}
+
 export function SupervisorHome() {
   const [employees, setEmployees] = useState<Array<{ id: string; name: string; role: string; annualVacationDays: number; carryOverVacationDays: number }>>([]);
-  const [pending, setPending] = useState<Array<{ id: string; kind: string; startDate: string; endDate: string; note?: string; user: { name: string } }>>([]);
+  const [pending, setPending] = useState<Array<{ id: string; kind: string; startDate: string; endDate: string; note?: string; userId: string; availableVacationDays: number; availableOvertimeHours: number; user: { name: string } }>>([]);
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [editNotes, setEditNotes] = useState<Record<string, string>>({});
+  const [editFrom, setEditFrom] = useState<Record<string, string>>({});
+  const [editTo, setEditTo] = useState<Record<string, string>>({});
+  const [editKind, setEditKind] = useState<Record<string, "VACATION" | "OVERTIME">>({});
   const [msg, setMsg] = useState("");
 
+  async function loadData() {
+    const [e, p] = await Promise.all([api.employees(), api.pendingLeaves()]);
+    setEmployees(e);
+    setPending(p);
+  }
+
   useEffect(() => {
-    Promise.all([api.employees(), api.pendingLeaves()])
-      .then(([e, p]) => {
-        setEmployees(e);
-        setPending(p);
-      })
-      .catch((e) => setMsg((e as Error).message));
+    loadData().catch((e) => setMsg((e as Error).message));
   }, []);
 
   return (
@@ -42,22 +52,102 @@ export function SupervisorHome() {
       </div>
 
       <div className="card">
-        <h2>Urlaubsantraege offen</h2>
+        <h2>Antraege offen</h2>
         <div className="grid">
           {pending.map((p) => (
             <div key={p.id} className="card" style={{ padding: 12 }}>
-              <div><strong>{p.user.name}</strong></div>
-              <div>{p.kind}: {p.startDate.slice(0, 10)} bis {p.endDate.slice(0, 10)}</div>
+              <div>
+                <strong>{p.user.name}</strong>
+              </div>
+              <div>
+                {kindLabel(p.kind)}: {p.startDate.slice(0, 10)} bis {p.endDate.slice(0, 10)}
+              </div>
               <div>{p.note || "-"}</div>
+              <div>Verfuegbarer Urlaub: {p.availableVacationDays.toFixed(2)} Tage</div>
+              <div>Verfuegbare Ueberstunden (Monat): {p.availableOvertimeHours.toFixed(2)} h</div>
+
+              <label style={{ marginTop: 8 }}>
+                Entscheidungsnotiz (Pflicht)
+                <textarea value={notes[p.id] || ""} onChange={(e) => setNotes({ ...notes, [p.id]: e.target.value })} />
+              </label>
+
               <div className="row" style={{ marginTop: 8 }}>
-                <button onClick={async () => {
-                  await api.decideLeave({ leaveId: p.id, decision: "APPROVED" });
-                  setPending(await api.pendingLeaves());
-                }}>Genehmigen</button>
-                <button className="secondary" onClick={async () => {
-                  await api.decideLeave({ leaveId: p.id, decision: "REJECTED" });
-                  setPending(await api.pendingLeaves());
-                }}>Ablehnen</button>
+                <button
+                  onClick={async () => {
+                    try {
+                      const note = (notes[p.id] || "").trim();
+                      if (!note) {
+                        setMsg("Entscheidungsnotiz ist Pflicht.");
+                        return;
+                      }
+                      await api.decideLeave({ leaveId: p.id, decision: "APPROVED", decisionNote: note });
+                      await loadData();
+                    } catch (e) {
+                      setMsg((e as Error).message);
+                    }
+                  }}
+                >
+                  Genehmigen
+                </button>
+                <button
+                  className="secondary"
+                  onClick={async () => {
+                    try {
+                      const note = (notes[p.id] || "").trim();
+                      if (!note) {
+                        setMsg("Entscheidungsnotiz ist Pflicht.");
+                        return;
+                      }
+                      await api.decideLeave({ leaveId: p.id, decision: "REJECTED", decisionNote: note });
+                      await loadData();
+                    } catch (e) {
+                      setMsg((e as Error).message);
+                    }
+                  }}
+                >
+                  Ablehnen
+                </button>
+              </div>
+
+              <div className="card" style={{ marginTop: 10, padding: 10 }}>
+                <strong>Antrag aendern</strong>
+                <div className="grid grid-2" style={{ marginTop: 8 }}>
+                  <select value={editKind[p.id] || (p.kind as "VACATION" | "OVERTIME")} onChange={(e) => setEditKind({ ...editKind, [p.id]: e.target.value as "VACATION" | "OVERTIME" })}>
+                    <option value="VACATION">Urlaub</option>
+                    <option value="OVERTIME">Ueberstunden</option>
+                  </select>
+                  <input type="date" value={editFrom[p.id] || p.startDate.slice(0, 10)} onChange={(e) => setEditFrom({ ...editFrom, [p.id]: e.target.value })} />
+                  <input type="date" value={editTo[p.id] || p.endDate.slice(0, 10)} onChange={(e) => setEditTo({ ...editTo, [p.id]: e.target.value })} />
+                </div>
+                <textarea style={{ marginTop: 8 }} placeholder="Antragsnotiz (Pflicht)" value={(editNotes[`note-${p.id}`] || p.note || "")} onChange={(e) => setEditNotes({ ...editNotes, [`note-${p.id}`]: e.target.value })} />
+                <textarea style={{ marginTop: 8 }} placeholder="Aenderungsnotiz Vorgesetzter (Pflicht)" value={editNotes[p.id] || ""} onChange={(e) => setEditNotes({ ...editNotes, [p.id]: e.target.value })} />
+                <button
+                  style={{ marginTop: 8 }}
+                  onClick={async () => {
+                    try {
+                      const note = (editNotes[`note-${p.id}`] || p.note || "").trim();
+                      const changeNote = (editNotes[p.id] || "").trim();
+                      if (!note || !changeNote) {
+                        setMsg("Antragsnotiz und Aenderungsnotiz sind Pflicht.");
+                        return;
+                      }
+                      await api.supervisorUpdateLeave({
+                        leaveId: p.id,
+                        kind: editKind[p.id] || (p.kind as "VACATION" | "OVERTIME"),
+                        startDate: editFrom[p.id] || p.startDate.slice(0, 10),
+                        endDate: editTo[p.id] || p.endDate.slice(0, 10),
+                        note,
+                        changeNote
+                      });
+                      setMsg("Antrag geaendert.");
+                      await loadData();
+                    } catch (e) {
+                      setMsg((e as Error).message);
+                    }
+                  }}
+                >
+                  Aenderung speichern
+                </button>
               </div>
             </div>
           ))}

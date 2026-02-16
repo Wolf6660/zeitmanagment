@@ -221,3 +221,38 @@ timeRouter.get("/summary/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, 
     longShiftAlert: longStreakAlert
   });
 });
+
+timeRouter.get("/today/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+  if (!req.auth) {
+    res.status(401).json({ message: "Nicht authentifiziert." });
+    return;
+  }
+
+  const targetUserId = String(req.params.userId);
+  if (req.auth.role === Role.EMPLOYEE && req.auth.userId !== targetUserId) {
+    res.status(403).json({ message: "Keine Berechtigung." });
+    return;
+  }
+
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+
+  const entries = await prisma.timeEntry.findMany({
+    where: {
+      userId: targetUserId,
+      occurredAt: { gte: start, lte: end }
+    },
+    orderBy: { occurredAt: "asc" },
+    select: {
+      id: true,
+      type: true,
+      occurredAt: true,
+      source: true,
+      reasonText: true
+    }
+  });
+
+  res.json(entries);
+});

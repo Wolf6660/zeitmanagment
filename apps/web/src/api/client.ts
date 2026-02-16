@@ -68,13 +68,21 @@ export const api = {
   clock: (payload: { type: "CLOCK_IN" | "CLOCK_OUT"; reasonCode?: string; reasonText?: string }) =>
     request("/api/time/clock", { method: "POST", body: JSON.stringify(payload) }),
 
+  todayEntries: (userId: string) =>
+    request<Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; occurredAt: string; source: string; reasonText?: string }>>(
+      `/api/time/today/${userId}`
+    ),
+
   myLeaves: () =>
     request<Array<{ id: string; status: string; kind: string; startDate: string; endDate: string; note?: string; requestedAt: string }>>(
       "/api/leave/my"
     ),
 
-  createLeave: (payload: { kind: "VACATION" | "OVERTIME"; startDate: string; endDate: string; note?: string }) =>
-    request<{ warningOverdrawn: boolean }>("/api/leave", { method: "POST", body: JSON.stringify(payload) }),
+  createLeave: (payload: { kind: "VACATION" | "OVERTIME"; startDate: string; endDate: string; note: string }) =>
+    request<{ warningOverdrawn: boolean; availableVacationDays: number; availableOvertimeHours: number }>("/api/leave", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
 
   summary: (userId: string) =>
     request<{ month: string; plannedHours: number; workedHours: number; overtimeHours: number; longShiftAlert: boolean }>(
@@ -82,9 +90,19 @@ export const api = {
     ),
 
   employees: () =>
-    request<Array<{ id: string; name: string; email: string; role: string; isActive: boolean; annualVacationDays: number; carryOverVacationDays: number; loginName: string }>>(
-      "/api/employees"
-    ),
+    request<
+      Array<{
+        id: string;
+        name: string;
+        email: string;
+        role: string;
+        isActive: boolean;
+        annualVacationDays: number;
+        carryOverVacationDays: number;
+        loginName: string;
+        mailNotificationsEnabled: boolean;
+      }>
+    >("/api/employees"),
 
   createEmployee: (payload: {
     name: string;
@@ -97,13 +115,45 @@ export const api = {
     mailNotificationsEnabled: boolean;
   }) => request("/api/employees", { method: "POST", body: JSON.stringify(payload) }),
 
-  pendingLeaves: () =>
-    request<Array<{ id: string; kind: string; startDate: string; endDate: string; note?: string; user: { name: string } }>>(
-      "/api/leave/pending"
-    ),
+  updateEmployee: (
+    id: string,
+    payload: {
+      name?: string;
+      email?: string;
+      role?: "EMPLOYEE" | "SUPERVISOR" | "ADMIN";
+      annualVacationDays?: number;
+      carryOverVacationDays?: number;
+      mailNotificationsEnabled?: boolean;
+      isActive?: boolean;
+    }
+  ) => request(`/api/employees/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
 
-  decideLeave: (payload: { leaveId: string; decision: "APPROVED" | "REJECTED"; decisionNote?: string }) =>
+  pendingLeaves: () =>
+    request<
+      Array<{
+        id: string;
+        kind: string;
+        startDate: string;
+        endDate: string;
+        note?: string;
+        userId: string;
+        availableVacationDays: number;
+        availableOvertimeHours: number;
+        user: { name: string };
+      }>
+    >("/api/leave/pending"),
+
+  decideLeave: (payload: { leaveId: string; decision: "APPROVED" | "REJECTED"; decisionNote: string }) =>
     request("/api/leave/decision", { method: "POST", body: JSON.stringify(payload) }),
+
+  supervisorUpdateLeave: (payload: {
+    leaveId: string;
+    kind: "VACATION" | "OVERTIME";
+    startDate: string;
+    endDate: string;
+    note: string;
+    changeNote: string;
+  }) => request("/api/leave/supervisor-update", { method: "POST", body: JSON.stringify(payload) }),
 
   getConfig: () =>
     request<{

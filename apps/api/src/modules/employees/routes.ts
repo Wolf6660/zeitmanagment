@@ -79,32 +79,36 @@ employeesRouter.post("/", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req
 
   const hash = await bcrypt.hash(parsed.data.password, 12);
 
-  const user = await prisma.user.create({
-    data: {
-      name: parsed.data.name,
-      email: parsed.data.email,
-      loginName: parsed.data.loginName,
-      passwordHash: hash,
-      role: parsed.data.role,
-      annualVacationDays: parsed.data.annualVacationDays,
-      carryOverVacationDays: parsed.data.carryOverVacationDays,
-      mailNotificationsEnabled: parsed.data.mailNotificationsEnabled,
-      rfidTag: parsed.data.rfidTag
-    },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      loginName: true,
-      annualVacationDays: true,
-      carryOverVacationDays: true,
-      mailNotificationsEnabled: true,
-      rfidTag: true
-    }
-  });
+  try {
+    const user = await prisma.user.create({
+      data: {
+        name: parsed.data.name,
+        email: parsed.data.email,
+        loginName: parsed.data.loginName,
+        passwordHash: hash,
+        role: parsed.data.role,
+        annualVacationDays: parsed.data.annualVacationDays,
+        carryOverVacationDays: parsed.data.carryOverVacationDays,
+        mailNotificationsEnabled: parsed.data.mailNotificationsEnabled,
+        rfidTag: parsed.data.rfidTag
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        loginName: true,
+        annualVacationDays: true,
+        carryOverVacationDays: true,
+        mailNotificationsEnabled: true,
+        rfidTag: true
+      }
+    });
 
-  res.status(201).json(user);
+    res.status(201).json(user);
+  } catch {
+    res.status(409).json({ message: "Mitarbeiter konnte nicht angelegt werden (Loginname/E-Mail evtl. bereits vorhanden)." });
+  }
 });
 
 const updateEmployeeSchema = z.object({
@@ -126,21 +130,25 @@ employeesRouter.patch("/:id", requireRole([Role.SUPERVISOR, Role.ADMIN]), async 
   }
   const userId = String(req.params.id);
 
-  const updated = await prisma.user.update({
-    where: { id: userId },
-    data: parsed.data,
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      isActive: true,
-      annualVacationDays: true,
-      carryOverVacationDays: true,
-      mailNotificationsEnabled: true,
-      rfidTag: true
-    }
-  });
+  try {
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: parsed.data,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        isActive: true,
+        annualVacationDays: true,
+        carryOverVacationDays: true,
+        mailNotificationsEnabled: true,
+        rfidTag: true
+      }
+    });
 
-  res.json(updated);
+    res.json(updated);
+  } catch {
+    res.status(409).json({ message: "Mitarbeiter konnte nicht aktualisiert werden." });
+  }
 });
