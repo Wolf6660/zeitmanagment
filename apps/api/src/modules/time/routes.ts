@@ -308,14 +308,18 @@ timeRouter.post("/day-override", requireRole([Role.SUPERVISOR, Role.ADMIN]), asy
       });
       created.push(row);
     }
-    await writeAuditLog({
-      actorUserId: req.auth.userId,
-      actorLoginName: await resolveActorLoginName(req.auth.userId),
-      action: "DAY_OVERRIDE_SUPERVISOR",
-      targetType: "TimeEntry",
-      targetId: parsed.data.userId,
-      payload: parsed.data
-    });
+    try {
+      await writeAuditLog({
+        actorUserId: req.auth.userId,
+        actorLoginName: await resolveActorLoginName(req.auth.userId),
+        action: "DAY_OVERRIDE_SUPERVISOR",
+        targetType: "TimeEntry",
+        targetId: parsed.data.userId,
+        payload: parsed.data
+      });
+    } catch {
+      // Speichern war erfolgreich; Log-Fehler darf keine 500 fuer den Benutzer ausloesen.
+    }
     res.json({ createdCount: created.length });
   } catch {
     res.status(500).json({ message: "Tag konnte nicht gespeichert werden." });
@@ -389,14 +393,18 @@ timeRouter.post("/day-override-self", requireRole([Role.EMPLOYEE, Role.SUPERVISO
         }
       });
     }
-    await writeAuditLog({
-      actorUserId: req.auth.userId,
-      actorLoginName: await resolveActorLoginName(req.auth.userId),
-      action: "DAY_OVERRIDE_SELF",
-      targetType: "TimeEntry",
-      targetId: req.auth.userId,
-      payload: parsed.data
-    });
+    try {
+      await writeAuditLog({
+        actorUserId: req.auth.userId,
+        actorLoginName: await resolveActorLoginName(req.auth.userId),
+        action: "DAY_OVERRIDE_SELF",
+        targetType: "TimeEntry",
+        targetId: req.auth.userId,
+        payload: parsed.data
+      });
+    } catch {
+      // Speichern war erfolgreich; Log-Fehler darf keine 500 fuer den Benutzer ausloesen.
+    }
     res.json({ ok: true });
   } catch {
     res.status(500).json({ message: "Nachtrag konnte nicht gespeichert werden." });
