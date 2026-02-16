@@ -17,6 +17,23 @@ function zodFirstMessage(result: z.SafeParseError<unknown>): string {
   return msg;
 }
 
+function parseIsoDateParts(date: string): { year: number; month: number; day: number } | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!m) return null;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return { year, month, day };
+}
+
+function parseTimeParts(time: string): { hour: number; minute: number } | null {
+  const m = /^([01]\d|2[0-3]):([0-5]\d)(:[0-5]\d)?$/.exec(time);
+  if (!m) return null;
+  return { hour: Number(m[1]), minute: Number(m[2]) };
+}
+
 function parseWorkingDaySet(value?: string | null): Set<number> {
   const raw = (value || "MON,TUE,WED,THU,FRI").split(",").map((x) => x.trim().toUpperCase());
   const map: Record<string, number> = { SUN: 0, MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6 };
@@ -259,36 +276,50 @@ timeRouter.post("/day-override", requireRole([Role.SUPERVISOR, Role.ADMIN]), asy
     res.status(401).json({ message: "Nicht authentifiziert." });
     return;
   }
-  const dayStart = new Date(`${parsed.data.date}T00:00:00`);
-  const dayEnd = new Date(`${parsed.data.date}T23:59:59`);
-  await prisma.timeEntry.deleteMany({ where: { userId: parsed.data.userId, occurredAt: { gte: dayStart, lte: dayEnd } } });
-  const created = [];
-  for (const e of parsed.data.events) {
-    const hhmm = e.time.slice(0, 5);
-    const occurredAt = new Date(`${parsed.data.date}T${hhmm}:00`);
-    const row = await prisma.timeEntry.create({
-      data: {
-        userId: parsed.data.userId,
-        type: e.type,
-        source: TimeEntrySource.MANUAL_CORRECTION,
-        isManualCorrection: true,
-        correctionComment: parsed.data.note,
-        reasonText: parsed.data.note,
-        occurredAt,
-        createdById: req.auth.userId
-      }
-    });
-    created.push(row);
+  const dateParts = parseIsoDateParts(parsed.data.date);
+  if (!dateParts) {
+    res.status(400).json({ message: "Datum ist ungueltig." });
+    return;
   }
-  await writeAuditLog({
-    actorUserId: req.auth.userId,
-    actorLoginName: await resolveActorLoginName(req.auth.userId),
-    action: "DAY_OVERRIDE_SUPERVISOR",
-    targetType: "TimeEntry",
-    targetId: parsed.data.userId,
-    payload: parsed.data
-  });
-  res.json({ createdCount: created.length });
+
+  try {
+    const dayStart = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, 0, 0, 0));
+    const dayEnd = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, 23, 59, 59, 999));
+    await prisma.timeEntry.deleteMany({ where: { userId: parsed.data.userId, occurredAt: { gte: dayStart, lte: dayEnd } } });
+    const created = [];
+    for (const e of parsed.data.events) {
+      const t = parseTimeParts(e.time);
+      if (!t) {
+        res.status(400).json({ message: "Zeit ist ungueltig (HH:MM)." });
+        return;
+      }
+      const occurredAt = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, t.hour, t.minute, 0));
+      const row = await prisma.timeEntry.create({
+        data: {
+          userId: parsed.data.userId,
+          type: e.type,
+          source: TimeEntrySource.MANUAL_CORRECTION,
+          isManualCorrection: true,
+          correctionComment: parsed.data.note,
+          reasonText: parsed.data.note,
+          occurredAt,
+          createdById: req.auth.userId
+        }
+      });
+      created.push(row);
+    }
+    await writeAuditLog({
+      actorUserId: req.auth.userId,
+      actorLoginName: await resolveActorLoginName(req.auth.userId),
+      action: "DAY_OVERRIDE_SUPERVISOR",
+      targetType: "TimeEntry",
+      targetId: parsed.data.userId,
+      payload: parsed.data
+    });
+    res.json({ createdCount: created.length });
+  } catch {
+    res.status(500).json({ message: "Tag konnte nicht gespeichert werden." });
+  }
 });
 
 const selfDayOverrideSchema = z.object({
@@ -314,12 +345,18 @@ timeRouter.post("/day-override-self", requireRole([Role.EMPLOYEE, Role.SUPERVISO
     res.status(401).json({ message: "Nicht authentifiziert." });
     return;
   }
+  const dateParts = parseIsoDateParts(parsed.data.date);
+  if (!dateParts) {
+    res.status(400).json({ message: "Datum ist ungueltig." });
+    return;
+  }
+
   const cfg = await prisma.systemConfig.findUnique({ where: { id: 1 }, select: { selfCorrectionMaxDays: true } });
   const maxDays = cfg?.selfCorrectionMaxDays ?? 3;
   const now = new Date();
-  const todayLocal = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const selected = new Date(`${parsed.data.date}T00:00:00`);
-  const diffDays = Math.floor((todayLocal.getTime() - selected.getTime()) / 86400000);
+  const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0));
+  const selected = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, 0, 0, 0));
+  const diffDays = Math.floor((todayUtc.getTime() - selected.getTime()) / 86400000);
   if (Number.isNaN(diffDays) || diffDays < 0) {
     res.status(403).json({ message: "Nachtrag in die Zukunft ist nicht erlaubt." });
     return;
@@ -328,34 +365,42 @@ timeRouter.post("/day-override-self", requireRole([Role.EMPLOYEE, Role.SUPERVISO
     res.status(403).json({ message: `Nachtrag nur bis ${maxDays} Tage rueckwirkend erlaubt.` });
     return;
   }
-  const dayStart = new Date(`${parsed.data.date}T00:00:00`);
-  const dayEnd = new Date(`${parsed.data.date}T23:59:59`);
-  await prisma.timeEntry.deleteMany({ where: { userId: req.auth.userId, occurredAt: { gte: dayStart, lte: dayEnd } } });
-  for (const e of parsed.data.events) {
-    const hhmm = e.time.slice(0, 5);
-    const occurredAt = new Date(`${parsed.data.date}T${hhmm}:00`);
-    await prisma.timeEntry.create({
-      data: {
-        userId: req.auth.userId,
-        type: e.type,
-        source: TimeEntrySource.MANUAL_CORRECTION,
-        isManualCorrection: true,
-        correctionComment: parsed.data.note,
-        reasonText: parsed.data.note,
-        occurredAt,
-        createdById: req.auth.userId
+  try {
+    const dayStart = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, 0, 0, 0));
+    const dayEnd = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, 23, 59, 59, 999));
+    await prisma.timeEntry.deleteMany({ where: { userId: req.auth.userId, occurredAt: { gte: dayStart, lte: dayEnd } } });
+    for (const e of parsed.data.events) {
+      const t = parseTimeParts(e.time);
+      if (!t) {
+        res.status(400).json({ message: "Zeit ist ungueltig (HH:MM)." });
+        return;
       }
+      const occurredAt = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, t.hour, t.minute, 0));
+      await prisma.timeEntry.create({
+        data: {
+          userId: req.auth.userId,
+          type: e.type,
+          source: TimeEntrySource.MANUAL_CORRECTION,
+          isManualCorrection: true,
+          correctionComment: parsed.data.note,
+          reasonText: parsed.data.note,
+          occurredAt,
+          createdById: req.auth.userId
+        }
+      });
+    }
+    await writeAuditLog({
+      actorUserId: req.auth.userId,
+      actorLoginName: await resolveActorLoginName(req.auth.userId),
+      action: "DAY_OVERRIDE_SELF",
+      targetType: "TimeEntry",
+      targetId: req.auth.userId,
+      payload: parsed.data
     });
+    res.json({ ok: true });
+  } catch {
+    res.status(500).json({ message: "Nachtrag konnte nicht gespeichert werden." });
   }
-  await writeAuditLog({
-    actorUserId: req.auth.userId,
-    actorLoginName: await resolveActorLoginName(req.auth.userId),
-    action: "DAY_OVERRIDE_SELF",
-    targetType: "TimeEntry",
-    targetId: req.auth.userId,
-    payload: parsed.data
-  });
-  res.json({ ok: true });
 });
 
 timeRouter.get("/month/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
