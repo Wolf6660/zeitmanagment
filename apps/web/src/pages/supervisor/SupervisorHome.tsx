@@ -7,7 +7,7 @@ function kindLabel(kind: string): string {
 
 export function SupervisorHome() {
   const [employees, setEmployees] = useState<Array<{ id: string; name: string; loginName?: string; role: string; annualVacationDays: number; carryOverVacationDays: number }>>([]);
-  const [availability, setAvailability] = useState<Record<string, { availableVacationDays: number; availableOvertimeHours: number }>>({});
+  const [overview, setOverview] = useState<Record<string, { istHours: number; overtimeWithoutCurrentMonth: number }>>({});
   const [pending, setPending] = useState<Array<{ id: string; kind: string; startDate: string; endDate: string; note?: string; userId: string; availableVacationDays: number; requestedWorkingDays: number; remainingVacationAfterRequest: number; availableOvertimeHours: number; user: { name: string } }>>([]);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [editNotes, setEditNotes] = useState<Record<string, string>>({});
@@ -17,14 +17,10 @@ export function SupervisorHome() {
   const [msg, setMsg] = useState("");
 
   async function loadData() {
-    const [e, p] = await Promise.all([api.employees(), api.pendingLeaves()]);
+    const [e, p, ov] = await Promise.all([api.employees(), api.pendingLeaves(), api.supervisorOverview()]);
     setEmployees(e);
     setPending(p);
-    const rows = await Promise.all(e.map(async (emp) => {
-      const a = await api.leaveAvailability(emp.id);
-      return [emp.id, { availableVacationDays: a.availableVacationDays, availableOvertimeHours: a.availableOvertimeHours }] as const;
-    }));
-    setAvailability(Object.fromEntries(rows));
+    setOverview(Object.fromEntries(ov.map((x) => [x.userId, { istHours: x.istHours, overtimeWithoutCurrentMonth: x.overtimeWithoutCurrentMonth }])));
   }
 
   useEffect(() => {
@@ -37,15 +33,15 @@ export function SupervisorHome() {
         <h2>Stundenaufzeichnung Mitarbeiter</h2>
         <table>
           <thead>
-            <tr><th>Name</th><th>Rolle</th><th>Verfuegbarer Urlaub</th><th>Ueberstunden</th></tr>
+            <tr><th>Name</th><th>Rolle</th><th>Ist-Stunden</th><th>Ueberstunden (ohne laufenden Monat)</th></tr>
           </thead>
           <tbody>
             {employees.map((e) => (
               <tr key={e.id}>
                 <td>{e.name}</td>
                 <td>{e.role}</td>
-                <td>{(availability[e.id]?.availableVacationDays ?? 0).toFixed(2)} Tage</td>
-                <td>{(availability[e.id]?.availableOvertimeHours ?? 0).toFixed(2)} h</td>
+                <td>{(overview[e.id]?.istHours ?? 0).toFixed(2)} h</td>
+                <td>{(overview[e.id]?.overtimeWithoutCurrentMonth ?? 0).toFixed(2)} h</td>
               </tr>
             ))}
             {employees.length === 0 && (

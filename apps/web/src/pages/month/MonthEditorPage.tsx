@@ -12,6 +12,7 @@ export function MonthEditorPage() {
   const [overrideNote, setOverrideNote] = useState("");
   const [overrideEvents, setOverrideEvents] = useState<Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; time: string }>>([]);
   const [msg, setMsg] = useState("");
+  const [saving, setSaving] = useState(false);
 
   async function loadEmployees() {
     const e = await api.employees();
@@ -43,7 +44,7 @@ export function MonthEditorPage() {
         </select>
         <input type="number" value={monthYear} onChange={(e) => setMonthYear(Number(e.target.value))} style={{ maxWidth: 120 }} />
         <input type="number" min={1} max={12} value={monthNum} onChange={(e) => setMonthNum(Number(e.target.value))} style={{ maxWidth: 90 }} />
-        <button className="secondary" onClick={() => loadMonth()}>Laden</button>
+        <button className="secondary" type="button" onClick={() => loadMonth()}>Laden</button>
       </div>
 
       {monthView && (
@@ -60,7 +61,7 @@ export function MonthEditorPage() {
                     <td>{d.workedHours.toFixed(2)}</td>
                     <td>{d.entries.map((e: any) => `${e.type === "CLOCK_IN" ? "K" : "G"} ${e.time}`).join(" | ")}</td>
                     <td>
-                      <button className="secondary" onClick={() => {
+                      <button className="secondary" type="button" onClick={() => {
                         setSelectedDay(expanded ? null : d.date);
                         setOverrideEvents(
                           (d.entries || []).map((e: any, idx: number) => ({
@@ -121,8 +122,9 @@ export function MonthEditorPage() {
                           </div>
                           <textarea style={{ marginTop: 8 }} placeholder="Notiz (Pflichtfeld)" value={overrideNote} onChange={(e) => setOverrideNote(e.target.value)} />
                           <div className="row" style={{ marginTop: 8 }}>
-                            <button onClick={async () => {
+                            <button type="button" disabled={saving} onClick={async () => {
                               try {
+                                setSaving(true);
                                 if (!overrideNote.trim()) { setMsg("Notiz ist Pflicht."); return; }
                                 const events = overrideEvents
                                   .map((x) => ({ type: x.type, time: x.time.trim() }))
@@ -145,12 +147,18 @@ export function MonthEditorPage() {
                                     }))
                                   );
                                 }
-                                setMsg("Tag aktualisiert.");
+                                setMsg(`Tag aktualisiert (${events.length} Ereignisse).`);
                                 setSelectedDay(d.date);
-                              } catch (e) { setMsg((e as Error).message); }
+                              } catch (e) {
+                                setMsg((e as Error).message);
+                              } finally {
+                                setSaving(false);
+                              }
                             }}>Tag speichern</button>
-                            <button className="secondary" onClick={() => setSelectedDay(null)}>Abbrechen</button>
+                            <button className="secondary" type="button" onClick={() => setSelectedDay(null)}>Abbrechen</button>
                           </div>
+                          {saving && <div style={{ marginTop: 8 }}>Speichert...</div>}
+                          {msg && <div className={msg.includes("aktualisiert") ? "success" : "error"} style={{ marginTop: 8 }}>{msg}</div>}
                         </div>
                       </td>
                     </tr>
@@ -162,7 +170,7 @@ export function MonthEditorPage() {
         </table>
       )}
 
-      {msg && <div className="error" style={{ marginTop: 10 }}>{msg}</div>}
+      {msg && !selectedDay && <div className={msg.includes("aktualisiert") ? "success" : "error"} style={{ marginTop: 10 }}>{msg}</div>}
     </div>
   );
 }

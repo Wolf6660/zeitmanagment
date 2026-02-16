@@ -121,6 +121,11 @@ export const api = {
       `/api/time/summary/${userId}`
     ),
 
+  supervisorOverview: () =>
+    request<Array<{ userId: string; istHours: number; overtimeWithoutCurrentMonth: number; currentMonthOvertime: number }>>(
+      "/api/time/supervisor-overview"
+    ),
+
   employees: () =>
     request<
       Array<{

@@ -11,7 +11,7 @@ import { sendMailIfEnabled } from "../../utils/mail.js";
 
 export const adminRouter = Router();
 
-adminRouter.use(requireAuth, requireRole([Role.SUPERVISOR, Role.ADMIN]));
+adminRouter.use(requireAuth, requireRole([Role.ADMIN]));
 
 adminRouter.get("/config", async (_req, res) => {
   const config = await prisma.systemConfig.findUnique({ where: { id: 1 } });
@@ -54,21 +54,24 @@ adminRouter.patch("/config", async (req, res) => {
     return;
   }
 
-  const updated = await prisma.systemConfig.update({
-    where: { id: 1 },
-    data: parsed.data
-  });
-  const authReq = req as AuthRequest;
-  await writeAuditLog({
-    actorUserId: authReq.auth?.userId,
-    actorLoginName: await resolveActorLoginName(authReq.auth?.userId),
-    action: "SYSTEM_CONFIG_UPDATED",
-    targetType: "SystemConfig",
-    targetId: "1",
-    payload: parsed.data
-  });
-
-  res.json(updated);
+  try {
+    const updated = await prisma.systemConfig.update({
+      where: { id: 1 },
+      data: parsed.data
+    });
+    const authReq = req as AuthRequest;
+    await writeAuditLog({
+      actorUserId: authReq.auth?.userId,
+      actorLoginName: await resolveActorLoginName(authReq.auth?.userId),
+      action: "SYSTEM_CONFIG_UPDATED",
+      targetType: "SystemConfig",
+      targetId: "1",
+      payload: parsed.data
+    });
+    res.json(updated);
+  } catch {
+    res.status(400).json({ message: "Konfiguration konnte nicht gespeichert werden." });
+  }
 });
 
 const holidaySchema = z.object({

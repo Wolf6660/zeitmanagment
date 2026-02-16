@@ -75,6 +75,7 @@ export function AdminHome() {
 
   const [otUserId, setOtUserId] = useState("");
   const [otDate, setOtDate] = useState("");
+  const [otSign, setOtSign] = useState<"+" | "-">("+");
   const [otHours, setOtHours] = useState(0);
   const [otCurrentHours, setOtCurrentHours] = useState(0);
   const [otNote, setOtNote] = useState("");
@@ -293,8 +294,15 @@ export function AdminHome() {
               <input type="number" value={otCurrentHours} readOnly />
             </label>
             <label>
-              Stunden (+/-)
-              <input type="number" step="0.25" value={otHours} onChange={(e) => setOtHours(Number(e.target.value))} />
+              Richtung
+              <select value={otSign} onChange={(e) => setOtSign(e.target.value as "+" | "-")}>
+                <option value="+">Plus (+)</option>
+                <option value="-">Minus (-)</option>
+              </select>
+            </label>
+            <label>
+              Stunden
+              <input type="number" min={0} max={500} step="0.25" value={otHours} onChange={(e) => setOtHours(Number(e.target.value))} />
             </label>
             <label>
               Notiz (Pflicht)
@@ -317,13 +325,19 @@ export function AdminHome() {
                   setMsg("Stunden sind ungueltig.");
                   return;
                 }
+                if (otHours < 0 || otHours > 500) {
+                  setMsg("Stunden muessen zwischen 0 und 500 liegen.");
+                  return;
+                }
                 if (!otNote.trim()) {
                   setMsg("Notiz ist Pflicht.");
                   return;
                 }
-                await api.createOvertimeAdjustment({ userId: otUserId, date: otDate, hours: otHours, note: otNote.trim() });
+                const signedHours = otSign === "-" ? -otHours : otHours;
+                await api.createOvertimeAdjustment({ userId: otUserId, date: otDate, hours: signedHours, note: otNote.trim() });
                 setMsg("Ueberstundenanpassung gespeichert.");
                 setOtHours(0);
+                setOtSign("+");
                 setOtNote("");
                 const [history, summary] = await Promise.all([api.overtimeAdjustments(otUserId), api.summary(otUserId)]);
                 setOtHistory(history);

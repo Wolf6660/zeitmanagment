@@ -18,6 +18,15 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 function AdminRoute({ children }: { children: React.ReactNode }) {
   const session = getSession();
   if (!session) return <Navigate to="/login" replace />;
+  if (session.user.role !== "ADMIN") {
+    return <Navigate to="/app" replace />;
+  }
+  return <>{children}</>;
+}
+
+function SupervisorOrAdminRoute({ children }: { children: React.ReactNode }) {
+  const session = getSession();
+  if (!session) return <Navigate to="/login" replace />;
   if (session.user.role !== "ADMIN" && session.user.role !== "SUPERVISOR") {
     return <Navigate to="/app" replace />;
   }
@@ -51,11 +60,11 @@ export default function App() {
       <Route
         path="/app/month"
         element={
-          <AdminRoute>
+          <SupervisorOrAdminRoute>
             <AppLayout>
               <MonthEditorPage />
             </AppLayout>
-          </AdminRoute>
+          </SupervisorOrAdminRoute>
         }
       />
       <Route path="*" element={<Navigate to="/app" replace />} />

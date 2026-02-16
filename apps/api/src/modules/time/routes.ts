@@ -175,7 +175,7 @@ timeRouter.post("/break-credit", requireRole([Role.SUPERVISOR, Role.ADMIN]), asy
 const overtimeAdjustmentSchema = z.object({
   userId: z.string().min(1),
   date: z.coerce.date(),
-  hours: z.number().min(-24).max(24),
+  hours: z.number().min(-500).max(500),
   note: z.string().min(3)
 });
 
@@ -545,4 +545,123 @@ timeRouter.get("/today/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Ro
   });
 
   res.json(entries);
+});
+
+timeRouter.get("/supervisor-overview", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (_req: AuthRequest, res) => {
+  const now = new Date();
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59));
+  const historyStart = new Date(Date.UTC(2000, 0, 1));
+
+  const [users, config, holidaysAll] = await Promise.all([
+    prisma.user.findMany({ where: { isActive: true }, select: { id: true, dailyWorkHours: true } }),
+    prisma.systemConfig.findUnique({ where: { id: 1 } }),
+    prisma.holiday.findMany({ where: { date: { gte: historyStart, lte: monthEnd } } })
+  ]);
+
+  const workingDays = parseWorkingDaySet(config?.defaultWeeklyWorkingDays);
+  const breakMinutes = config?.autoBreakMinutes ?? 30;
+  const breakAfterHours = config?.autoBreakAfterHours ?? 6;
+  const holidaySet = new Set(holidaysAll.map((h) => dayKey(h.date)));
+
+  const rows = await Promise.all(users.map(async (u) => {
+    const dailyHours = u.dailyWorkHours ?? config?.defaultDailyHours ?? 8;
+    const [entries, credits, leaveRequests, sickLeaves, adjustments] = await Promise.all([
+      prisma.timeEntry.findMany({
+        where: { userId: u.id, occurredAt: { gte: historyStart, lte: monthEnd } },
+        select: { type: true, occurredAt: true }
+      }),
+      prisma.breakCredit.findMany({
+        where: { userId: u.id, date: { gte: historyStart, lte: monthEnd } },
+        select: { date: true, minutes: true }
+      }),
+      prisma.leaveRequest.findMany({
+        where: { userId: u.id, status: "APPROVED", startDate: { lte: monthEnd }, endDate: { gte: historyStart } },
+        select: { startDate: true, endDate: true }
+      }),
+      prisma.sickLeave.findMany({
+        where: { userId: u.id, startDate: { lte: monthEnd }, endDate: { gte: historyStart } },
+        select: { startDate: true, endDate: true }
+      }),
+      prisma.overtimeAdjustment.findMany({
+        where: { userId: u.id, date: { gte: historyStart, lte: monthEnd } },
+        select: { date: true, hours: true }
+      })
+    ]);
+
+    const byDay = new Map<string, Array<{ type: TimeEntryType; occurredAt: Date }>>();
+    for (const e of entries) {
+      const k = dayKey(e.occurredAt);
+      const list = byDay.get(k) ?? [];
+      list.push({ type: e.type, occurredAt: e.occurredAt });
+      byDay.set(k, list);
+    }
+    const creditByDay = new Map<string, number>();
+    for (const c of credits) {
+      const k = dayKey(c.date);
+      creditByDay.set(k, (creditByDay.get(k) ?? 0) + c.minutes);
+    }
+
+    const leaveDays = new Set<string>();
+    for (const l of leaveRequests) {
+      const s = new Date(Math.max(l.startDate.getTime(), historyStart.getTime()));
+      const e = new Date(Math.min(l.endDate.getTime(), monthEnd.getTime()));
+      for (let d = new Date(s); d <= e; d = new Date(d.getTime() + 86400000)) {
+        leaveDays.add(dayKey(d));
+      }
+    }
+    const sickDays = new Set<string>();
+    for (const l of sickLeaves) {
+      const s = new Date(Math.max(l.startDate.getTime(), historyStart.getTime()));
+      const e = new Date(Math.min(l.endDate.getTime(), monthEnd.getTime()));
+      for (let d = new Date(s); d <= e; d = new Date(d.getTime() + 86400000)) {
+        sickDays.add(dayKey(d));
+      }
+    }
+
+    const manualByDay = new Map<string, number>();
+    for (const a of adjustments) {
+      const k = dayKey(a.date);
+      manualByDay.set(k, (manualByDay.get(k) ?? 0) + a.hours);
+    }
+
+    let plannedCurrent = 0;
+    let overtimeCurrent = 0;
+    let overtimeBeforeCurrent = 0;
+
+    for (let d = new Date(historyStart); d <= monthEnd; d = new Date(d.getTime() + 86400000)) {
+      const k = dayKey(d);
+      const isWorkday = workingDays.has(d.getUTCDay()) && !holidaySet.has(k);
+      const planned = isWorkday ? dailyHours : 0;
+      const dayEntries = (byDay.get(k) ?? []).sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
+      let openIn: Date | null = null;
+      let grossMin = 0;
+      for (const e of dayEntries) {
+        if (e.type === TimeEntryType.CLOCK_IN) openIn = e.occurredAt;
+        if (e.type === TimeEntryType.CLOCK_OUT && openIn) {
+          const diff = e.occurredAt.getTime() - openIn.getTime();
+          if (diff > 0) grossMin += Math.floor(diff / 60000);
+          openIn = null;
+        }
+      }
+      const netWorked = Math.max(grossMin - (grossMin >= breakAfterHours * 60 ? breakMinutes : 0) + (creditByDay.get(k) ?? 0), 0) / 60;
+      const absenceHours = isWorkday ? ((leaveDays.has(k) ? dailyHours : 0) + (sickDays.has(k) ? dailyHours : 0)) : 0;
+      const dayOvertime = netWorked + absenceHours - planned + (manualByDay.get(k) ?? 0);
+      if (d >= monthStart) {
+        plannedCurrent += planned;
+        overtimeCurrent += dayOvertime;
+      } else {
+        overtimeBeforeCurrent += dayOvertime;
+      }
+    }
+
+    return {
+      userId: u.id,
+      istHours: Number((plannedCurrent - overtimeCurrent).toFixed(2)),
+      overtimeWithoutCurrentMonth: Number(overtimeBeforeCurrent.toFixed(2)),
+      currentMonthOvertime: Number(overtimeCurrent.toFixed(2))
+    };
+  }));
+
+  res.json(rows);
 });
