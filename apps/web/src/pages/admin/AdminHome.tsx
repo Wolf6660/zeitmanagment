@@ -440,6 +440,28 @@ export function AdminHome() {
                       {editing ? (
                         <input
                           type="number"
+                          value={editingEmployee.annualVacationDays ?? e.annualVacationDays}
+                          onChange={(ev) => setEditingEmployee({ ...editingEmployee, annualVacationDays: Number(ev.target.value) })}
+                        />
+                      ) : (
+                        e.annualVacationDays
+                      )}
+                    </td>
+                    <td>
+                      {editing ? (
+                        <input
+                          type="number"
+                          value={editingEmployee.carryOverVacationDays ?? e.carryOverVacationDays}
+                          onChange={(ev) => setEditingEmployee({ ...editingEmployee, carryOverVacationDays: Number(ev.target.value) })}
+                        />
+                      ) : (
+                        e.carryOverVacationDays
+                      )}
+                    </td>
+                    <td>
+                      {editing ? (
+                        <input
+                          type="number"
                           step="0.25"
                           value={editingEmployee.dailyWorkHours ?? e.dailyWorkHours ?? 8}
                           onChange={(ev) => setEditingEmployee({ ...editingEmployee, dailyWorkHours: Number(ev.target.value) })}
@@ -468,28 +490,6 @@ export function AdminHome() {
                           <option value="false">Nein</option>
                         </select>
                       ) : e.webLoginEnabled ? "Ja" : "Nein"}
-                    </td>
-                    <td>
-                      {editing ? (
-                        <input
-                          type="number"
-                          value={editingEmployee.annualVacationDays ?? e.annualVacationDays}
-                          onChange={(ev) => setEditingEmployee({ ...editingEmployee, annualVacationDays: Number(ev.target.value) })}
-                        />
-                      ) : (
-                        e.annualVacationDays
-                      )}
-                    </td>
-                    <td>
-                      {editing ? (
-                        <input
-                          type="number"
-                          value={editingEmployee.carryOverVacationDays ?? e.carryOverVacationDays}
-                          onChange={(ev) => setEditingEmployee({ ...editingEmployee, carryOverVacationDays: Number(ev.target.value) })}
-                        />
-                      ) : (
-                        e.carryOverVacationDays
-                      )}
                     </td>
                     <td>
                       {editing ? (

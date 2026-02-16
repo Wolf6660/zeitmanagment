@@ -342,7 +342,10 @@ adminRouter.post("/logo-upload", async (req: AuthRequest, res) => {
   const uploadDir = path.resolve(process.cwd(), "uploads");
   if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
   const targetPath = path.join(uploadDir, `logo.${ext}`);
-  fs.writeFileSync(targetPath, Buffer.from(parsed.data.contentBase64, "base64"));
+  const rawBase64 = parsed.data.contentBase64.includes(",")
+    ? parsed.data.contentBase64.split(",").pop() || ""
+    : parsed.data.contentBase64;
+  fs.writeFileSync(targetPath, Buffer.from(rawBase64, "base64"));
   const logoUrl = `/uploads/logo.${ext}`;
   await prisma.systemConfig.update({ where: { id: 1 }, data: { companyLogoUrl: logoUrl } });
   await writeAuditLog({

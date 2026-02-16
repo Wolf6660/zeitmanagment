@@ -42,14 +42,19 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   const res = await fetch(`${API_URL}${path}`, { ...init, headers });
   if (!res.ok) {
-    let message = "Anfrage fehlgeschlagen.";
+    let message = `Anfrage fehlgeschlagen (${res.status}).`;
     try {
       const body = await res.json();
       if (body?.message) {
         message = body.message;
       }
     } catch {
-      // Ignore parse error.
+      try {
+        const txt = await res.text();
+        if (txt) message = txt.slice(0, 180);
+      } catch {
+        // Ignore parse error.
+      }
     }
     throw new Error(message);
   }

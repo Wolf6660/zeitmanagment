@@ -22,7 +22,7 @@ export function createApp() {
   }
 
   app.use(cors({ origin: allowAnyOrigin ? true : env.WEB_ORIGIN }));
-  app.use(express.json());
+  app.use(express.json({ limit: "12mb" }));
   app.use(morgan("dev"));
   app.use("/uploads", express.static(uploadDir));
 
