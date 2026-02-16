@@ -10,7 +10,7 @@ export const timeRouter = Router();
 
 timeRouter.use(requireAuth);
 
-function zodFirstMessage(result: z.ZodSafeParseError<unknown>): string {
+function zodFirstMessage(result: z.SafeParseError<unknown>): string {
   const issue = result.error.issues[0];
   return issue?.message || "Ungueltige Eingaben.";
 }
