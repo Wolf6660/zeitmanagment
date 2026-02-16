@@ -49,8 +49,6 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
-      args:
-        VITE_API_URL: http://localhost:${API_PORT}
     container_name: zeitmanagment-web
     restart: unless-stopped
     depends_on:
