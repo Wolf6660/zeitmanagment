@@ -11,6 +11,7 @@ async function main() {
       companyName: "Musterfirma",
       systemName: "Zeitmanagment",
       defaultDailyHours: 8,
+      selfCorrectionMaxDays: 3,
       autoBreakMinutes: 30,
       autoBreakAfterHours: 6,
       webPort: 3000,

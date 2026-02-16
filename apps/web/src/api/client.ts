@@ -203,6 +203,7 @@ export const api = {
       companyLogoUrl?: string | null;
       defaultDailyHours: number;
       defaultWeeklyWorkingDays?: string;
+      selfCorrectionMaxDays?: number;
       autoBreakMinutes: number;
       autoBreakAfterHours: number;
       colorApproved: string;
@@ -236,6 +237,11 @@ export const api = {
 
   createOvertimeAdjustment: (payload: { userId: string; date: string; hours: number; note: string }) =>
     request("/api/time/overtime-adjustment", { method: "POST", body: JSON.stringify(payload) }),
+
+  overtimeAdjustments: (userId: string) =>
+    request<Array<{ id: string; userId: string; date: string; hours: number; reason: string; createdAt: string }>>(
+      `/api/time/overtime-adjustment/${userId}`
+    ),
 
   listAuditLogs: () =>
     request<Array<{ id: string; actorLoginName: string; action: string; targetType?: string; targetId?: string; payloadJson?: string; createdAt: string }>>(

@@ -24,6 +24,7 @@ const configSchema = z.object({
   companyLogoUrl: z.string().url().nullable().optional(),
   defaultDailyHours: z.number().min(1).max(24).optional(),
   defaultWeeklyWorkingDays: z.string().optional(),
+  selfCorrectionMaxDays: z.number().int().min(0).max(60).optional(),
   autoBreakMinutes: z.number().int().min(0).max(180).optional(),
   autoBreakAfterHours: z.number().min(0).max(24).optional(),
   colorApproved: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),

@@ -220,6 +220,7 @@ model SystemConfig {
   companyLogoUrl                    String?
   defaultDailyHours                 Float    @default(8)
   defaultWeeklyWorkingDays          String   @default("MON,TUE,WED,THU,FRI")
+  selfCorrectionMaxDays             Int      @default(3)
   autoBreakMinutes                  Int      @default(30)
   autoBreakAfterHours               Float    @default(6)
 

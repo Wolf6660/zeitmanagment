@@ -8,10 +8,6 @@ function kindLabel(kind: string): string {
   return kind === "VACATION" ? "Urlaub" : "Ueberstunden";
 }
 
-function pad(v: number): string {
-  return String(v).padStart(2, "0");
-}
-
 export function EmployeeHome() {
   const session = getSession();
   const today = new Date();
@@ -20,11 +16,13 @@ export function EmployeeHome() {
   const [message, setMessage] = useState("");
   const [leaveMessage, setLeaveMessage] = useState("");
   const [leaveList, setLeaveList] = useState<Array<{ id: string; kind: string; status: string; startDate: string; endDate: string; note?: string }>>([]);
-  const [todayEntries, setTodayEntries] = useState<Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; occurredAt: string; source: string }>>([]);
+  const [todayEntries, setTodayEntries] = useState<Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; occurredAt: string; source: string; reasonText?: string }>>([]);
   const [manualMode, setManualMode] = useState(false);
   const [manualNote, setManualNote] = useState("");
   const [manualIn, setManualIn] = useState("");
   const [manualOut, setManualOut] = useState("");
+  const [manualDate, setManualDate] = useState("");
+  const [maxBackDays, setMaxBackDays] = useState(3);
 
   const [leaveKind, setLeaveKind] = useState<"VACATION" | "OVERTIME">("VACATION");
   const [startDate, setStartDate] = useState("");
@@ -37,7 +35,7 @@ export function EmployeeHome() {
   const [monthView, setMonthView] = useState<{
     monthPlanned: number;
     monthWorked: number;
-    days: Array<{ date: string; plannedHours: number; workedHours: number; isHoliday: boolean; isWeekend: boolean; hasManualCorrection: boolean; entries: Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; time: string; source: string }> }>;
+    days: Array<{ date: string; plannedHours: number; workedHours: number; isHoliday: boolean; isWeekend: boolean; hasManualCorrection: boolean; entries: Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; time: string; source: string; reasonText?: string }> }>;
   } | null>(null);
 
   async function reloadData() {
@@ -57,6 +55,12 @@ export function EmployeeHome() {
   useEffect(() => {
     reloadData().catch((e) => setMessage((e as Error).message));
   }, [monthYear, monthNum]);
+
+  useEffect(() => {
+    api.publicConfig()
+      .then((cfg) => setMaxBackDays(cfg.selfCorrectionMaxDays ?? 3))
+      .catch(() => setMaxBackDays(3));
+  }, []);
 
   const filteredLeaves = useMemo(() => leaveList.filter((l) => l.status === filter), [leaveList, filter]);
   const openClockIn = todayEntries.length > 0 && todayEntries[todayEntries.length - 1].type === "CLOCK_IN";
@@ -108,12 +112,22 @@ export function EmployeeHome() {
             </button>
           </div>
           <button className="secondary" onClick={() => setManualMode((m) => !m)}>
-            {manualMode ? "Bearbeiten schliessen" : "Tag bearbeiten (heute)"}
+            {manualMode ? "Nachtragen schliessen" : "Nachtragen"}
           </button>
           {manualMode && (
             <div className="card" style={{ padding: 10 }}>
-              <strong>Heutige Zeiten bearbeiten</strong>
+              <strong>Zeiten nachtragen</strong>
               <div className="grid" style={{ marginTop: 8 }}>
+                <label>
+                  Datum
+                  <input
+                    type="date"
+                    value={manualDate}
+                    onChange={(e) => setManualDate(e.target.value)}
+                    max={new Date().toISOString().slice(0, 10)}
+                    min={new Date(Date.now() - maxBackDays * 86400000).toISOString().slice(0, 10)}
+                  />
+                </label>
                 <label>
                   Kommen
                   <input type="time" value={manualIn} onChange={(e) => setManualIn(e.target.value)} />
@@ -130,6 +144,10 @@ export function EmployeeHome() {
                         setMessage("Notiz ist Pflicht.");
                         return;
                       }
+                      if (!manualDate) {
+                        setMessage("Datum ist Pflicht.");
+                        return;
+                      }
                       const events: Array<{ type: "CLOCK_IN" | "CLOCK_OUT"; time: string }> = [];
                       if (manualIn) events.push({ type: "CLOCK_IN", time: manualIn });
                       if (manualOut) events.push({ type: "CLOCK_OUT", time: manualOut });
@@ -137,10 +155,8 @@ export function EmployeeHome() {
                         setMessage("Mindestens eine Zeit ist erforderlich.");
                         return;
                       }
-                      const nowDate = new Date();
-                      const date = `${nowDate.getFullYear()}-${pad(nowDate.getMonth() + 1)}-${pad(nowDate.getDate())}`;
-                      await api.dayOverrideSelf({ date, note: manualNote.trim(), events });
-                      setMessage("Heutige Zeiten aktualisiert.");
+                      await api.dayOverrideSelf({ date: manualDate, note: manualNote.trim(), events });
+                      setMessage("Nachtrag gespeichert.");
                       await reloadData();
                     } catch (e) {
                       setMessage((e as Error).message);
@@ -160,6 +176,7 @@ export function EmployeeHome() {
             {todayEntries.map((e) => (
               <div key={e.id} style={{ color: e.source === "MANUAL_CORRECTION" ? "var(--manual)" : "inherit" }}>
                 {e.type === "CLOCK_IN" ? "Kommen" : "Gehen"} {new Date(e.occurredAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
+                {e.reasonText ? ` - ${e.reasonText}` : ""}
               </div>
             ))}
             {openClockIn && <div className="error">Offene Buchung: Ausstempeln fehlt noch.</div>}
@@ -267,6 +284,7 @@ export function EmployeeHome() {
                     {d.entries.map((e) => (
                       <span key={e.id} style={{ marginRight: 8, color: e.source === "MANUAL_CORRECTION" ? "var(--manual)" : "inherit" }}>
                         {e.type === "CLOCK_IN" ? "K" : "G"} {e.time}
+                        {e.reasonText ? ` (${e.reasonText})` : ""}
                       </span>
                     ))}
                   </td>

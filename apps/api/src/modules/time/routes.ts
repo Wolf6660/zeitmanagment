@@ -270,9 +270,18 @@ timeRouter.post("/day-override-self", requireRole([Role.EMPLOYEE, Role.SUPERVISO
     res.status(400).json({ message: "Ungueltige Eingaben. Notiz ist Pflicht." });
     return;
   }
-  const todayKey = new Date().toISOString().slice(0, 10);
-  if (parsed.data.date !== todayKey) {
-    res.status(403).json({ message: "Mitarbeiter duerfen nur den laufenden Tag bearbeiten." });
+  const cfg = await prisma.systemConfig.findUnique({ where: { id: 1 }, select: { selfCorrectionMaxDays: true } });
+  const maxDays = cfg?.selfCorrectionMaxDays ?? 3;
+  const now = new Date();
+  const todayLocal = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const selected = new Date(`${parsed.data.date}T00:00:00`);
+  const diffDays = Math.floor((todayLocal.getTime() - selected.getTime()) / 86400000);
+  if (Number.isNaN(diffDays) || diffDays < 0) {
+    res.status(403).json({ message: "Nachtrag in die Zukunft ist nicht erlaubt." });
+    return;
+  }
+  if (diffDays > maxDays) {
+    res.status(403).json({ message: `Nachtrag nur bis ${maxDays} Tage rueckwirkend erlaubt.` });
     return;
   }
   const dayStart = new Date(`${parsed.data.date}T00:00:00`);

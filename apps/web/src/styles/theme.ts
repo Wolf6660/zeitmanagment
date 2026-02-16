@@ -2,6 +2,7 @@ export type PublicConfig = {
   companyName: string;
   systemName: string;
   companyLogoUrl?: string | null;
+  selfCorrectionMaxDays?: number;
   colorApproved: string;
   colorRejected: string;
   colorManualCorrection: string;

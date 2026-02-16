@@ -11,6 +11,7 @@ type AdminConfig = {
   companyLogoUrl?: string | null;
   defaultDailyHours: number;
   defaultWeeklyWorkingDays?: string;
+  selfCorrectionMaxDays?: number;
   autoBreakMinutes: number;
   autoBreakAfterHours: number;
   colorApproved: string;
@@ -76,6 +77,7 @@ export function AdminHome() {
   const [otDate, setOtDate] = useState("");
   const [otHours, setOtHours] = useState(0);
   const [otNote, setOtNote] = useState("");
+  const [otHistory, setOtHistory] = useState<Array<{ id: string; date: string; hours: number; reason: string; createdAt: string }>>([]);
 
   const [newEmployee, setNewEmployee] = useState({
     name: "",
@@ -109,6 +111,12 @@ export function AdminHome() {
       api.listAuditLogs().then(setLogs).catch((e) => setMsg((e as Error).message));
     }
   }, [section]);
+
+  useEffect(() => {
+    if (section === "overtime" && otUserId) {
+      api.overtimeAdjustments(otUserId).then(setOtHistory).catch((e) => setMsg((e as Error).message));
+    }
+  }, [section, otUserId]);
 
   const sectionTitle = useMemo(() => {
     if (section === "company") return "Firmenstammdaten";
@@ -178,7 +186,7 @@ export function AdminHome() {
       {section === "rules" && (
         <div className="grid grid-2">
           <label>
-            Standard Sollarbeitszeit/Tag (wenn Mitarbeiterwert leer)
+            Standard Sollarbeitszeit/Tag
             <input type="number" step="0.25" value={config.defaultDailyHours} onChange={(e) => setConfig({ ...config, defaultDailyHours: Number(e.target.value) })} />
           </label>
           <label>
@@ -190,27 +198,39 @@ export function AdminHome() {
             <input type="number" value={config.autoBreakAfterHours} onChange={(e) => setConfig({ ...config, autoBreakAfterHours: Number(e.target.value) })} />
           </label>
           <label>
-            Arbeitstage
-            <div className="row">
-              {["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"].map((d) => {
-                const set = new Set((config.defaultWeeklyWorkingDays || "MON,TUE,WED,THU,FRI").split(",").filter(Boolean));
-                const active = set.has(d);
-                return (
-                  <button
-                    type="button"
-                    key={d}
-                    className={active ? "" : "secondary"}
-                    onClick={() => {
-                      if (active) set.delete(d); else set.add(d);
-                      setConfig({ ...config, defaultWeeklyWorkingDays: Array.from(set).join(",") });
-                    }}
-                  >
-                    {d}
-                  </button>
-                );
-              })}
-            </div>
+            Rueckwirkender Nachtrag (Tage)
+            <input
+              type="number"
+              min={0}
+              max={60}
+              value={config.selfCorrectionMaxDays ?? 3}
+              onChange={(e) => setConfig({ ...config, selfCorrectionMaxDays: Number(e.target.value) })}
+            />
           </label>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label>
+              Arbeitstage
+              <div className="row">
+                {["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"].map((d) => {
+                  const set = new Set((config.defaultWeeklyWorkingDays || "MON,TUE,WED,THU,FRI").split(",").filter(Boolean));
+                  const active = set.has(d);
+                  return (
+                    <button
+                      type="button"
+                      key={d}
+                      className={active ? "" : "secondary"}
+                      onClick={() => {
+                        if (active) set.delete(d); else set.add(d);
+                        setConfig({ ...config, defaultWeeklyWorkingDays: Array.from(set).join(",") });
+                      }}
+                    >
+                      {d}
+                    </button>
+                  );
+                })}
+              </div>
+            </label>
+          </div>
         </div>
       )}
 
@@ -221,13 +241,14 @@ export function AdminHome() {
               {field.label}
               <input
                 type="color"
-                value={config[field.key] as string}
+                value={(config[field.key] as string) || "#000000"}
                 onChange={(e) => {
                   const updated = { ...config, [field.key]: e.target.value } as AdminConfig;
                   setConfig(updated);
                   applyTheme(updated as PublicConfig);
                 }}
               />
+              <div style={{ marginTop: 4, color: "var(--muted)" }}>Aktuell: {(config[field.key] as string) || "#000000"}</div>
             </label>
           ))}
         </div>
@@ -270,6 +291,7 @@ export function AdminHome() {
                 setMsg("Ueberstundenanpassung gespeichert.");
                 setOtHours(0);
                 setOtNote("");
+                setOtHistory(await api.overtimeAdjustments(otUserId));
               } catch (e) {
                 setMsg((e as Error).message);
               }
@@ -277,6 +299,21 @@ export function AdminHome() {
           >
             Ueberstunden speichern
           </button>
+          <table style={{ marginTop: 10 }}>
+            <thead>
+              <tr><th>Datum</th><th>Stunden</th><th>Notiz</th></tr>
+            </thead>
+            <tbody>
+              {otHistory.map((h) => (
+                <tr key={h.id}>
+                  <td>{h.date.slice(0, 10)}</td>
+                  <td>{h.hours.toFixed(2)}</td>
+                  <td>{h.reason}</td>
+                </tr>
+              ))}
+              {otHistory.length === 0 && <tr><td colSpan={3}>Keine Eintraege.</td></tr>}
+            </tbody>
+          </table>
         </div>
       )}
 
