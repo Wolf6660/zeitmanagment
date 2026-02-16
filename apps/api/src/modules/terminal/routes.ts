@@ -35,11 +35,15 @@ terminalRouter.post("/punch", async (req, res) => {
 
   const user = await prisma.user.findFirst({
     where: { rfidTag: parsed.data.rfidTag, isActive: true },
-    select: { id: true }
+    select: { id: true, timeTrackingEnabled: true }
   });
 
   if (!user) {
     res.status(404).json({ message: "RFID nicht zugeordnet." });
+    return;
+  }
+  if (!user.timeTrackingEnabled) {
+    res.status(403).json({ message: "Zeiterfassung ist fuer diesen Mitarbeiter deaktiviert." });
     return;
   }
 

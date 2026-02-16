@@ -140,6 +140,7 @@ export const api = {
         loginName: string;
         mailNotificationsEnabled: boolean;
         webLoginEnabled: boolean;
+        timeTrackingEnabled: boolean;
         rfidTag?: string | null;
       }>
     >("/api/employees"),
@@ -155,6 +156,7 @@ export const api = {
     carryOverVacationDays: number;
     mailNotificationsEnabled: boolean;
     webLoginEnabled: boolean;
+    timeTrackingEnabled?: boolean;
     rfidTag?: string;
   }) => request("/api/employees", { method: "POST", body: JSON.stringify(payload) }),
 
@@ -169,6 +171,7 @@ export const api = {
       carryOverVacationDays?: number;
       mailNotificationsEnabled?: boolean;
       webLoginEnabled?: boolean;
+      timeTrackingEnabled?: boolean;
       rfidTag?: string | null;
       isActive?: boolean;
     }

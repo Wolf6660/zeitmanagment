@@ -43,6 +43,7 @@ type Employee = {
   loginName: string;
   mailNotificationsEnabled: boolean;
   webLoginEnabled: boolean;
+  timeTrackingEnabled: boolean;
   dailyWorkHours?: number | null;
   rfidTag?: string | null;
 };
@@ -482,6 +483,7 @@ export function AdminHome() {
                 <th>RFID</th>
                 <th>Mailversand</th>
                 <th>Weblogin</th>
+                <th>Zeiterfassung</th>
                 <th>Aktiv</th>
                 <th>Aktion</th>
               </tr>
@@ -576,6 +578,17 @@ export function AdminHome() {
                     <td>
                       {editing ? (
                         <select
+                          value={String(editingEmployee.timeTrackingEnabled ?? e.timeTrackingEnabled)}
+                          onChange={(ev) => setEditingEmployee({ ...editingEmployee, timeTrackingEnabled: ev.target.value === "true" })}
+                        >
+                          <option value="true">Ja</option>
+                          <option value="false">Nein</option>
+                        </select>
+                      ) : e.timeTrackingEnabled ? "Ja" : "Nein"}
+                    </td>
+                    <td>
+                      {editing ? (
+                        <select
                           value={String(editingEmployee.isActive ?? e.isActive)}
                           onChange={(ev) => setEditingEmployee({ ...editingEmployee, isActive: ev.target.value === "true" })}
                         >
@@ -600,6 +613,7 @@ export function AdminHome() {
                               isActive: e.isActive,
                               mailNotificationsEnabled: e.mailNotificationsEnabled,
                               webLoginEnabled: e.webLoginEnabled,
+                              timeTrackingEnabled: e.timeTrackingEnabled,
                               rfidTag: e.rfidTag
                             });
                           }}

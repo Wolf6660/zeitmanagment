@@ -30,6 +30,7 @@ employeesRouter.get("/me", async (req: AuthRequest, res) => {
       overtimeBalanceHours: true,
       mailNotificationsEnabled: true,
       webLoginEnabled: true,
+      timeTrackingEnabled: true,
       rfidTag: true,
       isActive: true
     }
@@ -58,6 +59,7 @@ employeesRouter.get("/", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (_req
       overtimeBalanceHours: true,
       mailNotificationsEnabled: true,
       webLoginEnabled: true,
+      timeTrackingEnabled: true,
       loginName: true,
       rfidTag: true
     }
@@ -77,6 +79,7 @@ const createEmployeeSchema = z.object({
   carryOverVacationDays: z.number().min(0).max(365).default(0),
   mailNotificationsEnabled: z.boolean().default(true),
   webLoginEnabled: z.boolean().default(true),
+  timeTrackingEnabled: z.boolean().default(true),
   rfidTag: z.string().optional()
 });
 
@@ -89,6 +92,10 @@ employeesRouter.post("/", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req
 
   if (req.auth?.role === Role.SUPERVISOR && parsed.data.role !== Role.EMPLOYEE) {
     res.status(403).json({ message: "Vorgesetzte duerfen nur Mitarbeiter anlegen." });
+    return;
+  }
+  if (req.auth?.role === Role.SUPERVISOR && parsed.data.timeTrackingEnabled === false) {
+    res.status(403).json({ message: "Vorgesetzte duerfen Zeiterfassung nicht deaktivieren." });
     return;
   }
 
@@ -107,6 +114,7 @@ employeesRouter.post("/", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req
         carryOverVacationDays: parsed.data.carryOverVacationDays,
         mailNotificationsEnabled: parsed.data.mailNotificationsEnabled,
         webLoginEnabled: parsed.data.webLoginEnabled,
+        timeTrackingEnabled: parsed.data.timeTrackingEnabled,
         rfidTag: parsed.data.rfidTag
       },
       select: {
@@ -120,6 +128,7 @@ employeesRouter.post("/", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req
         carryOverVacationDays: true,
         mailNotificationsEnabled: true,
         webLoginEnabled: true,
+        timeTrackingEnabled: true,
         rfidTag: true
       }
     });
@@ -149,6 +158,7 @@ const updateEmployeeSchema = z.object({
   overtimeBalanceHours: z.number().min(-10000).max(10000).optional(),
   mailNotificationsEnabled: z.boolean().optional(),
   webLoginEnabled: z.boolean().optional(),
+  timeTrackingEnabled: z.boolean().optional(),
   rfidTag: z.string().nullable().optional(),
   isActive: z.boolean().optional()
 });
@@ -178,6 +188,12 @@ employeesRouter.patch("/:id", requireRole([Role.SUPERVISOR, Role.ADMIN]), async 
     res.status(403).json({ message: "Vorgesetzte duerfen keine Admins/Vorgesetzten setzen." });
     return;
   }
+  if (req.auth?.role === Role.SUPERVISOR) {
+    if (parsed.data.overtimeBalanceHours !== undefined || parsed.data.timeTrackingEnabled !== undefined) {
+      res.status(403).json({ message: "Vorgesetzte duerfen Ueberstundenkonto/Zeiterfassung nicht aendern." });
+      return;
+    }
+  }
 
   try {
     const updated = await prisma.user.update({
@@ -195,6 +211,7 @@ employeesRouter.patch("/:id", requireRole([Role.SUPERVISOR, Role.ADMIN]), async 
         overtimeBalanceHours: true,
         mailNotificationsEnabled: true,
         webLoginEnabled: true,
+        timeTrackingEnabled: true,
         rfidTag: true
       }
     });

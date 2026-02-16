@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { api } from "../../api/client";
+import { api, getSession } from "../../api/client";
 
 function kindLabel(kind: string): string {
   return kind === "VACATION" ? "Urlaub" : "Ueberstunden";
 }
 
 export function SupervisorHome() {
+  const session = getSession();
   const [employees, setEmployees] = useState<Array<{ id: string; name: string; loginName?: string; role: string; annualVacationDays: number; carryOverVacationDays: number }>>([]);
   const [overview, setOverview] = useState<Record<string, { istHours: number; overtimeHours: number }>>({});
   const [pending, setPending] = useState<Array<{ id: string; kind: string; startDate: string; endDate: string; note?: string; userId: string; availableVacationDays: number; requestedWorkingDays: number; remainingVacationAfterRequest: number; availableOvertimeHours: number; user: { name: string } }>>([]);
@@ -17,13 +18,17 @@ export function SupervisorHome() {
   const [msg, setMsg] = useState("");
   const [specialPending, setSpecialPending] = useState<Array<{ id: string; userId: string; date: string; status: "SUBMITTED" | "APPROVED" | "REJECTED"; note?: string; user: { id: string; name: string; loginName: string } }>>([]);
   const [specialNotes, setSpecialNotes] = useState<Record<string, string>>({});
+  const [reasonText, setReasonText] = useState("");
+  const [todayEntries, setTodayEntries] = useState<Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; occurredAt: string; source: string; reasonText?: string }>>([]);
 
   async function loadData() {
-    const [e, p, ov, sp] = await Promise.all([api.employees(), api.pendingLeaves(), api.supervisorOverview(), api.pendingSpecialWork()]);
+    if (!session) return;
+    const [e, p, ov, sp, t] = await Promise.all([api.employees(), api.pendingLeaves(), api.supervisorOverview(), api.pendingSpecialWork(), api.todayEntries(session.user.id)]);
     setEmployees(e);
     setPending(p);
     setOverview(Object.fromEntries(ov.map((x) => [x.userId, { istHours: x.istHours, overtimeHours: x.overtimeHours }])));
     setSpecialPending(sp);
+    setTodayEntries(t);
   }
 
   useEffect(() => {
@@ -32,6 +37,41 @@ export function SupervisorHome() {
 
   return (
     <div className="grid grid-2">
+      <div className="card">
+        <h2>Eigene Stempeluhr</h2>
+        <div className="grid">
+          <input value={reasonText} onChange={(e) => setReasonText(e.target.value)} placeholder="Grund / Kommentar (Pflicht)" />
+          <div className="row">
+            <button onClick={async () => {
+              try {
+                if (!reasonText.trim()) { setMsg("Grund ist Pflicht."); return; }
+                await api.clock({ type: "CLOCK_IN", reasonText });
+                await loadData();
+                setMsg("Kommen gestempelt.");
+              } catch (e) { setMsg((e as Error).message); }
+            }}>Kommen</button>
+            <button className="secondary" onClick={async () => {
+              try {
+                if (!reasonText.trim()) { setMsg("Grund ist Pflicht."); return; }
+                await api.clock({ type: "CLOCK_OUT", reasonText });
+                await loadData();
+                setMsg("Gehen gestempelt.");
+              } catch (e) { setMsg((e as Error).message); }
+            }}>Gehen</button>
+          </div>
+          <div className="card" style={{ padding: 10 }}>
+            <strong>Heute erfasst</strong>
+            {todayEntries.length === 0 && <div>Keine Ereignisse heute.</div>}
+            {todayEntries.map((e) => (
+              <div key={e.id}>
+                {e.type === "CLOCK_IN" ? "Kommen" : "Gehen"} {new Date(e.occurredAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
+                {e.reasonText ? ` - ${e.reasonText}` : ""}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <div className="card">
         <h2>Stundenaufzeichnung Mitarbeiter</h2>
         <table>

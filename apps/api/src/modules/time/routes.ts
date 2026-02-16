@@ -75,6 +75,11 @@ timeRouter.post("/clock", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMI
     res.status(400).json({ message: "Ungueltige Eingaben. Grund ist Pflicht." });
     return;
   }
+  const me = await prisma.user.findUnique({ where: { id: req.auth.userId }, select: { timeTrackingEnabled: true } });
+  if (me && !me.timeTrackingEnabled) {
+    res.status(403).json({ message: "Zeiterfassung ist fuer diesen Mitarbeiter deaktiviert." });
+    return;
+  }
 
   const entry = await prisma.timeEntry.create({
     data: {
@@ -111,6 +116,11 @@ timeRouter.post("/self-correction", requireRole([Role.EMPLOYEE, Role.SUPERVISOR,
   const parsed = selfCorrectionSchema.safeParse(req.body);
   if (!parsed.success || !req.auth) {
     res.status(400).json({ message: "Ungueltige Eingaben. Notiz ist Pflicht." });
+    return;
+  }
+  const me = await prisma.user.findUnique({ where: { id: req.auth.userId }, select: { timeTrackingEnabled: true } });
+  if (me && !me.timeTrackingEnabled) {
+    res.status(403).json({ message: "Zeiterfassung ist fuer diesen Mitarbeiter deaktiviert." });
     return;
   }
 
@@ -154,6 +164,11 @@ timeRouter.post("/correction", requireRole([Role.SUPERVISOR, Role.ADMIN]), async
   const parsed = correctionSchema.safeParse(req.body);
   if (!parsed.success || !req.auth) {
     res.status(400).json({ message: "Ungueltige Eingaben oder Kommentar zu kurz." });
+    return;
+  }
+  const target = await prisma.user.findUnique({ where: { id: parsed.data.userId }, select: { timeTrackingEnabled: true } });
+  if (target && !target.timeTrackingEnabled) {
+    res.status(403).json({ message: "Zeiterfassung ist fuer diesen Mitarbeiter deaktiviert." });
     return;
   }
 
@@ -364,6 +379,11 @@ timeRouter.post("/day-override", requireRole([Role.SUPERVISOR, Role.ADMIN]), asy
     res.status(400).json({ message: "Datum ist ungueltig." });
     return;
   }
+  const target = await prisma.user.findUnique({ where: { id: parsed.data.userId }, select: { timeTrackingEnabled: true } });
+  if (target && !target.timeTrackingEnabled) {
+    res.status(403).json({ message: "Zeiterfassung ist fuer diesen Mitarbeiter deaktiviert." });
+    return;
+  }
 
   try {
     const dayStart = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, 0, 0, 0));
@@ -431,6 +451,11 @@ timeRouter.post("/day-override-self", requireRole([Role.EMPLOYEE, Role.SUPERVISO
   }
   if (!req.auth) {
     res.status(401).json({ message: "Nicht authentifiziert." });
+    return;
+  }
+  const me = await prisma.user.findUnique({ where: { id: req.auth.userId }, select: { timeTrackingEnabled: true } });
+  if (me && !me.timeTrackingEnabled) {
+    res.status(403).json({ message: "Zeiterfassung ist fuer diesen Mitarbeiter deaktiviert." });
     return;
   }
   const dateParts = parseIsoDateParts(parsed.data.date);
@@ -516,7 +541,7 @@ timeRouter.get("/month/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Ro
   const monthEnd = new Date(Date.UTC(year, month, 0, 23, 59, 59));
   const [config, user, holidays, entries, approvals] = await Promise.all([
     prisma.systemConfig.findUnique({ where: { id: 1 } }),
-    prisma.user.findUnique({ where: { id: targetUserId }, select: { dailyWorkHours: true } }),
+    prisma.user.findUnique({ where: { id: targetUserId }, select: { dailyWorkHours: true, timeTrackingEnabled: true } }),
     prisma.holiday.findMany({ where: { date: { gte: monthStart, lte: monthEnd } } }),
     prisma.timeEntry.findMany({ where: { userId: targetUserId, occurredAt: { gte: monthStart, lte: monthEnd } }, orderBy: { occurredAt: "asc" } }),
     prisma.specialWorkApproval.findMany({ where: { userId: targetUserId, date: { gte: monthStart, lte: monthEnd } } })
@@ -555,7 +580,8 @@ timeRouter.get("/month/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Ro
     const approvalStatus = approvalByDay.get(key) ?? null;
     const requiresApproval = isHoliday || weekend;
     const workedRaw = Number((grossMin / 60).toFixed(2));
-    const worked = requiresApproval && approvalStatus !== ApprovalStatus.APPROVED ? 0 : workedRaw;
+    const workedEffective = requiresApproval && approvalStatus !== ApprovalStatus.APPROVED ? 0 : workedRaw;
+    const worked = user?.timeTrackingEnabled === false ? Number(planned.toFixed(2)) : workedEffective;
     monthPlanned += planned;
     monthWorked += worked;
     days.push({
@@ -611,7 +637,7 @@ timeRouter.get("/summary/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, 
 
   const [config, user, holidays, entries, credits, sickLeaves, leaveRequests, overtimeAdjustments, approvals] = await Promise.all([
     prisma.systemConfig.findUnique({ where: { id: 1 } }),
-    prisma.user.findUnique({ where: { id: targetUserId }, select: { dailyWorkHours: true, overtimeBalanceHours: true } }),
+    prisma.user.findUnique({ where: { id: targetUserId }, select: { dailyWorkHours: true, overtimeBalanceHours: true, timeTrackingEnabled: true } }),
     prisma.holiday.findMany({ where: { date: { gte: monthStart, lte: monthEnd } } }),
     prisma.timeEntry.findMany({ where: { userId: targetUserId, occurredAt: { gte: monthStart, lte: monthEnd } } }),
     prisma.breakCredit.findMany({ where: { userId: targetUserId, date: { gte: monthStart, lte: monthEnd } } }),
@@ -685,6 +711,18 @@ timeRouter.get("/summary/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, 
 
   const manualAdjustmentHours = overtimeAdjustments.reduce((sum, a) => sum + a.hours, 0);
   const totalIncludingAbsence = workedTotal + approvalDays * dailyHours + sickDays * dailyHours;
+  if (user?.timeTrackingEnabled === false) {
+    res.json({
+      month: `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`,
+      plannedHours: Number(expectedTotal.toFixed(2)),
+      workedHours: Number(expectedTotal.toFixed(2)),
+      overtimeHours: Number((user?.overtimeBalanceHours ?? 0).toFixed(2)),
+      manualAdjustmentHours: Number(manualAdjustmentHours.toFixed(2)),
+      longShiftAlert: false
+    });
+    return;
+  }
+
   const overtime = (user?.overtimeBalanceHours ?? 0) + (totalIncludingAbsence - expectedTotal + manualAdjustmentHours);
 
   const longStreakAlert = entries.length >= 2

@@ -51,6 +51,7 @@ model User {
   role                      Role     @default(EMPLOYEE)
   isActive                  Boolean  @default(true)
   webLoginEnabled           Boolean  @default(true)
+  timeTrackingEnabled       Boolean  @default(true)
   mailNotificationsEnabled  Boolean  @default(true)
   dailyWorkHours            Float?
   annualVacationDays        Int      @default(30)

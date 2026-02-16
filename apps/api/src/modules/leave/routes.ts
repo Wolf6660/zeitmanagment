@@ -18,6 +18,7 @@ async function getVacationAvailabilityDays(userId: string, targetStart: Date, ta
   const year = targetStart.getUTCFullYear();
   const employee = await prisma.user.findUnique({ where: { id: userId } });
   if (!employee) return 0;
+  if (employee.timeTrackingEnabled === false) return 999999;
 
   const holidays = await prisma.holiday.findMany({
     where: {
@@ -55,11 +56,15 @@ async function getCurrentMonthOvertimeHours(userId: string): Promise<number> {
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59));
 
-  const [config, holidays, entries] = await Promise.all([
+  const [config, user, holidays, entries] = await Promise.all([
     prisma.systemConfig.findUnique({ where: { id: 1 } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { overtimeBalanceHours: true, timeTrackingEnabled: true } }),
     prisma.holiday.findMany({ where: { date: { gte: monthStart, lte: monthEnd } } }),
     prisma.timeEntry.findMany({ where: { userId, occurredAt: { gte: monthStart, lte: monthEnd } }, orderBy: { occurredAt: "asc" } })
   ]);
+  if (user?.timeTrackingEnabled === false) {
+    return Number((user.overtimeBalanceHours ?? 0).toFixed(2));
+  }
 
   const dailyHours = config?.defaultDailyHours ?? 8;
   const breakMinutes = config?.autoBreakMinutes ?? 30;
@@ -101,7 +106,7 @@ async function getCurrentMonthOvertimeHours(userId: string): Promise<number> {
     }
   }
 
-  return Number((workedTotal - expectedTotal).toFixed(2));
+  return Number(((user?.overtimeBalanceHours ?? 0) + workedTotal - expectedTotal).toFixed(2));
 }
 
 async function ensureNoDoubleBooking(userId: string, startDate: Date, endDate: Date, excludeId?: string): Promise<boolean> {
