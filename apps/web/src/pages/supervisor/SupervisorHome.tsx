@@ -15,18 +15,14 @@ export function SupervisorHome() {
   const [editTo, setEditTo] = useState<Record<string, string>>({});
   const [editKind, setEditKind] = useState<Record<string, "VACATION" | "OVERTIME">>({});
   const [msg, setMsg] = useState("");
-  const [holidays, setHolidays] = useState<Array<{ id: string; date: string; name: string }>>([]);
-  const [holidayDate, setHolidayDate] = useState("");
-  const [holidayName, setHolidayName] = useState("");
   const [specialPending, setSpecialPending] = useState<Array<{ id: string; userId: string; date: string; status: "SUBMITTED" | "APPROVED" | "REJECTED"; note?: string; user: { id: string; name: string; loginName: string } }>>([]);
   const [specialNotes, setSpecialNotes] = useState<Record<string, string>>({});
 
   async function loadData() {
-    const [e, p, ov, h, sp] = await Promise.all([api.employees(), api.pendingLeaves(), api.supervisorOverview(), api.holidays(), api.pendingSpecialWork()]);
+    const [e, p, ov, sp] = await Promise.all([api.employees(), api.pendingLeaves(), api.supervisorOverview(), api.pendingSpecialWork()]);
     setEmployees(e);
     setPending(p);
     setOverview(Object.fromEntries(ov.map((x) => [x.userId, { istHours: x.istHours, overtimeHours: x.overtimeHours }])));
-    setHolidays(h);
     setSpecialPending(sp);
   }
 
@@ -124,31 +120,6 @@ export function SupervisorHome() {
           {pending.length === 0 && <div>Keine offenen Antraege.</div>}
           {msg && <div className="error">{msg}</div>}
         </div>
-      </div>
-
-      <div className="card">
-        <h2>Feiertage</h2>
-        <div className="row" style={{ marginBottom: 8 }}>
-          <input type="date" value={holidayDate} onChange={(e) => setHolidayDate(e.target.value)} />
-          <input placeholder="Name" value={holidayName} onChange={(e) => setHolidayName(e.target.value)} />
-          <button onClick={async () => {
-            try {
-              if (!holidayDate || !holidayName.trim()) { setMsg("Datum und Name sind Pflicht."); return; }
-              await api.createHoliday({ date: holidayDate, name: holidayName.trim() });
-              setHolidayDate("");
-              setHolidayName("");
-              await loadData();
-              setMsg("Feiertag gespeichert.");
-            } catch (e) { setMsg((e as Error).message); }
-          }}>Feiertag speichern</button>
-        </div>
-        <table>
-          <thead><tr><th>Datum</th><th>Name</th></tr></thead>
-          <tbody>
-            {holidays.map((h) => <tr key={h.id}><td>{h.date}</td><td>{h.name}</td></tr>)}
-            {holidays.length === 0 && <tr><td colSpan={2}>Keine Feiertage.</td></tr>}
-          </tbody>
-        </table>
       </div>
 
       <div className="card" style={{ gridColumn: "1 / -1" }}>

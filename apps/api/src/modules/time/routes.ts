@@ -748,6 +748,11 @@ const holidaySchema = z.object({
   name: z.string().trim().min(1, "Name ist Pflicht.")
 });
 
+const holidayUpdateSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Datum ist ungueltig.").optional(),
+  name: z.string().trim().min(1, "Name ist Pflicht.").optional()
+});
+
 timeRouter.get("/holidays", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (_req, res) => {
   const holidays = await prisma.holiday.findMany({ orderBy: { date: "asc" } });
   res.json(holidays.map((h) => ({ id: h.id, date: h.date.toISOString().slice(0, 10), name: h.name })));
@@ -778,6 +783,62 @@ timeRouter.post("/holidays", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (
     res.status(201).json({ id: holiday.id, date: holiday.date.toISOString().slice(0, 10), name: holiday.name });
   } catch {
     res.status(409).json({ message: "Feiertag existiert bereits." });
+  }
+});
+
+timeRouter.patch("/holidays/:id", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+  const parsed = holidayUpdateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: zodFirstMessage(parsed) });
+    return;
+  }
+  if (!parsed.data.date && !parsed.data.name) {
+    res.status(400).json({ message: "Keine Aenderung uebergeben." });
+    return;
+  }
+  const holidayId = String(req.params.id);
+  const data: { date?: Date; name?: string } = {};
+  if (parsed.data.date) {
+    const p = parseIsoDateParts(parsed.data.date);
+    if (!p) {
+      res.status(400).json({ message: "Datum ist ungueltig." });
+      return;
+    }
+    data.date = new Date(Date.UTC(p.year, p.month - 1, p.day, 0, 0, 0));
+  }
+  if (parsed.data.name) {
+    data.name = parsed.data.name;
+  }
+  try {
+    const updated = await prisma.holiday.update({ where: { id: holidayId }, data });
+    await writeAuditLog({
+      actorUserId: req.auth?.userId,
+      actorLoginName: await resolveActorLoginName(req.auth?.userId),
+      action: "HOLIDAY_UPDATED",
+      targetType: "Holiday",
+      targetId: updated.id,
+      payload: parsed.data
+    });
+    res.json({ id: updated.id, date: updated.date.toISOString().slice(0, 10), name: updated.name });
+  } catch {
+    res.status(400).json({ message: "Feiertag konnte nicht aktualisiert werden." });
+  }
+});
+
+timeRouter.delete("/holidays/:id", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+  const holidayId = String(req.params.id);
+  try {
+    await prisma.holiday.delete({ where: { id: holidayId } });
+    await writeAuditLog({
+      actorUserId: req.auth?.userId,
+      actorLoginName: await resolveActorLoginName(req.auth?.userId),
+      action: "HOLIDAY_DELETED",
+      targetType: "Holiday",
+      targetId: holidayId
+    });
+    res.json({ ok: true });
+  } catch {
+    res.status(404).json({ message: "Feiertag nicht gefunden." });
   }
 });
 

@@ -6,6 +6,7 @@ import { LoginPage } from "./pages/auth/LoginPage";
 import { HomeRouter } from "./pages/HomeRouter";
 import { AdminHome } from "./pages/admin/AdminHome";
 import { MonthEditorPage } from "./pages/month/MonthEditorPage";
+import { HolidaysPage } from "./pages/holidays/HolidaysPage";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const session = getSession();
@@ -63,6 +64,16 @@ export default function App() {
           <SupervisorOrAdminRoute>
             <AppLayout>
               <MonthEditorPage />
+            </AppLayout>
+          </SupervisorOrAdminRoute>
+        }
+      />
+      <Route
+        path="/app/holidays"
+        element={
+          <SupervisorOrAdminRoute>
+            <AppLayout>
+              <HolidaysPage />
             </AppLayout>
           </SupervisorOrAdminRoute>
         }

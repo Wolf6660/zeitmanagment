@@ -267,6 +267,12 @@ export const api = {
   createHoliday: (payload: { date: string; name: string }) =>
     request<{ id: string; date: string; name: string }>("/api/time/holidays", { method: "POST", body: JSON.stringify(payload) }),
 
+  updateHoliday: (id: string, payload: { date?: string; name?: string }) =>
+    request<{ id: string; date: string; name: string }>(`/api/time/holidays/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+
+  deleteHoliday: (id: string) =>
+    request<{ ok: boolean }>(`/api/time/holidays/${id}`, { method: "DELETE" }),
+
   pendingSpecialWork: () =>
     request<Array<{ id: string; userId: string; date: string; status: "SUBMITTED" | "APPROVED" | "REJECTED"; note?: string; user: { id: string; name: string; loginName: string } }>>(
       "/api/time/special-work/pending"

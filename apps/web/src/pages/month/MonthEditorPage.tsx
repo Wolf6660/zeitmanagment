@@ -13,6 +13,7 @@ export function MonthEditorPage() {
   const [overrideEvents, setOverrideEvents] = useState<Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; time: string }>>([]);
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
+  const [showNotesForDay, setShowNotesForDay] = useState<string | null>(null);
 
   async function loadEmployees() {
     const e = await api.employees();
@@ -59,7 +60,29 @@ export function MonthEditorPage() {
                     <td>{d.date}</td>
                     <td>{d.plannedHours.toFixed(2)}</td>
                     <td>{d.workedHours.toFixed(2)}</td>
-                    <td>{d.entries.map((e: any) => `${e.type === "CLOCK_IN" ? "K" : "G"} ${e.time}`).join(" | ")}</td>
+                    <td>
+                      <div>{d.entries.map((e: any) => `${e.type === "CLOCK_IN" ? "K" : "G"} ${e.time}`).join(" | ")}</div>
+                      {d.entries.some((e: any) => (e.reasonText || "").trim().length > 0) && (
+                        <div style={{ marginTop: 6 }}>
+                          <button
+                            className="secondary"
+                            type="button"
+                            onClick={() => setShowNotesForDay((prev) => (prev === d.date ? null : d.date))}
+                          >
+                            {showNotesForDay === d.date ? "Notizen ausblenden" : "Notizen anzeigen"}
+                          </button>
+                          {showNotesForDay === d.date && (
+                            <div className="card" style={{ marginTop: 6, padding: 8 }}>
+                              {d.entries.filter((e: any) => (e.reasonText || "").trim().length > 0).map((e: any) => (
+                                <div key={`${d.date}-note-${e.id}`} style={{ marginBottom: 4 }}>
+                                  <strong>{e.type === "CLOCK_IN" ? "Kommen" : "Gehen"} {e.time}:</strong> {e.reasonText}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </td>
                     <td>
                       <button className="secondary" type="button" onClick={() => {
                         setSelectedDay(expanded ? null : d.date);
