@@ -44,7 +44,9 @@ model User {
   passwordHash              String
   role                      Role     @default(EMPLOYEE)
   isActive                  Boolean  @default(true)
+  webLoginEnabled           Boolean  @default(true)
   mailNotificationsEnabled  Boolean  @default(true)
+  dailyWorkHours            Float?
   annualVacationDays        Int      @default(30)
   carryOverVacationDays     Float    @default(0)
   rfidTag                   String?  @unique
@@ -58,9 +60,43 @@ model User {
   approvedLeaveRequests     LeaveRequest[]      @relation("LeaveDecisionAuthor")
   createdSickLeaves         SickLeave[]         @relation("SickLeaveAuthor")
   vacationBalances          VacationBalance[]
+  overtimeAdjustments       OvertimeAdjustment[] @relation("EmployeeOvertimeAdjustments")
+  createdOvertimeAdjustments OvertimeAdjustment[] @relation("OvertimeAdjustmentAuthor")
+  auditLogs                 AuditLog[] @relation("AuditActor")
 
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
+}
+
+model OvertimeAdjustment {
+  id                String   @id @default(cuid())
+  userId            String
+  date              DateTime
+  hours             Float
+  reason            String
+  createdById       String
+  createdAt         DateTime @default(now())
+
+  user              User     @relation("EmployeeOvertimeAdjustments", fields: [userId], references: [id])
+  createdBy         User     @relation("OvertimeAdjustmentAuthor", fields: [createdById], references: [id])
+
+  @@index([userId, date])
+}
+
+model AuditLog {
+  id                String   @id @default(cuid())
+  actorUserId       String?
+  actorLoginName    String
+  action            String
+  targetType        String?
+  targetId          String?
+  payloadJson       String?
+  createdAt         DateTime @default(now())
+
+  actor             User?    @relation("AuditActor", fields: [actorUserId], references: [id])
+
+  @@index([createdAt])
+  @@index([actorLoginName])
 }
 
 model RfidTerminal {

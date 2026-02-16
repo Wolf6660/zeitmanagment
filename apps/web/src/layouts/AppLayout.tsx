@@ -7,43 +7,48 @@ import { applyTheme } from "../styles/theme";
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const session = getSession();
-  const [brand, setBrand] = useState<Pick<PublicConfig, "companyName" | "systemName"> | null>(null);
+  const [brand, setBrand] = useState<Pick<PublicConfig, "companyName" | "systemName" | "companyLogoUrl"> | null>(null);
 
   useEffect(() => {
     api.publicConfig()
       .then((config) => {
-        setBrand({ companyName: config.companyName, systemName: config.systemName });
+        setBrand({ companyName: config.companyName, systemName: config.systemName, companyLogoUrl: config.companyLogoUrl });
         applyTheme(config);
       })
       .catch(() => {
-        setBrand({ companyName: "Musterfirma", systemName: "Zeitmanagment" });
+        setBrand({ companyName: "Musterfirma", systemName: "Zeitmanagment", companyLogoUrl: null });
       });
   }, []);
 
   return (
     <div className="page">
       <div className="card" style={{ marginBottom: 12 }}>
-        <div className="row" style={{ justifyContent: "space-between" }}>
+        <div className="brand-wrap">
           <div>
-            <strong>{brand?.companyName || "Musterfirma"}</strong>
-            <div style={{ color: "var(--muted)", fontSize: 13 }}>{brand?.systemName || "Zeitmanagment"}</div>
+            <div className="brand-title">{brand?.companyName || "Musterfirma"}</div>
+            <div style={{ color: "var(--muted)", fontSize: 14 }}>{brand?.systemName || "Zeitmanagment"}</div>
           </div>
-          <span>{session?.user.name}</span>
+          {brand?.companyLogoUrl && <img className="brand-logo" src={brand.companyLogoUrl} alt="Firmenlogo" />}
         </div>
-        <div className="nav" style={{ marginTop: 8 }}>
-          <Link to="/app"><button>Startseite</button></Link>
-          {(session?.user.role === "ADMIN" || session?.user.role === "SUPERVISOR") && (
-            <Link to="/app/admin"><button>Admin</button></Link>
-          )}
-          <button
-            className="secondary"
-            onClick={() => {
-              clearSession();
-              navigate("/login");
-            }}
-          >
-            Logout
-          </button>
+        <div className="row" style={{ justifyContent: "space-between", marginTop: 8 }}>
+          <div className="nav" style={{ margin: 0 }}>
+            <Link to="/app"><button>Startseite</button></Link>
+            {(session?.user.role === "ADMIN" || session?.user.role === "SUPERVISOR") && (
+              <Link to="/app/admin"><button>Admin</button></Link>
+            )}
+          </div>
+          <div className="row">
+            <span>{session?.user.name}</span>
+            <button
+              className="secondary"
+              onClick={() => {
+                clearSession();
+                navigate("/login");
+              }}
+            >
+              Logout
+            </button>
+          </div>
         </div>
       </div>
       {children}

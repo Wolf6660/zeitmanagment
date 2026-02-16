@@ -4,6 +4,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../../db/prisma.js";
 import { AuthRequest, requireAuth, requireRole } from "../../utils/auth.js";
+import { resolveActorLoginName, writeAuditLog } from "../../utils/audit.js";
 
 export const employeesRouter = Router();
 
@@ -24,8 +25,10 @@ employeesRouter.get("/me", async (req: AuthRequest, res) => {
       role: true,
       loginName: true,
       annualVacationDays: true,
+      dailyWorkHours: true,
       carryOverVacationDays: true,
       mailNotificationsEnabled: true,
+      webLoginEnabled: true,
       rfidTag: true,
       isActive: true
     }
@@ -49,9 +52,12 @@ employeesRouter.get("/", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (_req
       role: true,
       isActive: true,
       annualVacationDays: true,
+      dailyWorkHours: true,
       carryOverVacationDays: true,
       mailNotificationsEnabled: true,
-      loginName: true
+      webLoginEnabled: true,
+      loginName: true,
+      rfidTag: true
     }
   });
 
@@ -65,15 +71,22 @@ const createEmployeeSchema = z.object({
   password: z.string().min(8),
   role: z.nativeEnum(Role).default(Role.EMPLOYEE),
   annualVacationDays: z.number().int().min(0).max(365).default(30),
+  dailyWorkHours: z.number().min(1).max(24).optional(),
   carryOverVacationDays: z.number().min(0).max(365).default(0),
   mailNotificationsEnabled: z.boolean().default(true),
+  webLoginEnabled: z.boolean().default(true),
   rfidTag: z.string().optional()
 });
 
-employeesRouter.post("/", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req, res) => {
+employeesRouter.post("/", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
   const parsed = createEmployeeSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ message: "Ungueltige Eingaben.", errors: parsed.error.flatten() });
+    return;
+  }
+
+  if (req.auth?.role === Role.SUPERVISOR && parsed.data.role !== Role.EMPLOYEE) {
+    res.status(403).json({ message: "Vorgesetzte duerfen nur Mitarbeiter anlegen." });
     return;
   }
 
@@ -88,8 +101,10 @@ employeesRouter.post("/", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req
         passwordHash: hash,
         role: parsed.data.role,
         annualVacationDays: parsed.data.annualVacationDays,
+        dailyWorkHours: parsed.data.dailyWorkHours,
         carryOverVacationDays: parsed.data.carryOverVacationDays,
         mailNotificationsEnabled: parsed.data.mailNotificationsEnabled,
+        webLoginEnabled: parsed.data.webLoginEnabled,
         rfidTag: parsed.data.rfidTag
       },
       select: {
@@ -99,10 +114,21 @@ employeesRouter.post("/", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req
         role: true,
         loginName: true,
         annualVacationDays: true,
+        dailyWorkHours: true,
         carryOverVacationDays: true,
         mailNotificationsEnabled: true,
+        webLoginEnabled: true,
         rfidTag: true
       }
+    });
+
+    await writeAuditLog({
+      actorUserId: req.auth?.userId,
+      actorLoginName: await resolveActorLoginName(req.auth?.userId),
+      action: "EMPLOYEE_CREATED",
+      targetType: "User",
+      targetId: user.id,
+      payload: { ...parsed.data, password: "***" }
     });
 
     res.status(201).json(user);
@@ -116,18 +142,26 @@ const updateEmployeeSchema = z.object({
   email: z.string().email().optional(),
   role: z.nativeEnum(Role).optional(),
   annualVacationDays: z.number().int().min(0).max(365).optional(),
+  dailyWorkHours: z.number().min(1).max(24).nullable().optional(),
   carryOverVacationDays: z.number().min(0).max(365).optional(),
   mailNotificationsEnabled: z.boolean().optional(),
+  webLoginEnabled: z.boolean().optional(),
   rfidTag: z.string().nullable().optional(),
   isActive: z.boolean().optional()
 });
 
-employeesRouter.patch("/:id", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req, res) => {
+employeesRouter.patch("/:id", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
   const parsed = updateEmployeeSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ message: "Ungueltige Eingaben." });
     return;
   }
+
+  if (req.auth?.role === Role.SUPERVISOR && parsed.data.role && parsed.data.role !== Role.EMPLOYEE) {
+    res.status(403).json({ message: "Vorgesetzte duerfen keine Admins/Vorgesetzten setzen." });
+    return;
+  }
+
   const userId = String(req.params.id);
 
   try {
@@ -141,10 +175,21 @@ employeesRouter.patch("/:id", requireRole([Role.SUPERVISOR, Role.ADMIN]), async 
         role: true,
         isActive: true,
         annualVacationDays: true,
+        dailyWorkHours: true,
         carryOverVacationDays: true,
         mailNotificationsEnabled: true,
+        webLoginEnabled: true,
         rfidTag: true
       }
+    });
+
+    await writeAuditLog({
+      actorUserId: req.auth?.userId,
+      actorLoginName: await resolveActorLoginName(req.auth?.userId),
+      action: "EMPLOYEE_UPDATED",
+      targetType: "User",
+      targetId: updated.id,
+      payload: parsed.data
     });
 
     res.json(updated);

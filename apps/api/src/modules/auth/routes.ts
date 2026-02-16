@@ -19,7 +19,7 @@ authRouter.post("/login", async (req, res) => {
   }
 
   const user = await prisma.user.findUnique({ where: { loginName: parsed.data.loginName } });
-  if (!user || !user.isActive) {
+  if (!user || !user.isActive || !user.webLoginEnabled) {
     res.status(401).json({ message: "Login fehlgeschlagen." });
     return;
   }

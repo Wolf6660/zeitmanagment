@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../../api/client";
+import { getSession } from "../../api/client";
 import type { PublicConfig } from "../../styles/theme";
 import { applyTheme } from "../../styles/theme";
 
@@ -8,6 +9,8 @@ type AdminConfig = {
   companyName: string;
   systemName: string;
   companyLogoUrl?: string | null;
+  defaultDailyHours: number;
+  defaultWeeklyWorkingDays?: string;
   autoBreakMinutes: number;
   autoBreakAfterHours: number;
   colorApproved: string;
@@ -38,6 +41,9 @@ type Employee = {
   carryOverVacationDays: number;
   loginName: string;
   mailNotificationsEnabled: boolean;
+  webLoginEnabled: boolean;
+  dailyWorkHours?: number | null;
+  rfidTag?: string | null;
 };
 
 const COLOR_FIELDS: Array<{ key: keyof AdminConfig; label: string }> = [
@@ -57,11 +63,19 @@ export function AdminHome() {
   const [config, setConfig] = useState<AdminConfig | null>(null);
   const [terminals, setTerminals] = useState<Terminal[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [logs, setLogs] = useState<Array<{ id: string; actorLoginName: string; action: string; targetType?: string; createdAt: string; payloadJson?: string }>>([]);
   const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<Partial<Employee>>({});
   const [terminalName, setTerminalName] = useState("");
   const [terminalLocation, setTerminalLocation] = useState("");
+  const [logoFile, setLogoFile] = useState<File | null>(null);
   const [msg, setMsg] = useState("");
+  const session = getSession();
+
+  const [otUserId, setOtUserId] = useState("");
+  const [otDate, setOtDate] = useState("");
+  const [otHours, setOtHours] = useState(0);
+  const [otNote, setOtNote] = useState("");
 
   const [newEmployee, setNewEmployee] = useState({
     name: "",
@@ -70,8 +84,11 @@ export function AdminHome() {
     password: "",
     role: "EMPLOYEE" as "EMPLOYEE" | "SUPERVISOR" | "ADMIN",
     annualVacationDays: 30,
+    dailyWorkHours: 8,
     carryOverVacationDays: 0,
-    mailNotificationsEnabled: true
+    mailNotificationsEnabled: true,
+    webLoginEnabled: true,
+    rfidTag: ""
   });
 
   async function loadData() {
@@ -79,6 +96,7 @@ export function AdminHome() {
     setConfig(cfg);
     setTerminals(trms);
     setEmployees(emps as Employee[]);
+    setOtUserId((prev) => prev || (emps[0]?.id ?? ""));
     applyTheme(cfg as PublicConfig);
   }
 
@@ -86,12 +104,20 @@ export function AdminHome() {
     loadData().catch((e) => setMsg((e as Error).message));
   }, []);
 
+  useEffect(() => {
+    if (section === "logs") {
+      api.listAuditLogs().then(setLogs).catch((e) => setMsg((e as Error).message));
+    }
+  }, [section]);
+
   const sectionTitle = useMemo(() => {
     if (section === "company") return "Firmenstammdaten";
     if (section === "rules") return "Regeln";
     if (section === "colors") return "Farben";
     if (section === "employees") return "Mitarbeiter";
+    if (section === "overtime") return "Ueberstunden";
     if (section === "terminals") return "RFID-Terminals";
+    if (section === "logs") return "Log";
     return "Admin";
   }, [section]);
 
@@ -107,7 +133,9 @@ export function AdminHome() {
         <button onClick={() => setSearchParams({ section: "rules" })}>Regeln</button>
         <button onClick={() => setSearchParams({ section: "colors" })}>Farben</button>
         <button onClick={() => setSearchParams({ section: "employees" })}>Mitarbeiter</button>
+        <button onClick={() => setSearchParams({ section: "overtime" })}>Ueberstunden</button>
         <button onClick={() => setSearchParams({ section: "terminals" })}>RFID-Terminals</button>
+        <button onClick={() => setSearchParams({ section: "logs" })}>Log</button>
       </div>
 
       <h3>{sectionTitle}</h3>
@@ -123,8 +151,26 @@ export function AdminHome() {
             <input value={config.systemName || ""} onChange={(e) => setConfig({ ...config, systemName: e.target.value })} />
           </label>
           <label>
-            Firmenlogo URL
-            <input value={config.companyLogoUrl || ""} onChange={(e) => setConfig({ ...config, companyLogoUrl: e.target.value })} />
+            Firmenlogo hochladen (PNG/JPG)
+            <input type="file" accept="image/png,image/jpeg" onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)} />
+            <button className="secondary" type="button" style={{ marginTop: 6 }} onClick={async () => {
+              try {
+                if (!logoFile) {
+                  setMsg("Bitte zuerst eine Datei waehlen.");
+                  return;
+                }
+                const buffer = await logoFile.arrayBuffer();
+                const bytes = new Uint8Array(buffer);
+                let binary = "";
+                for (let i = 0; i < bytes.byteLength; i += 1) binary += String.fromCharCode(bytes[i]);
+                const base64 = btoa(binary);
+                const uploaded = await api.uploadLogo({ filename: logoFile.name, contentBase64: base64 });
+                setConfig({ ...config, companyLogoUrl: uploaded.logoUrl });
+                setMsg("Logo hochgeladen.");
+              } catch (e) {
+                setMsg((e as Error).message);
+              }
+            }}>Logo hochladen</button>
           </label>
         </div>
       )}
@@ -132,12 +178,38 @@ export function AdminHome() {
       {section === "rules" && (
         <div className="grid grid-2">
           <label>
+            Standard Sollarbeitszeit/Tag (wenn Mitarbeiterwert leer)
+            <input type="number" step="0.25" value={config.defaultDailyHours} onChange={(e) => setConfig({ ...config, defaultDailyHours: Number(e.target.value) })} />
+          </label>
+          <label>
             Automatische Pause (Minuten)
             <input type="number" value={config.autoBreakMinutes} onChange={(e) => setConfig({ ...config, autoBreakMinutes: Number(e.target.value) })} />
           </label>
           <label>
             Pause automatisch ab (Stunden)
             <input type="number" value={config.autoBreakAfterHours} onChange={(e) => setConfig({ ...config, autoBreakAfterHours: Number(e.target.value) })} />
+          </label>
+          <label>
+            Arbeitstage
+            <div className="row">
+              {["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"].map((d) => {
+                const set = new Set((config.defaultWeeklyWorkingDays || "MON,TUE,WED,THU,FRI").split(",").filter(Boolean));
+                const active = set.has(d);
+                return (
+                  <button
+                    type="button"
+                    key={d}
+                    className={active ? "" : "secondary"}
+                    onClick={() => {
+                      if (active) set.delete(d); else set.add(d);
+                      setConfig({ ...config, defaultWeeklyWorkingDays: Array.from(set).join(",") });
+                    }}
+                  >
+                    {d}
+                  </button>
+                );
+              })}
+            </div>
           </label>
         </div>
       )}
@@ -161,6 +233,83 @@ export function AdminHome() {
         </div>
       )}
 
+      {section === "overtime" && (
+        <div className="card" style={{ padding: 12 }}>
+          <h4>Ueberstunden bearbeiten</h4>
+          <div className="grid grid-2">
+            <label>
+              Mitarbeiter
+              <select value={otUserId} onChange={(e) => setOtUserId(e.target.value)}>
+                {employees.map((e) => (
+                  <option key={e.id} value={e.id}>{e.name} ({e.loginName})</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Datum
+              <input type="date" value={otDate} onChange={(e) => setOtDate(e.target.value)} />
+            </label>
+            <label>
+              Stunden (+/-)
+              <input type="number" step="0.25" value={otHours} onChange={(e) => setOtHours(Number(e.target.value))} />
+            </label>
+            <label>
+              Notiz (Pflicht)
+              <textarea value={otNote} onChange={(e) => setOtNote(e.target.value)} />
+            </label>
+          </div>
+          <button
+            style={{ marginTop: 8 }}
+            onClick={async () => {
+              try {
+                if (!otNote.trim()) {
+                  setMsg("Notiz ist Pflicht.");
+                  return;
+                }
+                await api.createOvertimeAdjustment({ userId: otUserId, date: otDate, hours: otHours, note: otNote.trim() });
+                setMsg("Ueberstundenanpassung gespeichert.");
+                setOtHours(0);
+                setOtNote("");
+              } catch (e) {
+                setMsg((e as Error).message);
+              }
+            }}
+          >
+            Ueberstunden speichern
+          </button>
+        </div>
+      )}
+
+      {section === "logs" && (
+        <table>
+          <thead>
+            <tr>
+              <th>Zeit</th>
+              <th>Loginname</th>
+              <th>Aktion</th>
+              <th>Ziel</th>
+              <th>Daten</th>
+            </tr>
+          </thead>
+          <tbody>
+            {logs.map((l) => (
+              <tr key={l.id}>
+                <td>{new Date(l.createdAt).toLocaleString("de-DE")}</td>
+                <td>{l.actorLoginName}</td>
+                <td>{l.action}</td>
+                <td>{l.targetType || "-"}</td>
+                <td style={{ maxWidth: 340, wordBreak: "break-word" }}>{l.payloadJson || "-"}</td>
+              </tr>
+            ))}
+            {logs.length === 0 && (
+              <tr>
+                <td colSpan={5}>Keine Logeintraege.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      )}
+
       {section === "employees" && (
         <div className="grid">
           <div className="card" style={{ padding: 12 }}>
@@ -174,8 +323,8 @@ export function AdminHome() {
                 Rolle
                 <select value={newEmployee.role} onChange={(e) => setNewEmployee({ ...newEmployee, role: e.target.value as "EMPLOYEE" | "SUPERVISOR" | "ADMIN" })}>
                   <option value="EMPLOYEE">Mitarbeiter</option>
-                  <option value="SUPERVISOR">Vorgesetzter</option>
-                  <option value="ADMIN">Admin</option>
+                  {session?.user.role === "ADMIN" && <option value="SUPERVISOR">Vorgesetzter</option>}
+                  {session?.user.role === "ADMIN" && <option value="ADMIN">Admin</option>}
                 </select>
               </label>
               <label>
@@ -197,6 +346,10 @@ export function AdminHome() {
                 />
               </label>
               <label>
+                Sollarbeitszeit/Tag (h)
+                <input type="number" step="0.25" value={newEmployee.dailyWorkHours} onChange={(e) => setNewEmployee({ ...newEmployee, dailyWorkHours: Number(e.target.value) })} />
+              </label>
+              <label>
                 Resturlaub Vorjahr (Tage)
                 <input
                   type="number"
@@ -204,12 +357,26 @@ export function AdminHome() {
                   onChange={(e) => setNewEmployee({ ...newEmployee, carryOverVacationDays: Number(e.target.value) })}
                 />
               </label>
+              <label>
+                Weblogin aktiviert
+                <select value={newEmployee.webLoginEnabled ? "yes" : "no"} onChange={(e) => setNewEmployee({ ...newEmployee, webLoginEnabled: e.target.value === "yes" })}>
+                  <option value="yes">Ja</option>
+                  <option value="no">Nein</option>
+                </select>
+              </label>
+              <label>
+                RFID Tag
+                <input value={newEmployee.rfidTag} onChange={(e) => setNewEmployee({ ...newEmployee, rfidTag: e.target.value })} />
+              </label>
             </div>
             <button
               style={{ marginTop: 8 }}
               onClick={async () => {
                 try {
-                  await api.createEmployee(newEmployee);
+                  await api.createEmployee({
+                    ...newEmployee,
+                    rfidTag: newEmployee.rfidTag.trim() ? newEmployee.rfidTag.trim() : undefined
+                  });
                   setMsg("Mitarbeiter angelegt.");
                   setEmployees((await api.employees()) as Employee[]);
                   setNewEmployee({
@@ -219,8 +386,11 @@ export function AdminHome() {
                     password: "",
                     role: "EMPLOYEE",
                     annualVacationDays: 30,
+                    dailyWorkHours: 8,
                     carryOverVacationDays: 0,
-                    mailNotificationsEnabled: true
+                    mailNotificationsEnabled: true,
+                    webLoginEnabled: true,
+                    rfidTag: ""
                   });
                 } catch (e) {
                   setMsg((e as Error).message);
@@ -240,6 +410,9 @@ export function AdminHome() {
                 <th>Rolle</th>
                 <th>Jahresurlaub</th>
                 <th>Resturlaub</th>
+                <th>Soll/Tag</th>
+                <th>RFID</th>
+                <th>Weblogin</th>
                 <th>Aktiv</th>
                 <th>Aktion</th>
               </tr>
@@ -262,6 +435,39 @@ export function AdminHome() {
                       ) : (
                         e.role
                       )}
+                    </td>
+                    <td>
+                      {editing ? (
+                        <input
+                          type="number"
+                          step="0.25"
+                          value={editingEmployee.dailyWorkHours ?? e.dailyWorkHours ?? 8}
+                          onChange={(ev) => setEditingEmployee({ ...editingEmployee, dailyWorkHours: Number(ev.target.value) })}
+                        />
+                      ) : (
+                        (e.dailyWorkHours ?? 8).toFixed(2)
+                      )}
+                    </td>
+                    <td>
+                      {editing ? (
+                        <input
+                          value={editingEmployee.rfidTag ?? e.rfidTag ?? ""}
+                          onChange={(ev) => setEditingEmployee({ ...editingEmployee, rfidTag: ev.target.value })}
+                        />
+                      ) : (
+                        e.rfidTag || "-"
+                      )}
+                    </td>
+                    <td>
+                      {editing ? (
+                        <select
+                          value={String(editingEmployee.webLoginEnabled ?? e.webLoginEnabled)}
+                          onChange={(ev) => setEditingEmployee({ ...editingEmployee, webLoginEnabled: ev.target.value === "true" })}
+                        >
+                          <option value="true">Ja</option>
+                          <option value="false">Nein</option>
+                        </select>
+                      ) : e.webLoginEnabled ? "Ja" : "Nein"}
                     </td>
                     <td>
                       {editing ? (
@@ -307,9 +513,12 @@ export function AdminHome() {
                               email: e.email,
                               role: e.role,
                               annualVacationDays: e.annualVacationDays,
+                              dailyWorkHours: e.dailyWorkHours,
                               carryOverVacationDays: e.carryOverVacationDays,
                               isActive: e.isActive,
-                              mailNotificationsEnabled: e.mailNotificationsEnabled
+                              mailNotificationsEnabled: e.mailNotificationsEnabled,
+                              webLoginEnabled: e.webLoginEnabled,
+                              rfidTag: e.rfidTag
                             });
                           }}
                         >
@@ -321,7 +530,10 @@ export function AdminHome() {
                           <button
                             onClick={async () => {
                               try {
-                                await api.updateEmployee(e.id, editingEmployee);
+                                await api.updateEmployee(e.id, {
+                                  ...editingEmployee,
+                                  rfidTag: typeof editingEmployee.rfidTag === "string" && editingEmployee.rfidTag.trim() === "" ? null : editingEmployee.rfidTag
+                                });
                                 setMsg("Mitarbeiter aktualisiert.");
                                 setEditingEmployeeId(null);
                                 setEditingEmployee({});

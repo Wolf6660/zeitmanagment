@@ -1,6 +1,8 @@
 import cors from "cors";
 import express from "express";
 import morgan from "morgan";
+import fs from "node:fs";
+import path from "node:path";
 import { authRouter } from "./modules/auth/routes.js";
 import { healthRouter } from "./modules/health/routes.js";
 import { timeRouter } from "./modules/time/routes.js";
@@ -14,10 +16,15 @@ import { env } from "./config/env.js";
 export function createApp() {
   const app = express();
   const allowAnyOrigin = env.WEB_ORIGIN === "*";
+  const uploadDir = path.resolve(process.cwd(), "uploads");
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
 
   app.use(cors({ origin: allowAnyOrigin ? true : env.WEB_ORIGIN }));
   app.use(express.json());
   app.use(morgan("dev"));
+  app.use("/uploads", express.static(uploadDir));
 
   app.use("/api/health", healthRouter);
   app.use("/api/public", publicRouter);

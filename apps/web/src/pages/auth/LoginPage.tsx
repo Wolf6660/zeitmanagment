@@ -9,24 +9,29 @@ export function LoginPage() {
   const [loginName, setLoginName] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [brand, setBrand] = useState<Pick<PublicConfig, "companyName" | "systemName"> | null>(null);
+  const [brand, setBrand] = useState<Pick<PublicConfig, "companyName" | "systemName" | "companyLogoUrl"> | null>(null);
 
   useEffect(() => {
     api.publicConfig()
       .then((config) => {
-        setBrand({ companyName: config.companyName, systemName: config.systemName });
+        setBrand({ companyName: config.companyName, systemName: config.systemName, companyLogoUrl: config.companyLogoUrl });
         applyTheme(config);
       })
       .catch(() => {
-        setBrand({ companyName: "Musterfirma", systemName: "Zeitmanagment" });
+        setBrand({ companyName: "Musterfirma", systemName: "Zeitmanagment", companyLogoUrl: null });
       });
   }, []);
 
   return (
-    <div className="page" style={{ maxWidth: 460 }}>
+    <div className="page" style={{ maxWidth: 520 }}>
       <div className="card">
-        <h1>{brand?.companyName || "Musterfirma"}</h1>
-        <p style={{ marginTop: -6 }}>{brand?.systemName || "Zeitmanagment"}</p>
+        <div className="brand-wrap" style={{ marginBottom: 10 }}>
+          <div>
+            <div className="brand-title">{brand?.companyName || "Musterfirma"}</div>
+            <p style={{ marginTop: 4 }}>{brand?.systemName || "Zeitmanagment"}</p>
+          </div>
+          {brand?.companyLogoUrl && <img className="brand-logo" src={brand.companyLogoUrl} alt="Firmenlogo" />}
+        </div>
         <p>Loginname + Passwort</p>
         <div className="grid">
           <input value={loginName} onChange={(e) => setLoginName(e.target.value)} placeholder="Loginname" />

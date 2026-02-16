@@ -68,10 +68,37 @@ export const api = {
   clock: (payload: { type: "CLOCK_IN" | "CLOCK_OUT"; reasonCode?: string; reasonText?: string }) =>
     request("/api/time/clock", { method: "POST", body: JSON.stringify(payload) }),
 
+  selfCorrection: (payload: { type: "CLOCK_IN" | "CLOCK_OUT"; occurredAt: string; correctionComment: string }) =>
+    request("/api/time/self-correction", { method: "POST", body: JSON.stringify(payload) }),
+
   todayEntries: (userId: string) =>
     request<Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; occurredAt: string; source: string; reasonText?: string }>>(
       `/api/time/today/${userId}`
     ),
+
+  monthView: (userId: string, year: number, month: number) =>
+    request<{
+      year: number;
+      month: number;
+      dailyHours: number;
+      monthPlanned: number;
+      monthWorked: number;
+      days: Array<{
+        date: string;
+        plannedHours: number;
+        workedHours: number;
+        isHoliday: boolean;
+        isWeekend: boolean;
+        hasManualCorrection: boolean;
+        entries: Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; time: string; source: string; reasonText?: string }>;
+      }>;
+    }>(`/api/time/month/${userId}?year=${year}&month=${month}`),
+
+  dayOverrideSelf: (payload: { date: string; note: string; events: Array<{ type: "CLOCK_IN" | "CLOCK_OUT"; time: string }> }) =>
+    request("/api/time/day-override-self", { method: "POST", body: JSON.stringify(payload) }),
+
+  dayOverrideBySupervisor: (payload: { userId: string; date: string; note: string; events: Array<{ type: "CLOCK_IN" | "CLOCK_OUT"; time: string }> }) =>
+    request("/api/time/day-override", { method: "POST", body: JSON.stringify(payload) }),
 
   myLeaves: () =>
     request<Array<{ id: string; status: string; kind: string; startDate: string; endDate: string; note?: string; requestedAt: string }>>(
@@ -98,9 +125,12 @@ export const api = {
         role: string;
         isActive: boolean;
         annualVacationDays: number;
+        dailyWorkHours?: number | null;
         carryOverVacationDays: number;
         loginName: string;
         mailNotificationsEnabled: boolean;
+        webLoginEnabled: boolean;
+        rfidTag?: string | null;
       }>
     >("/api/employees"),
 
@@ -111,8 +141,11 @@ export const api = {
     password: string;
     role: "EMPLOYEE" | "SUPERVISOR" | "ADMIN";
     annualVacationDays: number;
+    dailyWorkHours?: number;
     carryOverVacationDays: number;
     mailNotificationsEnabled: boolean;
+    webLoginEnabled: boolean;
+    rfidTag?: string;
   }) => request("/api/employees", { method: "POST", body: JSON.stringify(payload) }),
 
   updateEmployee: (
@@ -122,8 +155,11 @@ export const api = {
       email?: string;
       role?: "EMPLOYEE" | "SUPERVISOR" | "ADMIN";
       annualVacationDays?: number;
+      dailyWorkHours?: number | null;
       carryOverVacationDays?: number;
       mailNotificationsEnabled?: boolean;
+      webLoginEnabled?: boolean;
+      rfidTag?: string | null;
       isActive?: boolean;
     }
   ) => request(`/api/employees/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
@@ -160,6 +196,8 @@ export const api = {
       systemName: string;
       companyName: string;
       companyLogoUrl?: string | null;
+      defaultDailyHours: number;
+      defaultWeeklyWorkingDays?: string;
       autoBreakMinutes: number;
       autoBreakAfterHours: number;
       colorApproved: string;
@@ -189,5 +227,16 @@ export const api = {
     request(`/api/admin/terminals/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
 
   regenerateTerminalKey: (id: string) =>
-    request<{ id: string; apiKey: string }>(`/api/admin/terminals/${id}/regenerate-key`, { method: "POST" })
+    request<{ id: string; apiKey: string }>(`/api/admin/terminals/${id}/regenerate-key`, { method: "POST" }),
+
+  createOvertimeAdjustment: (payload: { userId: string; date: string; hours: number; note: string }) =>
+    request("/api/time/overtime-adjustment", { method: "POST", body: JSON.stringify(payload) }),
+
+  listAuditLogs: () =>
+    request<Array<{ id: string; actorLoginName: string; action: string; targetType?: string; targetId?: string; payloadJson?: string; createdAt: string }>>(
+      "/api/admin/audit-logs"
+    ),
+
+  uploadLogo: (payload: { filename: string; contentBase64: string }) =>
+    request<{ logoUrl: string }>("/api/admin/logo-upload", { method: "POST", body: JSON.stringify(payload) })
 };

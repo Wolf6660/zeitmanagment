@@ -1,9 +1,12 @@
 import { Role } from "@prisma/client";
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../../db/prisma.js";
 import { AuthRequest, requireAuth, requireRole } from "../../utils/auth.js";
+import { resolveActorLoginName, writeAuditLog } from "../../utils/audit.js";
 import { sendMailIfEnabled } from "../../utils/mail.js";
 
 export const adminRouter = Router();
@@ -20,6 +23,7 @@ const configSchema = z.object({
   systemName: z.string().min(1).optional(),
   companyLogoUrl: z.string().url().nullable().optional(),
   defaultDailyHours: z.number().min(1).max(24).optional(),
+  defaultWeeklyWorkingDays: z.string().optional(),
   autoBreakMinutes: z.number().int().min(0).max(180).optional(),
   autoBreakAfterHours: z.number().min(0).max(24).optional(),
   colorApproved: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
@@ -53,6 +57,15 @@ adminRouter.patch("/config", async (req, res) => {
     where: { id: 1 },
     data: parsed.data
   });
+  const authReq = req as AuthRequest;
+  await writeAuditLog({
+    actorUserId: authReq.auth?.userId,
+    actorLoginName: await resolveActorLoginName(authReq.auth?.userId),
+    action: "SYSTEM_CONFIG_UPDATED",
+    targetType: "SystemConfig",
+    targetId: "1",
+    payload: parsed.data
+  });
 
   res.json(updated);
 });
@@ -71,6 +84,15 @@ adminRouter.post("/holidays", async (req, res) => {
 
   const holiday = await prisma.holiday.create({
     data: { date: parsed.data.date, name: parsed.data.name }
+  });
+  const authReq = req as AuthRequest;
+  await writeAuditLog({
+    actorUserId: authReq.auth?.userId,
+    actorLoginName: await resolveActorLoginName(authReq.auth?.userId),
+    action: "HOLIDAY_CREATED",
+    targetType: "Holiday",
+    targetId: holiday.id,
+    payload: parsed.data
   });
 
   res.status(201).json(holiday);
@@ -94,6 +116,15 @@ adminRouter.post("/dropdown-options", async (req, res) => {
   }
 
   const option = await prisma.dropdownOption.create({ data: parsed.data });
+  const authReq = req as AuthRequest;
+  await writeAuditLog({
+    actorUserId: authReq.auth?.userId,
+    actorLoginName: await resolveActorLoginName(authReq.auth?.userId),
+    action: "DROPDOWN_OPTION_CREATED",
+    targetType: "DropdownOption",
+    targetId: option.id,
+    payload: parsed.data
+  });
   res.status(201).json(option);
 });
 
@@ -141,6 +172,14 @@ adminRouter.post("/sick-leave", async (req: AuthRequest, res) => {
       text: `Krankheit eingetragen fuer ${sick.user.name} von ${sick.startDate.toISOString().slice(0, 10)} bis ${sick.endDate.toISOString().slice(0, 10)}.`
     });
   }
+  await writeAuditLog({
+    actorUserId: req.auth.userId,
+    actorLoginName: await resolveActorLoginName(req.auth.userId),
+    action: "SICK_LEAVE_CREATED",
+    targetType: "SickLeave",
+    targetId: sick.id,
+    payload: parsed.data
+  });
 
   res.status(201).json(sick);
 });
@@ -205,6 +244,15 @@ adminRouter.post("/terminals", async (req, res) => {
       apiKey: crypto.randomBytes(24).toString("hex")
     }
   });
+  const authReq = req as AuthRequest;
+  await writeAuditLog({
+    actorUserId: authReq.auth?.userId,
+    actorLoginName: await resolveActorLoginName(authReq.auth?.userId),
+    action: "RFID_TERMINAL_CREATED",
+    targetType: "RfidTerminal",
+    targetId: terminal.id,
+    payload: parsed.data
+  });
 
   res.status(201).json(terminal);
 });
@@ -234,6 +282,15 @@ adminRouter.patch("/terminals/:id", async (req, res) => {
     where: { id: terminalId },
     data: parsed.data
   });
+  const authReq = req as AuthRequest;
+  await writeAuditLog({
+    actorUserId: authReq.auth?.userId,
+    actorLoginName: await resolveActorLoginName(authReq.auth?.userId),
+    action: "RFID_TERMINAL_UPDATED",
+    targetType: "RfidTerminal",
+    targetId: updated.id,
+    payload: parsed.data
+  });
   res.json(updated);
 });
 
@@ -243,5 +300,58 @@ adminRouter.post("/terminals/:id/regenerate-key", async (req, res) => {
     where: { id: terminalId },
     data: { apiKey: crypto.randomBytes(24).toString("hex") }
   });
+  const authReq = req as AuthRequest;
+  await writeAuditLog({
+    actorUserId: authReq.auth?.userId,
+    actorLoginName: await resolveActorLoginName(authReq.auth?.userId),
+    action: "RFID_TERMINAL_KEY_REGENERATED",
+    targetType: "RfidTerminal",
+    targetId: updated.id
+  });
   res.json(updated);
+});
+
+adminRouter.get("/audit-logs", async (_req, res) => {
+  const logs = await prisma.auditLog.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 300
+  });
+  res.json(logs);
+});
+
+const logoUploadSchema = z.object({
+  filename: z.string().min(3),
+  contentBase64: z.string().min(10)
+});
+
+adminRouter.post("/logo-upload", async (req: AuthRequest, res) => {
+  const parsed = logoUploadSchema.safeParse(req.body);
+  if (!parsed.success || !req.auth) {
+    res.status(400).json({ message: "Ungueltige Eingaben." });
+    return;
+  }
+  const ext = parsed.data.filename.toLowerCase().endsWith(".png")
+    ? "png"
+    : parsed.data.filename.toLowerCase().endsWith(".jpg") || parsed.data.filename.toLowerCase().endsWith(".jpeg")
+      ? "jpg"
+      : null;
+  if (!ext) {
+    res.status(400).json({ message: "Nur PNG/JPG erlaubt." });
+    return;
+  }
+  const uploadDir = path.resolve(process.cwd(), "uploads");
+  if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+  const targetPath = path.join(uploadDir, `logo.${ext}`);
+  fs.writeFileSync(targetPath, Buffer.from(parsed.data.contentBase64, "base64"));
+  const logoUrl = `/uploads/logo.${ext}`;
+  await prisma.systemConfig.update({ where: { id: 1 }, data: { companyLogoUrl: logoUrl } });
+  await writeAuditLog({
+    actorUserId: req.auth.userId,
+    actorLoginName: await resolveActorLoginName(req.auth.userId),
+    action: "LOGO_UPLOADED",
+    targetType: "SystemConfig",
+    targetId: "1",
+    payload: { logoUrl }
+  });
+  res.json({ logoUrl });
 });

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "../../db/prisma.js";
 import { AuthRequest, requireAuth, requireRole } from "../../utils/auth.js";
 import { dayKey, isWeekend, listDays } from "../../utils/date.js";
+import { resolveActorLoginName, writeAuditLog } from "../../utils/audit.js";
 
 export const leaveRouter = Router();
 
@@ -154,6 +155,14 @@ leaveRouter.post("/", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMIN]),
       note: parsed.data.note
     }
   });
+  await writeAuditLog({
+    actorUserId: req.auth.userId,
+    actorLoginName: await resolveActorLoginName(req.auth.userId),
+    action: "LEAVE_REQUEST_CREATED",
+    targetType: "LeaveRequest",
+    targetId: leave.id,
+    payload: parsed.data
+  });
 
   res.status(201).json({
     ...leave,
@@ -203,6 +212,13 @@ leaveRouter.post("/cancel", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.AD
     where: { id: leave.id },
     data: { status: LeaveStatus.CANCELED }
   });
+  await writeAuditLog({
+    actorUserId: req.auth.userId,
+    actorLoginName: await resolveActorLoginName(req.auth.userId),
+    action: "LEAVE_REQUEST_CANCELED",
+    targetType: "LeaveRequest",
+    targetId: updated.id
+  });
 
   res.json(updated);
 });
@@ -239,6 +255,14 @@ leaveRouter.post("/decision", requireRole([Role.SUPERVISOR, Role.ADMIN]), async 
       decidedById: req.auth.userId,
       decidedAt: new Date()
     }
+  });
+  await writeAuditLog({
+    actorUserId: req.auth.userId,
+    actorLoginName: await resolveActorLoginName(req.auth.userId),
+    action: parsed.data.decision === "APPROVED" ? "LEAVE_REQUEST_APPROVED" : "LEAVE_REQUEST_REJECTED",
+    targetType: "LeaveRequest",
+    targetId: updated.id,
+    payload: { decisionNote: parsed.data.decisionNote }
   });
 
   res.json(updated);
@@ -290,6 +314,14 @@ leaveRouter.post("/supervisor-update", requireRole([Role.SUPERVISOR, Role.ADMIN]
       endDate: parsed.data.endDate,
       note: `${parsed.data.note}\n\n[Aenderung Vorgesetzter]: ${parsed.data.changeNote}`
     }
+  });
+  await writeAuditLog({
+    actorUserId: req.auth.userId,
+    actorLoginName: await resolveActorLoginName(req.auth.userId),
+    action: "LEAVE_REQUEST_SUPERVISOR_UPDATED",
+    targetType: "LeaveRequest",
+    targetId: updated.id,
+    payload: parsed.data
   });
 
   res.json(updated);
