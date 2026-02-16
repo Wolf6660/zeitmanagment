@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { Role, TimeEntrySource, TimeEntryType } from "@prisma/client";
+import { ApprovalStatus, Role, TimeEntrySource, TimeEntryType } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../../db/prisma.js";
 import { AuthRequest, requireAuth, requireRole } from "../../utils/auth.js";
@@ -44,6 +44,25 @@ function parseWorkingDaySet(value?: string | null): Set<number> {
   return out;
 }
 
+async function isHolidayDate(date: Date): Promise<boolean> {
+  const dayStart = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0));
+  const dayEnd = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 23, 59, 59, 999));
+  const found = await prisma.holiday.findFirst({ where: { date: { gte: dayStart, lte: dayEnd } }, select: { id: true } });
+  return Boolean(found);
+}
+
+async function upsertSpecialWorkApproval(userId: string, date: Date, note?: string): Promise<void> {
+  const holiday = await isHolidayDate(date);
+  const weekend = isWeekend(date);
+  if (!holiday && !weekend) return;
+  const dayStart = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0));
+  await prisma.specialWorkApproval.upsert({
+    where: { userId_date: { userId, date: dayStart } },
+    create: { userId, date: dayStart, status: ApprovalStatus.SUBMITTED, note: note || null },
+    update: { status: ApprovalStatus.SUBMITTED, note: note || null, decidedAt: null, decidedById: null }
+  });
+}
+
 const clockSchema = z.object({
   type: z.nativeEnum(TimeEntryType),
   reasonCode: z.string().optional(),
@@ -76,6 +95,8 @@ timeRouter.post("/clock", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMI
     targetId: entry.id,
     payload: { type: parsed.data.type, reasonText: parsed.data.reasonText }
   });
+
+  await upsertSpecialWorkApproval(req.auth.userId, entry.occurredAt, parsed.data.reasonText);
 
   res.status(201).json(entry);
 });
@@ -114,6 +135,8 @@ timeRouter.post("/self-correction", requireRole([Role.EMPLOYEE, Role.SUPERVISOR,
     targetId: entry.id,
     payload: parsed.data
   });
+
+  await upsertSpecialWorkApproval(req.auth.userId, entry.occurredAt, parsed.data.correctionComment);
 
   res.status(201).json(entry);
 });
@@ -156,6 +179,8 @@ timeRouter.post("/correction", requireRole([Role.SUPERVISOR, Role.ADMIN]), async
     targetId: entry.id,
     payload: parsed.data
   });
+
+  await upsertSpecialWorkApproval(parsed.data.userId, entry.occurredAt, parsed.data.correctionComment);
 
   res.status(201).json(entry);
 });
@@ -213,7 +238,7 @@ const overtimeAdjustmentSchema = z.object({
   note: z.string().trim().min(3, "Notiz ist Pflicht.")
 });
 
-timeRouter.post("/overtime-adjustment", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+timeRouter.post("/overtime-adjustment", requireRole([Role.ADMIN]), async (req: AuthRequest, res) => {
   const parsed = overtimeAdjustmentSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ message: zodFirstMessage(parsed) });
@@ -246,10 +271,68 @@ timeRouter.post("/overtime-adjustment", requireRole([Role.SUPERVISOR, Role.ADMIN
   res.status(201).json(adjustment);
 });
 
-timeRouter.get("/overtime-adjustment/:userId", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req, res) => {
+timeRouter.get("/overtime-adjustment/:userId", requireRole([Role.ADMIN]), async (req, res) => {
   const userId = String(req.params.userId);
   const entries = await prisma.overtimeAdjustment.findMany({ where: { userId }, orderBy: { date: "desc" }, take: 50 });
   res.json(entries);
+});
+
+const overtimeAccountSchema = z.object({
+  hours: z
+    .preprocess((v) => {
+      if (typeof v === "number") return v;
+      if (typeof v === "string") return Number(v.replace(",", "."));
+      return v;
+    }, z.number().finite("Stunden sind ungueltig.").min(-10000).max(10000)),
+  note: z.string().trim().min(3, "Notiz ist Pflicht.")
+});
+
+timeRouter.get("/overtime-account/:userId", requireRole([Role.ADMIN]), async (req, res) => {
+  const userId = String(req.params.userId);
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, overtimeBalanceHours: true } });
+  if (!user) {
+    res.status(404).json({ message: "Mitarbeiter nicht gefunden." });
+    return;
+  }
+  res.json({ userId: user.id, overtimeBalanceHours: user.overtimeBalanceHours });
+});
+
+timeRouter.patch("/overtime-account/:userId", requireRole([Role.ADMIN]), async (req: AuthRequest, res) => {
+  const parsed = overtimeAccountSchema.safeParse(req.body);
+  if (!parsed.success || !req.auth) {
+    res.status(400).json({ message: parsed.success ? "Nicht authentifiziert." : zodFirstMessage(parsed) });
+    return;
+  }
+  const userId = String(req.params.userId);
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { overtimeBalanceHours: true } });
+  if (!user) {
+    res.status(404).json({ message: "Mitarbeiter nicht gefunden." });
+    return;
+  }
+  const target = parsed.data.hours;
+  const delta = Number((target - user.overtimeBalanceHours).toFixed(2));
+  const now = new Date();
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: userId }, data: { overtimeBalanceHours: target } }),
+    prisma.overtimeAdjustment.create({
+      data: {
+        userId,
+        date: now,
+        hours: delta,
+        reason: `Kontostand gesetzt auf ${target.toFixed(2)} h. ${parsed.data.note}`,
+        createdById: req.auth.userId
+      }
+    })
+  ]);
+  await writeAuditLog({
+    actorUserId: req.auth.userId,
+    actorLoginName: await resolveActorLoginName(req.auth.userId),
+    action: "OVERTIME_ACCOUNT_SET",
+    targetType: "User",
+    targetId: userId,
+    payload: { oldValue: user.overtimeBalanceHours, newValue: target, delta, note: parsed.data.note }
+  });
+  res.json({ userId, overtimeBalanceHours: target, delta });
 });
 
 const dayOverrideSchema = z.object({
@@ -308,6 +391,7 @@ timeRouter.post("/day-override", requireRole([Role.SUPERVISOR, Role.ADMIN]), asy
       });
       created.push(row);
     }
+    await upsertSpecialWorkApproval(parsed.data.userId, dayStart, parsed.data.note);
     try {
       await writeAuditLog({
         actorUserId: req.auth.userId,
@@ -393,6 +477,7 @@ timeRouter.post("/day-override-self", requireRole([Role.EMPLOYEE, Role.SUPERVISO
         }
       });
     }
+    await upsertSpecialWorkApproval(req.auth.userId, dayStart, parsed.data.note);
     try {
       await writeAuditLog({
         actorUserId: req.auth.userId,
@@ -429,15 +514,17 @@ timeRouter.get("/month/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Ro
   }
   const monthStart = new Date(Date.UTC(year, month - 1, 1));
   const monthEnd = new Date(Date.UTC(year, month, 0, 23, 59, 59));
-  const [config, user, holidays, entries] = await Promise.all([
+  const [config, user, holidays, entries, approvals] = await Promise.all([
     prisma.systemConfig.findUnique({ where: { id: 1 } }),
     prisma.user.findUnique({ where: { id: targetUserId }, select: { dailyWorkHours: true } }),
     prisma.holiday.findMany({ where: { date: { gte: monthStart, lte: monthEnd } } }),
-    prisma.timeEntry.findMany({ where: { userId: targetUserId, occurredAt: { gte: monthStart, lte: monthEnd } }, orderBy: { occurredAt: "asc" } })
+    prisma.timeEntry.findMany({ where: { userId: targetUserId, occurredAt: { gte: monthStart, lte: monthEnd } }, orderBy: { occurredAt: "asc" } }),
+    prisma.specialWorkApproval.findMany({ where: { userId: targetUserId, date: { gte: monthStart, lte: monthEnd } } })
   ]);
   const dailyHours = user?.dailyWorkHours ?? config?.defaultDailyHours ?? 8;
   const workingDays = parseWorkingDaySet(config?.defaultWeeklyWorkingDays);
   const holidaySet = new Set(holidays.map((h) => dayKey(h.date)));
+  const approvalByDay = new Map(approvals.map((a) => [dayKey(a.date), a.status]));
   const byDay = new Map<string, typeof entries>();
   for (const e of entries) {
     const key = dayKey(e.occurredAt);
@@ -465,7 +552,10 @@ timeRouter.get("/month/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Ro
         openIn = null;
       }
     }
-    const worked = Number((grossMin / 60).toFixed(2));
+    const approvalStatus = approvalByDay.get(key) ?? null;
+    const requiresApproval = isHoliday || weekend;
+    const workedRaw = Number((grossMin / 60).toFixed(2));
+    const worked = requiresApproval && approvalStatus !== ApprovalStatus.APPROVED ? 0 : workedRaw;
     monthPlanned += planned;
     monthWorked += worked;
     days.push({
@@ -474,6 +564,7 @@ timeRouter.get("/month/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Ro
       workedHours: worked,
       isHoliday,
       isWeekend: weekend,
+      specialWorkApprovalStatus: approvalStatus,
       hasManualCorrection: dayEntries.some((e) => e.isManualCorrection),
       entries: dayEntries.map((e) => ({ id: e.id, type: e.type, time: e.occurredAt.toISOString().slice(11, 16), source: e.source, reasonText: e.reasonText }))
     });
@@ -518,15 +609,16 @@ timeRouter.get("/summary/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, 
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59));
 
-  const [config, user, holidays, entries, credits, sickLeaves, leaveRequests, overtimeAdjustments] = await Promise.all([
+  const [config, user, holidays, entries, credits, sickLeaves, leaveRequests, overtimeAdjustments, approvals] = await Promise.all([
     prisma.systemConfig.findUnique({ where: { id: 1 } }),
-    prisma.user.findUnique({ where: { id: targetUserId }, select: { dailyWorkHours: true } }),
+    prisma.user.findUnique({ where: { id: targetUserId }, select: { dailyWorkHours: true, overtimeBalanceHours: true } }),
     prisma.holiday.findMany({ where: { date: { gte: monthStart, lte: monthEnd } } }),
     prisma.timeEntry.findMany({ where: { userId: targetUserId, occurredAt: { gte: monthStart, lte: monthEnd } } }),
     prisma.breakCredit.findMany({ where: { userId: targetUserId, date: { gte: monthStart, lte: monthEnd } } }),
     prisma.sickLeave.findMany({ where: { userId: targetUserId, startDate: { lte: monthEnd }, endDate: { gte: monthStart } } }),
     prisma.leaveRequest.findMany({ where: { userId: targetUserId, status: "APPROVED", startDate: { lte: monthEnd }, endDate: { gte: monthStart } } }),
-    prisma.overtimeAdjustment.findMany({ where: { userId: targetUserId, date: { gte: monthStart, lte: monthEnd } } })
+    prisma.overtimeAdjustment.findMany({ where: { userId: targetUserId, date: { gte: monthStart, lte: monthEnd } } }),
+    prisma.specialWorkApproval.findMany({ where: { userId: targetUserId, date: { gte: monthStart, lte: monthEnd } } })
   ]);
 
   const dailyHours = user?.dailyWorkHours ?? config?.defaultDailyHours ?? 8;
@@ -549,6 +641,7 @@ timeRouter.get("/summary/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, 
   }
 
   const holidaySet = new Set(holidays.map((h) => dayKey(h.date)));
+  const approvalByDay = new Map(approvals.map((a) => [dayKey(a.date), a.status]));
 
   let workedTotal = 0;
   let expectedTotal = 0;
@@ -563,9 +656,14 @@ timeRouter.get("/summary/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, 
     const dayCredit = creditByDay.get(key) ?? 0;
     const netMinutes = Math.max(grossMinutes - (autoBreakApplies ? breakMinutes : 0) + dayCredit, 0);
 
-    workedTotal += netMinutes / 60;
-
     const isHoliday = holidaySet.has(key);
+    const weekend = isWeekend(date);
+    const approvalStatus = approvalByDay.get(key) ?? null;
+    const requiresApproval = isHoliday || weekend;
+    if (!requiresApproval || approvalStatus === ApprovalStatus.APPROVED) {
+      workedTotal += netMinutes / 60;
+    }
+
     if (workingDays.has(date.getUTCDay()) && !isHoliday) {
       expectedTotal += dailyHours;
     }
@@ -587,7 +685,7 @@ timeRouter.get("/summary/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, 
 
   const manualAdjustmentHours = overtimeAdjustments.reduce((sum, a) => sum + a.hours, 0);
   const totalIncludingAbsence = workedTotal + approvalDays * dailyHours + sickDays * dailyHours;
-  const overtime = totalIncludingAbsence - expectedTotal + manualAdjustmentHours;
+  const overtime = (user?.overtimeBalanceHours ?? 0) + (totalIncludingAbsence - expectedTotal + manualAdjustmentHours);
 
   const longStreakAlert = entries.length >= 2
     ? entries
@@ -645,120 +743,116 @@ timeRouter.get("/today/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Ro
   res.json(entries);
 });
 
+const holidaySchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Datum ist ungueltig."),
+  name: z.string().trim().min(1, "Name ist Pflicht.")
+});
+
+timeRouter.get("/holidays", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (_req, res) => {
+  const holidays = await prisma.holiday.findMany({ orderBy: { date: "asc" } });
+  res.json(holidays.map((h) => ({ id: h.id, date: h.date.toISOString().slice(0, 10), name: h.name })));
+});
+
+timeRouter.post("/holidays", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+  const parsed = holidaySchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: zodFirstMessage(parsed) });
+    return;
+  }
+  const p = parseIsoDateParts(parsed.data.date);
+  if (!p) {
+    res.status(400).json({ message: "Datum ist ungueltig." });
+    return;
+  }
+  const holidayDate = new Date(Date.UTC(p.year, p.month - 1, p.day, 0, 0, 0));
+  try {
+    const holiday = await prisma.holiday.create({ data: { date: holidayDate, name: parsed.data.name } });
+    await writeAuditLog({
+      actorUserId: req.auth?.userId,
+      actorLoginName: await resolveActorLoginName(req.auth?.userId),
+      action: "HOLIDAY_CREATED",
+      targetType: "Holiday",
+      targetId: holiday.id,
+      payload: parsed.data
+    });
+    res.status(201).json({ id: holiday.id, date: holiday.date.toISOString().slice(0, 10), name: holiday.name });
+  } catch {
+    res.status(409).json({ message: "Feiertag existiert bereits." });
+  }
+});
+
+timeRouter.get("/special-work/pending", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (_req, res) => {
+  const pending = await prisma.specialWorkApproval.findMany({
+    where: { status: ApprovalStatus.SUBMITTED },
+    include: { user: { select: { id: true, name: true, loginName: true } } },
+    orderBy: [{ date: "asc" }, { createdAt: "asc" }]
+  });
+  res.json(pending.map((p) => ({ ...p, date: p.date.toISOString().slice(0, 10) })));
+});
+
+const specialDecisionSchema = z.object({
+  approvalId: z.string().min(1),
+  decision: z.enum(["APPROVED", "REJECTED"]),
+  note: z.string().trim().min(1, "Notiz ist Pflicht.")
+});
+
+timeRouter.post("/special-work/decision", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+  const parsed = specialDecisionSchema.safeParse(req.body);
+  if (!parsed.success || !req.auth) {
+    res.status(400).json({ message: parsed.success ? "Nicht authentifiziert." : zodFirstMessage(parsed) });
+    return;
+  }
+  const updated = await prisma.specialWorkApproval.update({
+    where: { id: parsed.data.approvalId },
+    data: {
+      status: parsed.data.decision as ApprovalStatus,
+      note: parsed.data.note,
+      decidedAt: new Date(),
+      decidedById: req.auth.userId
+    }
+  });
+  await writeAuditLog({
+    actorUserId: req.auth.userId,
+    actorLoginName: await resolveActorLoginName(req.auth.userId),
+    action: parsed.data.decision === "APPROVED" ? "SPECIAL_WORK_APPROVED" : "SPECIAL_WORK_REJECTED",
+    targetType: "SpecialWorkApproval",
+    targetId: updated.id,
+    payload: parsed.data
+  });
+  res.json({ id: updated.id, status: updated.status });
+});
+
 timeRouter.get("/supervisor-overview", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (_req: AuthRequest, res) => {
   const now = new Date();
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59));
-  const historyStart = new Date(Date.UTC(2000, 0, 1));
-  const prevMonthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0, 23, 59, 59));
 
   const [users, config, holidaysAll] = await Promise.all([
-    prisma.user.findMany({ where: { isActive: true }, select: { id: true, dailyWorkHours: true } }),
+    prisma.user.findMany({ where: { isActive: true }, select: { id: true, dailyWorkHours: true, overtimeBalanceHours: true } }),
     prisma.systemConfig.findUnique({ where: { id: 1 } }),
-    prisma.holiday.findMany({ where: { date: { gte: historyStart, lte: monthEnd } } })
+    prisma.holiday.findMany({ where: { date: { gte: monthStart, lte: monthEnd } } })
   ]);
 
   const workingDays = parseWorkingDaySet(config?.defaultWeeklyWorkingDays);
-  const breakMinutes = config?.autoBreakMinutes ?? 30;
-  const breakAfterHours = config?.autoBreakAfterHours ?? 6;
   const holidaySet = new Set(holidaysAll.map((h) => dayKey(h.date)));
 
-  const rows = await Promise.all(users.map(async (u) => {
+  const rows = users.map((u) => {
     const dailyHours = u.dailyWorkHours ?? config?.defaultDailyHours ?? 8;
-    const [entries, credits, leaveRequests, sickLeaves, adjustments] = await Promise.all([
-      prisma.timeEntry.findMany({
-        where: { userId: u.id, occurredAt: { gte: historyStart, lte: monthEnd } },
-        select: { type: true, occurredAt: true }
-      }),
-      prisma.breakCredit.findMany({
-        where: { userId: u.id, date: { gte: historyStart, lte: monthEnd } },
-        select: { date: true, minutes: true }
-      }),
-      prisma.leaveRequest.findMany({
-        where: { userId: u.id, status: "APPROVED", startDate: { lte: monthEnd }, endDate: { gte: historyStart } },
-        select: { startDate: true, endDate: true }
-      }),
-      prisma.sickLeave.findMany({
-        where: { userId: u.id, startDate: { lte: monthEnd }, endDate: { gte: historyStart } },
-        select: { startDate: true, endDate: true }
-      }),
-      prisma.overtimeAdjustment.findMany({
-        where: { userId: u.id, date: { gte: historyStart, lte: monthEnd } },
-        select: { date: true, hours: true }
-      })
-    ]);
-
-    const byDay = new Map<string, Array<{ type: TimeEntryType; occurredAt: Date }>>();
-    for (const e of entries) {
-      const k = dayKey(e.occurredAt);
-      const list = byDay.get(k) ?? [];
-      list.push({ type: e.type, occurredAt: e.occurredAt });
-      byDay.set(k, list);
-    }
-    const creditByDay = new Map<string, number>();
-    for (const c of credits) {
-      const k = dayKey(c.date);
-      creditByDay.set(k, (creditByDay.get(k) ?? 0) + c.minutes);
-    }
-
-    const leaveDays = new Set<string>();
-    for (const l of leaveRequests) {
-      const s = new Date(Math.max(l.startDate.getTime(), historyStart.getTime()));
-      const e = new Date(Math.min(l.endDate.getTime(), monthEnd.getTime()));
-      for (let d = new Date(s); d <= e; d = new Date(d.getTime() + 86400000)) {
-        leaveDays.add(dayKey(d));
-      }
-    }
-    const sickDays = new Set<string>();
-    for (const l of sickLeaves) {
-      const s = new Date(Math.max(l.startDate.getTime(), historyStart.getTime()));
-      const e = new Date(Math.min(l.endDate.getTime(), monthEnd.getTime()));
-      for (let d = new Date(s); d <= e; d = new Date(d.getTime() + 86400000)) {
-        sickDays.add(dayKey(d));
-      }
-    }
-
-    const manualByDay = new Map<string, number>();
-    for (const a of adjustments) {
-      const k = dayKey(a.date);
-      manualByDay.set(k, (manualByDay.get(k) ?? 0) + a.hours);
-    }
-
     let requiredCurrentMonthHours = 0;
-    let overtimeBeforeCurrent = 0;
 
-    for (let d = new Date(historyStart); d <= monthEnd; d = new Date(d.getTime() + 86400000)) {
+    for (let d = new Date(monthStart); d <= monthEnd; d = new Date(d.getTime() + 86400000)) {
       const k = dayKey(d);
       const isWorkday = workingDays.has(d.getUTCDay()) && !holidaySet.has(k);
       const planned = isWorkday ? dailyHours : 0;
-      const dayEntries = (byDay.get(k) ?? []).sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
-      let openIn: Date | null = null;
-      let grossMin = 0;
-      for (const e of dayEntries) {
-        if (e.type === TimeEntryType.CLOCK_IN) openIn = e.occurredAt;
-        if (e.type === TimeEntryType.CLOCK_OUT && openIn) {
-          const diff = e.occurredAt.getTime() - openIn.getTime();
-          if (diff > 0) grossMin += Math.floor(diff / 60000);
-          openIn = null;
-        }
-      }
-      const netWorked = Math.max(grossMin - (grossMin >= breakAfterHours * 60 ? breakMinutes : 0) + (creditByDay.get(k) ?? 0), 0) / 60;
-      const absenceHours = isWorkday ? ((leaveDays.has(k) ? dailyHours : 0) + (sickDays.has(k) ? dailyHours : 0)) : 0;
-      const dayOvertime = netWorked + absenceHours - planned + (manualByDay.get(k) ?? 0);
-      if (d >= monthStart) {
-        requiredCurrentMonthHours += planned;
-      }
-      if (d <= prevMonthEnd) {
-        overtimeBeforeCurrent += dayOvertime;
-      }
+      requiredCurrentMonthHours += planned;
     }
 
     return {
       userId: u.id,
       istHours: Number(requiredCurrentMonthHours.toFixed(2)),
-      overtimeHours: Number(overtimeBeforeCurrent.toFixed(2))
+      overtimeHours: Number((u.overtimeBalanceHours ?? 0).toFixed(2))
     };
-  }));
+  });
 
   res.json(rows);
 });

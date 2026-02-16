@@ -253,6 +253,31 @@ export const api = {
       `/api/time/overtime-adjustment/${userId}`
     ),
 
+  overtimeAccount: (userId: string) =>
+    request<{ userId: string; overtimeBalanceHours: number }>(`/api/time/overtime-account/${userId}`),
+
+  setOvertimeAccount: (userId: string, payload: { hours: number; note: string }) =>
+    request<{ userId: string; overtimeBalanceHours: number; delta: number }>(`/api/time/overtime-account/${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload)
+    }),
+
+  holidays: () => request<Array<{ id: string; date: string; name: string }>>("/api/time/holidays"),
+
+  createHoliday: (payload: { date: string; name: string }) =>
+    request<{ id: string; date: string; name: string }>("/api/time/holidays", { method: "POST", body: JSON.stringify(payload) }),
+
+  pendingSpecialWork: () =>
+    request<Array<{ id: string; userId: string; date: string; status: "SUBMITTED" | "APPROVED" | "REJECTED"; note?: string; user: { id: string; name: string; loginName: string } }>>(
+      "/api/time/special-work/pending"
+    ),
+
+  decideSpecialWork: (payload: { approvalId: string; decision: "APPROVED" | "REJECTED"; note: string }) =>
+    request<{ id: string; status: "APPROVED" | "REJECTED" }>("/api/time/special-work/decision", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+
   listAuditLogs: () =>
     request<Array<{ id: string; actorLoginName: string; action: string; targetType?: string; targetId?: string; payloadJson?: string; createdAt: string }>>(
       "/api/admin/audit-logs"

@@ -36,6 +36,12 @@ enum LeaveStatus {
   CANCELED
 }
 
+enum ApprovalStatus {
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
 model User {
   id                        String   @id @default(cuid())
   name                      String
@@ -49,6 +55,7 @@ model User {
   dailyWorkHours            Float?
   annualVacationDays        Int      @default(30)
   carryOverVacationDays     Float    @default(0)
+  overtimeBalanceHours      Float    @default(0)
   rfidTag                   String?  @unique
 
   timeEntries               TimeEntry[]         @relation("EmployeeTimeEntries")
@@ -63,6 +70,8 @@ model User {
   overtimeAdjustments       OvertimeAdjustment[] @relation("EmployeeOvertimeAdjustments")
   createdOvertimeAdjustments OvertimeAdjustment[] @relation("OvertimeAdjustmentAuthor")
   auditLogs                 AuditLog[] @relation("AuditActor")
+  decidedSpecialApprovals   SpecialWorkApproval[] @relation("SpecialWorkApprovalDecider")
+  specialWorkApprovals      SpecialWorkApproval[] @relation("SpecialWorkApprovalEmployee")
 
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
@@ -186,6 +195,24 @@ model Holiday {
   id                String   @id @default(cuid())
   date              DateTime @unique
   name              String
+}
+
+model SpecialWorkApproval {
+  id                String         @id @default(cuid())
+  userId            String
+  date              DateTime
+  status            ApprovalStatus @default(SUBMITTED)
+  note              String?
+  decidedById       String?
+  decidedAt         DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  user              User           @relation("SpecialWorkApprovalEmployee", fields: [userId], references: [id])
+  decidedBy         User?          @relation("SpecialWorkApprovalDecider", fields: [decidedById], references: [id])
+
+  @@unique([userId, date])
+  @@index([status, date])
 }
 
 model DropdownOption {

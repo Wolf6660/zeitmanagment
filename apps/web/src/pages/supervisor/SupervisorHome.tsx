@@ -15,12 +15,19 @@ export function SupervisorHome() {
   const [editTo, setEditTo] = useState<Record<string, string>>({});
   const [editKind, setEditKind] = useState<Record<string, "VACATION" | "OVERTIME">>({});
   const [msg, setMsg] = useState("");
+  const [holidays, setHolidays] = useState<Array<{ id: string; date: string; name: string }>>([]);
+  const [holidayDate, setHolidayDate] = useState("");
+  const [holidayName, setHolidayName] = useState("");
+  const [specialPending, setSpecialPending] = useState<Array<{ id: string; userId: string; date: string; status: "SUBMITTED" | "APPROVED" | "REJECTED"; note?: string; user: { id: string; name: string; loginName: string } }>>([]);
+  const [specialNotes, setSpecialNotes] = useState<Record<string, string>>({});
 
   async function loadData() {
-    const [e, p, ov] = await Promise.all([api.employees(), api.pendingLeaves(), api.supervisorOverview()]);
+    const [e, p, ov, h, sp] = await Promise.all([api.employees(), api.pendingLeaves(), api.supervisorOverview(), api.holidays(), api.pendingSpecialWork()]);
     setEmployees(e);
     setPending(p);
     setOverview(Object.fromEntries(ov.map((x) => [x.userId, { istHours: x.istHours, overtimeHours: x.overtimeHours }])));
+    setHolidays(h);
+    setSpecialPending(sp);
   }
 
   useEffect(() => {
@@ -116,6 +123,69 @@ export function SupervisorHome() {
           ))}
           {pending.length === 0 && <div>Keine offenen Antraege.</div>}
           {msg && <div className="error">{msg}</div>}
+        </div>
+      </div>
+
+      <div className="card">
+        <h2>Feiertage</h2>
+        <div className="row" style={{ marginBottom: 8 }}>
+          <input type="date" value={holidayDate} onChange={(e) => setHolidayDate(e.target.value)} />
+          <input placeholder="Name" value={holidayName} onChange={(e) => setHolidayName(e.target.value)} />
+          <button onClick={async () => {
+            try {
+              if (!holidayDate || !holidayName.trim()) { setMsg("Datum und Name sind Pflicht."); return; }
+              await api.createHoliday({ date: holidayDate, name: holidayName.trim() });
+              setHolidayDate("");
+              setHolidayName("");
+              await loadData();
+              setMsg("Feiertag gespeichert.");
+            } catch (e) { setMsg((e as Error).message); }
+          }}>Feiertag speichern</button>
+        </div>
+        <table>
+          <thead><tr><th>Datum</th><th>Name</th></tr></thead>
+          <tbody>
+            {holidays.map((h) => <tr key={h.id}><td>{h.date}</td><td>{h.name}</td></tr>)}
+            {holidays.length === 0 && <tr><td colSpan={2}>Keine Feiertage.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="card" style={{ gridColumn: "1 / -1" }}>
+        <h2>Arbeit Feiertag/Wochenende - Genehmigung offen</h2>
+        <div className="grid">
+          {specialPending.map((p) => (
+            <div key={p.id} className="card" style={{ padding: 10 }}>
+              <div><strong>{p.user.name}</strong> ({p.user.loginName})</div>
+              <div>Datum: {p.date}</div>
+              <div>Notiz Mitarbeiter: {p.note || "-"}</div>
+              <textarea
+                style={{ marginTop: 6 }}
+                placeholder="Entscheidungsnotiz (Pflicht)"
+                value={specialNotes[p.id] || ""}
+                onChange={(e) => setSpecialNotes({ ...specialNotes, [p.id]: e.target.value })}
+              />
+              <div className="row" style={{ marginTop: 8 }}>
+                <button onClick={async () => {
+                  try {
+                    const n = (specialNotes[p.id] || "").trim();
+                    if (!n) { setMsg("Entscheidungsnotiz ist Pflicht."); return; }
+                    await api.decideSpecialWork({ approvalId: p.id, decision: "APPROVED", note: n });
+                    await loadData();
+                  } catch (e) { setMsg((e as Error).message); }
+                }}>Genehmigen</button>
+                <button className="secondary" onClick={async () => {
+                  try {
+                    const n = (specialNotes[p.id] || "").trim();
+                    if (!n) { setMsg("Entscheidungsnotiz ist Pflicht."); return; }
+                    await api.decideSpecialWork({ approvalId: p.id, decision: "REJECTED", note: n });
+                    await loadData();
+                  } catch (e) { setMsg((e as Error).message); }
+                }}>Ablehnen</button>
+              </div>
+            </div>
+          ))}
+          {specialPending.length === 0 && <div>Keine offenen Genehmigungen.</div>}
         </div>
       </div>
     </div>

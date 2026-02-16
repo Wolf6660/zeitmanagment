@@ -74,9 +74,7 @@ export function AdminHome() {
   const session = getSession();
 
   const [otUserId, setOtUserId] = useState("");
-  const [otDate, setOtDate] = useState("");
-  const [otSign, setOtSign] = useState<"+" | "-">("+");
-  const [otHours, setOtHours] = useState(0);
+  const [otTargetHours, setOtTargetHours] = useState(0);
   const [otCurrentHours, setOtCurrentHours] = useState(0);
   const [otNote, setOtNote] = useState("");
   const [otHistory, setOtHistory] = useState<Array<{ id: string; date: string; hours: number; reason: string; createdAt: string }>>([]);
@@ -101,7 +99,6 @@ export function AdminHome() {
     setTerminals(trms);
     setEmployees(emps as Employee[]);
     setOtUserId((prev) => prev || (emps[0]?.id ?? ""));
-    setOtDate((prev) => prev || new Date().toISOString().slice(0, 10));
     applyTheme(cfg as PublicConfig);
   }
 
@@ -117,10 +114,11 @@ export function AdminHome() {
 
   useEffect(() => {
     if (section === "overtime" && otUserId) {
-      Promise.all([api.overtimeAdjustments(otUserId), api.summary(otUserId)])
-        .then(([history, summary]) => {
+      Promise.all([api.overtimeAdjustments(otUserId), api.overtimeAccount(otUserId)])
+        .then(([history, account]) => {
           setOtHistory(history);
-          setOtCurrentHours(summary.overtimeHours);
+          setOtCurrentHours(account.overtimeBalanceHours);
+          setOtTargetHours(account.overtimeBalanceHours);
         })
         .catch((e) => setMsg((e as Error).message));
     }
@@ -286,23 +284,12 @@ export function AdminHome() {
               </select>
             </label>
             <label>
-              Datum
-              <input type="date" value={otDate} onChange={(e) => setOtDate(e.target.value)} />
-            </label>
-            <label>
-              Aktuelle Ueberstunden (DB)
+              Ueberstundenkonto aktuell
               <input type="number" value={otCurrentHours} readOnly />
             </label>
             <label>
-              Richtung
-              <select value={otSign} onChange={(e) => setOtSign(e.target.value as "+" | "-")}>
-                <option value="+">Plus (+)</option>
-                <option value="-">Minus (-)</option>
-              </select>
-            </label>
-            <label>
-              Stunden
-              <input type="number" min={0} max={500} step="0.25" value={otHours} onChange={(e) => setOtHours(Number(e.target.value))} />
+              Neuer Kontostand (Sollwert)
+              <input type="number" min={-10000} max={10000} step="0.25" value={otTargetHours} onChange={(e) => setOtTargetHours(Number(e.target.value))} />
             </label>
             <label>
               Notiz (Pflicht)
@@ -317,31 +304,25 @@ export function AdminHome() {
                   setMsg("Bitte Mitarbeiter auswaehlen.");
                   return;
                 }
-                if (!otDate) {
-                  setMsg("Datum ist Pflicht.");
-                  return;
-                }
-                if (!Number.isFinite(otHours)) {
+                if (!Number.isFinite(otTargetHours)) {
                   setMsg("Stunden sind ungueltig.");
                   return;
                 }
-                if (otHours < 0 || otHours > 500) {
-                  setMsg("Stunden muessen zwischen 0 und 500 liegen.");
+                if (otTargetHours < -10000 || otTargetHours > 10000) {
+                  setMsg("Stunden muessen zwischen -10000 und 10000 liegen.");
                   return;
                 }
                 if (!otNote.trim()) {
                   setMsg("Notiz ist Pflicht.");
                   return;
                 }
-                const signedHours = otSign === "-" ? -otHours : otHours;
-                await api.createOvertimeAdjustment({ userId: otUserId, date: otDate, hours: signedHours, note: otNote.trim() });
-                setMsg("Ueberstundenanpassung gespeichert.");
-                setOtHours(0);
-                setOtSign("+");
+                const result = await api.setOvertimeAccount(otUserId, { hours: otTargetHours, note: otNote.trim() });
+                setMsg(`Ueberstundenkonto gespeichert (Delta ${result.delta >= 0 ? "+" : ""}${result.delta.toFixed(2)} h).`);
                 setOtNote("");
-                const [history, summary] = await Promise.all([api.overtimeAdjustments(otUserId), api.summary(otUserId)]);
+                const [history, account] = await Promise.all([api.overtimeAdjustments(otUserId), api.overtimeAccount(otUserId)]);
                 setOtHistory(history);
-                setOtCurrentHours(summary.overtimeHours);
+                setOtCurrentHours(account.overtimeBalanceHours);
+                setOtTargetHours(account.overtimeBalanceHours);
               } catch (e) {
                 setMsg((e as Error).message);
               }

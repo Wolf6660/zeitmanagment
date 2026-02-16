@@ -1,9 +1,14 @@
-import { TimeEntryType } from "@prisma/client";
+import { ApprovalStatus, TimeEntryType } from "@prisma/client";
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../../db/prisma.js";
 
 export const terminalRouter = Router();
+
+function isWeekendUtc(date: Date): boolean {
+  const day = date.getUTCDay();
+  return day === 0 || day === 6;
+}
 
 const punchSchema = z.object({
   terminalKey: z.string().min(16),
@@ -47,6 +52,24 @@ terminalRouter.post("/punch", async (req, res) => {
       occurredAt: new Date()
     }
   });
+
+  const isHoliday = await prisma.holiday.findFirst({
+    where: {
+      date: {
+        gte: new Date(Date.UTC(entry.occurredAt.getUTCFullYear(), entry.occurredAt.getUTCMonth(), entry.occurredAt.getUTCDate(), 0, 0, 0)),
+        lte: new Date(Date.UTC(entry.occurredAt.getUTCFullYear(), entry.occurredAt.getUTCMonth(), entry.occurredAt.getUTCDate(), 23, 59, 59, 999))
+      }
+    },
+    select: { id: true }
+  });
+  if (isHoliday || isWeekendUtc(entry.occurredAt)) {
+    const dayStart = new Date(Date.UTC(entry.occurredAt.getUTCFullYear(), entry.occurredAt.getUTCMonth(), entry.occurredAt.getUTCDate(), 0, 0, 0));
+    await prisma.specialWorkApproval.upsert({
+      where: { userId_date: { userId: user.id, date: dayStart } },
+      create: { userId: user.id, date: dayStart, status: ApprovalStatus.SUBMITTED, note: parsed.data.reasonText ?? "RFID Buchung" },
+      update: { status: ApprovalStatus.SUBMITTED, note: parsed.data.reasonText ?? "RFID Buchung", decidedAt: null, decidedById: null }
+    });
+  }
 
   await prisma.rfidTerminal.update({
     where: { id: terminal.id },
