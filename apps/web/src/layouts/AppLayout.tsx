@@ -36,6 +36,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             {(session?.user.role === "ADMIN" || session?.user.role === "SUPERVISOR") && (
               <Link to="/app/month"><button>Monatsansicht</button></Link>
             )}
+            {session?.user.role === "EMPLOYEE" && (
+              <Link to="/app/my-requests"><button>Meine Antraege</button></Link>
+            )}
+            {(session?.user.role === "ADMIN" || session?.user.role === "SUPERVISOR") && (
+              <Link to="/app/requests"><button>Antraege</button></Link>
+            )}
             {(session?.user.role === "ADMIN" || session?.user.role === "SUPERVISOR") && (
               <Link to="/app/team"><button>Mitarbeiter</button></Link>
             )}

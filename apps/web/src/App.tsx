@@ -8,6 +8,8 @@ import { AdminHome } from "./pages/admin/AdminHome";
 import { MonthEditorPage } from "./pages/month/MonthEditorPage";
 import { HolidaysPage } from "./pages/holidays/HolidaysPage";
 import { SupervisorEmployeesPage } from "./pages/supervisor/SupervisorEmployeesPage";
+import { RequestsPage } from "./pages/requests/RequestsPage";
+import { MyRequestsPage } from "./pages/requests/MyRequestsPage";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const session = getSession();
@@ -87,6 +89,26 @@ export default function App() {
               <SupervisorEmployeesPage />
             </AppLayout>
           </SupervisorOrAdminRoute>
+        }
+      />
+      <Route
+        path="/app/requests"
+        element={
+          <SupervisorOrAdminRoute>
+            <AppLayout>
+              <RequestsPage />
+            </AppLayout>
+          </SupervisorOrAdminRoute>
+        }
+      />
+      <Route
+        path="/app/my-requests"
+        element={
+          <PrivateRoute>
+            <AppLayout>
+              <MyRequestsPage />
+            </AppLayout>
+          </PrivateRoute>
         }
       />
       <Route path="*" element={<Navigate to="/app" replace />} />

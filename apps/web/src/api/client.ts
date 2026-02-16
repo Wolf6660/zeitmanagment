@@ -106,9 +106,26 @@ export const api = {
     request("/api/time/day-override", { method: "POST", body: JSON.stringify(payload) }),
 
   myLeaves: () =>
-    request<Array<{ id: string; status: string; kind: string; startDate: string; endDate: string; note?: string; requestedAt: string }>>(
+    request<Array<{ id: string; status: string; kind: string; startDate: string; endDate: string; note?: string; requestedAt: string; decisionNote?: string | null; decidedAt?: string | null; decidedBy?: { id: string; name: string; loginName: string } | null }>>(
       "/api/leave/my"
     ),
+
+  allLeaves: () =>
+    request<
+      Array<{
+        id: string;
+        status: string;
+        kind: string;
+        startDate: string;
+        endDate: string;
+        note?: string;
+        requestedAt: string;
+        decisionNote?: string | null;
+        decidedAt?: string | null;
+        user: { id: string; name: string; loginName: string };
+        decidedBy?: { id: string; name: string; loginName: string } | null;
+      }>
+    >("/api/leave/all"),
 
   createLeave: (payload: { kind: "VACATION" | "OVERTIME"; startDate: string; endDate: string; note: string }) =>
     request<{ warningOverdrawn: boolean; availableVacationDays: number; availableOvertimeHours: number }>("/api/leave", {

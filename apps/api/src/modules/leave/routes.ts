@@ -185,9 +185,23 @@ leaveRouter.get("/my", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMIN])
 
   const result = await prisma.leaveRequest.findMany({
     where: { userId: req.auth.userId },
+    include: {
+      decidedBy: { select: { id: true, name: true, loginName: true } }
+    },
     orderBy: { requestedAt: "desc" }
   });
 
+  res.json(result);
+});
+
+leaveRouter.get("/all", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (_req, res) => {
+  const result = await prisma.leaveRequest.findMany({
+    include: {
+      user: { select: { id: true, name: true, loginName: true } },
+      decidedBy: { select: { id: true, name: true, loginName: true } }
+    },
+    orderBy: { requestedAt: "desc" }
+  });
   res.json(result);
 });
 
