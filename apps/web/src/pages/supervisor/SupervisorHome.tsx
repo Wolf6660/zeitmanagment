@@ -50,7 +50,7 @@ export function SupervisorHome() {
             ))}
             {employees.length === 0 && (
               <tr><td colSpan={4}>Keine Mitarbeiter.</td></tr>
-            ))}
+            )}
           </tbody>
         </table>
       </div>
