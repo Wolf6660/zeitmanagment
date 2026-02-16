@@ -37,7 +37,7 @@ export function EmployeeHome() {
   const [monthView, setMonthView] = useState<{
     monthPlanned: number;
     monthWorked: number;
-    days: Array<{ date: string; plannedHours: number; workedHours: number; isHoliday: boolean; isWeekend: boolean; hasManualCorrection: boolean; entries: Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; time: string }> }>;
+    days: Array<{ date: string; plannedHours: number; workedHours: number; isHoliday: boolean; isWeekend: boolean; hasManualCorrection: boolean; entries: Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; time: string; source: string }> }>;
   } | null>(null);
 
   async function reloadData() {
