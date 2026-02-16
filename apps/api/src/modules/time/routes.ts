@@ -12,7 +12,9 @@ timeRouter.use(requireAuth);
 
 function zodFirstMessage(result: z.SafeParseError<unknown>): string {
   const issue = result.error.issues[0];
-  return issue?.message || "Ungueltige Eingaben.";
+  const msg = issue?.message || "Ungueltige Eingaben.";
+  if (msg.startsWith("Invalid")) return "Ungueltige Eingaben.";
+  return msg;
 }
 
 function parseWorkingDaySet(value?: string | null): Set<number> {
@@ -178,9 +180,19 @@ timeRouter.post("/break-credit", requireRole([Role.SUPERVISOR, Role.ADMIN]), asy
 });
 
 const overtimeAdjustmentSchema = z.object({
-  userId: z.string().min(1),
-  date: z.coerce.date(),
-  hours: z.coerce.number().min(-500).max(500),
+  userId: z.string().trim().min(1, "Mitarbeiter ist Pflicht."),
+  date: z
+    .string()
+    .trim()
+    .min(1, "Datum ist Pflicht.")
+    .refine((v) => !Number.isNaN(new Date(v).getTime()), "Datum ist ungueltig.")
+    .transform((v) => new Date(v)),
+  hours: z
+    .preprocess((v) => {
+      if (typeof v === "number") return v;
+      if (typeof v === "string") return Number(v.replace(",", "."));
+      return v;
+    }, z.number().finite("Stunden sind ungueltig.").min(-500, "Stunden muessen >= -500 sein.").max(500, "Stunden muessen <= 500 sein.")),
   note: z.string().trim().min(3, "Notiz ist Pflicht.")
 });
 
@@ -227,7 +239,14 @@ const dayOverrideSchema = z.object({
   userId: z.string().min(1),
   date: z.string().min(10),
   note: z.string().min(1),
-  events: z.array(z.object({ type: z.nativeEnum(TimeEntryType), time: z.string().regex(/^([01]\\d|2[0-3]):([0-5]\\d)$/) })).min(1)
+  events: z
+    .array(
+      z.object({
+        type: z.nativeEnum(TimeEntryType),
+        time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)(:[0-5]\d)?$/, "Zeit ist ungueltig (HH:MM).")
+      })
+    )
+    .min(1)
 });
 
 timeRouter.post("/day-override", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
@@ -245,7 +264,8 @@ timeRouter.post("/day-override", requireRole([Role.SUPERVISOR, Role.ADMIN]), asy
   await prisma.timeEntry.deleteMany({ where: { userId: parsed.data.userId, occurredAt: { gte: dayStart, lte: dayEnd } } });
   const created = [];
   for (const e of parsed.data.events) {
-    const occurredAt = new Date(`${parsed.data.date}T${e.time}:00`);
+    const hhmm = e.time.slice(0, 5);
+    const occurredAt = new Date(`${parsed.data.date}T${hhmm}:00`);
     const row = await prisma.timeEntry.create({
       data: {
         userId: parsed.data.userId,
@@ -274,7 +294,14 @@ timeRouter.post("/day-override", requireRole([Role.SUPERVISOR, Role.ADMIN]), asy
 const selfDayOverrideSchema = z.object({
   date: z.string().min(10),
   note: z.string().min(1),
-  events: z.array(z.object({ type: z.nativeEnum(TimeEntryType), time: z.string().regex(/^([01]\\d|2[0-3]):([0-5]\\d)$/) })).min(1)
+  events: z
+    .array(
+      z.object({
+        type: z.nativeEnum(TimeEntryType),
+        time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)(:[0-5]\d)?$/, "Zeit ist ungueltig (HH:MM).")
+      })
+    )
+    .min(1)
 });
 
 timeRouter.post("/day-override-self", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
@@ -305,7 +332,8 @@ timeRouter.post("/day-override-self", requireRole([Role.EMPLOYEE, Role.SUPERVISO
   const dayEnd = new Date(`${parsed.data.date}T23:59:59`);
   await prisma.timeEntry.deleteMany({ where: { userId: req.auth.userId, occurredAt: { gte: dayStart, lte: dayEnd } } });
   for (const e of parsed.data.events) {
-    const occurredAt = new Date(`${parsed.data.date}T${e.time}:00`);
+    const hhmm = e.time.slice(0, 5);
+    const occurredAt = new Date(`${parsed.data.date}T${hhmm}:00`);
     await prisma.timeEntry.create({
       data: {
         userId: req.auth.userId,

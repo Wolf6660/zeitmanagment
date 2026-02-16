@@ -137,11 +137,11 @@ export function EmployeeHome() {
                 </label>
                 <label>
                   Kommen
-                  <input type="time" value={manualIn} onChange={(e) => setManualIn(e.target.value)} />
+                  <input type="time" step={60} value={manualIn} onChange={(e) => setManualIn(e.target.value.slice(0, 5))} />
                 </label>
                 <label>
                   Gehen
-                  <input type="time" value={manualOut} onChange={(e) => setManualOut(e.target.value)} />
+                  <input type="time" step={60} value={manualOut} onChange={(e) => setManualOut(e.target.value.slice(0, 5))} />
                 </label>
                 <textarea placeholder="Notiz (Pflichtfeld)" value={manualNote} onChange={(e) => setManualNote(e.target.value)} />
                 <button
@@ -156,8 +156,8 @@ export function EmployeeHome() {
                         return;
                       }
                       const events: Array<{ type: "CLOCK_IN" | "CLOCK_OUT"; time: string }> = [];
-                      if (manualIn) events.push({ type: "CLOCK_IN", time: manualIn });
-                      if (manualOut) events.push({ type: "CLOCK_OUT", time: manualOut });
+                      if (manualIn) events.push({ type: "CLOCK_IN", time: manualIn.slice(0, 5) });
+                      if (manualOut) events.push({ type: "CLOCK_OUT", time: manualOut.slice(0, 5) });
                       if (events.length === 0) {
                         setMessage("Mindestens eine Zeit ist erforderlich.");
                         return;

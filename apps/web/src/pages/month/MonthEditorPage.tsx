@@ -96,10 +96,11 @@ export function MonthEditorPage() {
                                 </select>
                                 <input
                                   type="time"
+                                  step={60}
                                   value={evt.time}
                                   onChange={(e) => {
                                     const next = [...overrideEvents];
-                                    next[idx] = { ...next[idx], time: e.target.value };
+                                    next[idx] = { ...next[idx], time: e.target.value.slice(0, 5) };
                                     setOverrideEvents(next);
                                   }}
                                 />
@@ -127,7 +128,7 @@ export function MonthEditorPage() {
                                 setSaving(true);
                                 if (!overrideNote.trim()) { setMsg("Notiz ist Pflicht."); return; }
                                 const events = overrideEvents
-                                  .map((x) => ({ type: x.type, time: x.time.trim() }))
+                                  .map((x) => ({ type: x.type, time: x.time.trim().slice(0, 5) }))
                                   .filter((x) => x.time.length > 0);
                                 if (events.length === 0) { setMsg("Mindestens ein Ereignis erforderlich."); return; }
                                 if (events.some((x) => !/^([01]\d|2[0-3]):([0-5]\d)$/.test(x.time))) {
