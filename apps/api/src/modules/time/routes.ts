@@ -59,7 +59,7 @@ timeRouter.post("/clock", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMI
 const selfCorrectionSchema = z.object({
   type: z.nativeEnum(TimeEntryType),
   occurredAt: z.coerce.date(),
-  correctionComment: z.string().min(3)
+  correctionComment: z.string().min(1)
 });
 
 timeRouter.post("/self-correction", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
@@ -217,7 +217,7 @@ timeRouter.get("/overtime-adjustment/:userId", requireRole([Role.SUPERVISOR, Rol
 const dayOverrideSchema = z.object({
   userId: z.string().min(1),
   date: z.string().min(10),
-  note: z.string().min(3),
+  note: z.string().min(1),
   events: z.array(z.object({ type: z.nativeEnum(TimeEntryType), time: z.string().regex(/^([01]\\d|2[0-3]):([0-5]\\d)$/) })).min(1)
 });
 
@@ -260,14 +260,14 @@ timeRouter.post("/day-override", requireRole([Role.SUPERVISOR, Role.ADMIN]), asy
 
 const selfDayOverrideSchema = z.object({
   date: z.string().min(10),
-  note: z.string().min(3),
+  note: z.string().min(1),
   events: z.array(z.object({ type: z.nativeEnum(TimeEntryType), time: z.string().regex(/^([01]\\d|2[0-3]):([0-5]\\d)$/) })).min(1)
 });
 
 timeRouter.post("/day-override-self", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
   const parsed = selfDayOverrideSchema.safeParse(req.body);
   if (!parsed.success || !req.auth) {
-    res.status(400).json({ message: "Ungueltige Eingaben. Notiz ist Pflicht." });
+    res.status(400).json({ message: "Ungueltige Eingaben beim Nachtrag." });
     return;
   }
   const cfg = await prisma.systemConfig.findUnique({ where: { id: 1 }, select: { selfCorrectionMaxDays: true } });

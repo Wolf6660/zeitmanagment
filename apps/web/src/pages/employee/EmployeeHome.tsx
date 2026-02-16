@@ -62,6 +62,12 @@ export function EmployeeHome() {
       .catch(() => setMaxBackDays(3));
   }, []);
 
+  useEffect(() => {
+    if (manualMode && !manualDate) {
+      setManualDate(new Date().toISOString().slice(0, 10));
+    }
+  }, [manualMode, manualDate]);
+
   const filteredLeaves = useMemo(() => leaveList.filter((l) => l.status === filter), [leaveList, filter]);
   const openClockIn = todayEntries.length > 0 && todayEntries[todayEntries.length - 1].type === "CLOCK_IN";
 
@@ -117,6 +123,7 @@ export function EmployeeHome() {
           {manualMode && (
             <div className="card" style={{ padding: 10 }}>
               <strong>Zeiten nachtragen</strong>
+              <div style={{ color: "var(--muted)" }}>Rueckwirkend bis {maxBackDays} Tage, nie in die Zukunft.</div>
               <div className="grid" style={{ marginTop: 8 }}>
                 <label>
                   Datum

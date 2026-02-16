@@ -248,7 +248,7 @@ export function AdminHome() {
                   applyTheme(updated as PublicConfig);
                 }}
               />
-              <div style={{ marginTop: 4, color: "var(--muted)" }}>Aktuell: {(config[field.key] as string) || "#000000"}</div>
+              <div style={{ marginTop: 6, width: 44, height: 20, borderRadius: 6, border: "1px solid var(--border)", background: (config[field.key] as string) || "#000000" }} />
             </label>
           ))}
         </div>

@@ -5,6 +5,7 @@ import { AppLayout } from "./layouts/AppLayout";
 import { LoginPage } from "./pages/auth/LoginPage";
 import { HomeRouter } from "./pages/HomeRouter";
 import { AdminHome } from "./pages/admin/AdminHome";
+import { MonthEditorPage } from "./pages/month/MonthEditorPage";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const session = getSession();
@@ -43,6 +44,16 @@ export default function App() {
           <AdminRoute>
             <AppLayout>
               <AdminHome />
+            </AppLayout>
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/app/month"
+        element={
+          <AdminRoute>
+            <AppLayout>
+              <MonthEditorPage />
             </AppLayout>
           </AdminRoute>
         }

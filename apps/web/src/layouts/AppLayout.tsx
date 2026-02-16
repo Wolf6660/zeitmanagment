@@ -34,6 +34,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <div className="nav" style={{ margin: 0 }}>
             <Link to="/app"><button>Startseite</button></Link>
             {(session?.user.role === "ADMIN" || session?.user.role === "SUPERVISOR") && (
+              <Link to="/app/month"><button>Monatsansicht</button></Link>
+            )}
+            {(session?.user.role === "ADMIN" || session?.user.role === "SUPERVISOR") && (
               <Link to="/app/admin"><button>Admin</button></Link>
             )}
           </div>

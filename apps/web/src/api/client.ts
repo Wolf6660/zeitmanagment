@@ -179,6 +179,8 @@ export const api = {
         note?: string;
         userId: string;
         availableVacationDays: number;
+        requestedWorkingDays: number;
+        remainingVacationAfterRequest: number;
         availableOvertimeHours: number;
         user: { name: string };
       }>

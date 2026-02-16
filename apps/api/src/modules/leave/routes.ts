@@ -334,11 +334,28 @@ leaveRouter.get("/pending", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (_
     orderBy: { requestedAt: "asc" }
   });
 
-  const enriched = await Promise.all(result.map(async (request) => ({
-    ...request,
-    availableVacationDays: await getVacationAvailabilityDays(request.userId, request.startDate, request.endDate),
-    availableOvertimeHours: await getCurrentMonthOvertimeHours(request.userId)
-  })));
+  const enriched = await Promise.all(result.map(async (request) => {
+    const availableVacationDays = await getVacationAvailabilityDays(request.userId, request.startDate, request.endDate);
+    const holidays = await prisma.holiday.findMany({
+      where: { date: { gte: request.startDate, lte: request.endDate } }
+    });
+    const holidaySet = new Set(holidays.map((h) => h.date.toISOString().slice(0, 10)));
+    const requestedWorkingDays = listDays(request.startDate, request.endDate).filter((d) => {
+      const key = d.toISOString().slice(0, 10);
+      return !isWeekend(d) && !holidaySet.has(key);
+    }).length;
+    const remainingVacationAfterRequest = request.kind === LeaveKind.VACATION
+      ? Number((availableVacationDays - requestedWorkingDays).toFixed(2))
+      : Number(availableVacationDays.toFixed(2));
+
+    return {
+      ...request,
+      availableVacationDays,
+      requestedWorkingDays,
+      remainingVacationAfterRequest,
+      availableOvertimeHours: await getCurrentMonthOvertimeHours(request.userId)
+    };
+  }));
 
   res.json(enriched);
 });
