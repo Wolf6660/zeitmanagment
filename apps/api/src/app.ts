@@ -12,8 +12,9 @@ import { env } from "./config/env.js";
 
 export function createApp() {
   const app = express();
+  const allowAnyOrigin = env.WEB_ORIGIN === "*";
 
-  app.use(cors({ origin: env.WEB_ORIGIN }));
+  app.use(cors({ origin: allowAnyOrigin ? true : env.WEB_ORIGIN }));
   app.use(express.json());
   app.use(morgan("dev"));
 

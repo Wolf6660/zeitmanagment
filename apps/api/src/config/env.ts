@@ -16,7 +16,7 @@ const schema = z.object({
   TERMINAL_PORT: z.coerce.number().default(4010),
   DATABASE_URL: z.string().min(1),
   JWT_SECRET: z.string().min(16),
-  WEB_ORIGIN: z.string().default("http://localhost:3000"),
+  WEB_ORIGIN: z.preprocess(emptyToUndefined, z.string()).default("*"),
   ADMIN_LOGIN_NAME: z.preprocess(emptyToUndefined, z.string().min(3)).default("admin"),
   ADMIN_PASSWORD: z.preprocess(emptyToUndefined, z.string().min(8)).default("Admin1234!"),
   ADMIN_NAME: z.preprocess(emptyToUndefined, z.string().min(1)).default("System Admin"),
