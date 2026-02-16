@@ -1,3 +1,5 @@
+import type { PublicConfig } from "../styles/theme";
+
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined) || "";
 
 export type SessionUser = {
@@ -56,6 +58,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
+  publicConfig: () => request<PublicConfig>("/api/public/config"),
+
   login: (payload: { loginName: string; password: string }) =>
     request<Session>("/api/auth/login", { method: "POST", body: JSON.stringify(payload) }),
 
@@ -64,19 +68,39 @@ export const api = {
   clock: (payload: { type: "CLOCK_IN" | "CLOCK_OUT"; reasonCode?: string; reasonText?: string }) =>
     request("/api/time/clock", { method: "POST", body: JSON.stringify(payload) }),
 
-  myLeaves: () => request<Array<{ id: string; status: string; kind: string; startDate: string; endDate: string; note?: string; requestedAt: string }>>("/api/leave/my"),
+  myLeaves: () =>
+    request<Array<{ id: string; status: string; kind: string; startDate: string; endDate: string; note?: string; requestedAt: string }>>(
+      "/api/leave/my"
+    ),
 
   createLeave: (payload: { kind: "VACATION" | "OVERTIME"; startDate: string; endDate: string; note?: string }) =>
     request<{ warningOverdrawn: boolean }>("/api/leave", { method: "POST", body: JSON.stringify(payload) }),
 
   summary: (userId: string) =>
-    request<{ month: string; plannedHours: number; workedHours: number; overtimeHours: number; longShiftAlert: boolean }>(`/api/time/summary/${userId}`),
+    request<{ month: string; plannedHours: number; workedHours: number; overtimeHours: number; longShiftAlert: boolean }>(
+      `/api/time/summary/${userId}`
+    ),
 
   employees: () =>
-    request<Array<{ id: string; name: string; role: string; isActive: boolean; annualVacationDays: number; carryOverVacationDays: number }>>("/api/employees"),
+    request<Array<{ id: string; name: string; email: string; role: string; isActive: boolean; annualVacationDays: number; carryOverVacationDays: number; loginName: string }>>(
+      "/api/employees"
+    ),
+
+  createEmployee: (payload: {
+    name: string;
+    email: string;
+    loginName: string;
+    password: string;
+    role: "EMPLOYEE" | "SUPERVISOR" | "ADMIN";
+    annualVacationDays: number;
+    carryOverVacationDays: number;
+    mailNotificationsEnabled: boolean;
+  }) => request("/api/employees", { method: "POST", body: JSON.stringify(payload) }),
 
   pendingLeaves: () =>
-    request<Array<{ id: string; kind: string; startDate: string; endDate: string; note?: string; user: { name: string } }>>("/api/leave/pending"),
+    request<Array<{ id: string; kind: string; startDate: string; endDate: string; note?: string; user: { name: string } }>>(
+      "/api/leave/pending"
+    ),
 
   decideLeave: (payload: { leaveId: string; decision: "APPROVED" | "REJECTED"; decisionNote?: string }) =>
     request("/api/leave/decision", { method: "POST", body: JSON.stringify(payload) }),
@@ -85,6 +109,7 @@ export const api = {
     request<{
       systemName: string;
       companyName: string;
+      companyLogoUrl?: string | null;
       autoBreakMinutes: number;
       autoBreakAfterHours: number;
       colorApproved: string;
@@ -94,9 +119,6 @@ export const api = {
       colorSickLeave: string;
       colorHolidayOrWeekendWork: string;
       colorVacationWarning: string;
-      webPort: number;
-      apiPort: number;
-      terminalPort: number;
     }>("/api/admin/config"),
 
   updateConfig: (payload: Record<string, unknown>) =>
@@ -108,10 +130,10 @@ export const api = {
     ),
 
   createTerminal: (payload: { name: string; location?: string }) =>
-    request<{ id: string; name: string; location?: string; isActive: boolean; apiKey: string }>(
-      "/api/admin/terminals",
-      { method: "POST", body: JSON.stringify(payload) }
-    ),
+    request<{ id: string; name: string; location?: string; isActive: boolean; apiKey: string }>("/api/admin/terminals", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
 
   updateTerminal: (id: string, payload: { name?: string; location?: string | null; isActive?: boolean }) =>
     request(`/api/admin/terminals/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),

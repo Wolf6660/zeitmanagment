@@ -2,7 +2,6 @@ import React from "react";
 import { getSession } from "../api/client";
 import { EmployeeHome } from "./employee/EmployeeHome";
 import { SupervisorHome } from "./supervisor/SupervisorHome";
-import { AdminHome } from "./admin/AdminHome";
 
 export function HomeRouter() {
   const session = getSession();
@@ -13,18 +12,8 @@ export function HomeRouter() {
   }
 
   if (session.user.role === "SUPERVISOR") {
-    return (
-      <>
-        <SupervisorHome />
-        <div style={{ marginTop: 12 }}><AdminHome /></div>
-      </>
-    );
+    return <SupervisorHome />;
   }
 
-  return (
-    <>
-      <SupervisorHome />
-      <div style={{ marginTop: 12 }}><AdminHome /></div>
-    </>
-  );
+  return <SupervisorHome />;
 }
