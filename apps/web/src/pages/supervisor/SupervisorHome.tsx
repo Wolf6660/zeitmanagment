@@ -7,7 +7,7 @@ function kindLabel(kind: string): string {
 
 export function SupervisorHome() {
   const [employees, setEmployees] = useState<Array<{ id: string; name: string; loginName?: string; role: string; annualVacationDays: number; carryOverVacationDays: number }>>([]);
-  const [overview, setOverview] = useState<Record<string, { istHours: number; overtimeWithoutCurrentMonth: number }>>({});
+  const [overview, setOverview] = useState<Record<string, { istHours: number; overtimeHours: number }>>({});
   const [pending, setPending] = useState<Array<{ id: string; kind: string; startDate: string; endDate: string; note?: string; userId: string; availableVacationDays: number; requestedWorkingDays: number; remainingVacationAfterRequest: number; availableOvertimeHours: number; user: { name: string } }>>([]);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [editNotes, setEditNotes] = useState<Record<string, string>>({});
@@ -20,7 +20,7 @@ export function SupervisorHome() {
     const [e, p, ov] = await Promise.all([api.employees(), api.pendingLeaves(), api.supervisorOverview()]);
     setEmployees(e);
     setPending(p);
-    setOverview(Object.fromEntries(ov.map((x) => [x.userId, { istHours: x.istHours, overtimeWithoutCurrentMonth: x.overtimeWithoutCurrentMonth }])));
+    setOverview(Object.fromEntries(ov.map((x) => [x.userId, { istHours: x.istHours, overtimeHours: x.overtimeHours }])));
   }
 
   useEffect(() => {
@@ -33,7 +33,7 @@ export function SupervisorHome() {
         <h2>Stundenaufzeichnung Mitarbeiter</h2>
         <table>
           <thead>
-            <tr><th>Name</th><th>Rolle</th><th>Ist-Stunden</th><th>Ueberstunden (ohne laufenden Monat)</th></tr>
+            <tr><th>Name</th><th>Rolle</th><th>Ist-Stunden</th><th>Ueberstunden</th></tr>
           </thead>
           <tbody>
             {employees.map((e) => (
@@ -41,7 +41,7 @@ export function SupervisorHome() {
                 <td>{e.name}</td>
                 <td>{e.role}</td>
                 <td>{(overview[e.id]?.istHours ?? 0).toFixed(2)} h</td>
-                <td>{(overview[e.id]?.overtimeWithoutCurrentMonth ?? 0).toFixed(2)} h</td>
+                <td>{(overview[e.id]?.overtimeHours ?? 0).toFixed(2)} h</td>
               </tr>
             ))}
             {employees.length === 0 && (

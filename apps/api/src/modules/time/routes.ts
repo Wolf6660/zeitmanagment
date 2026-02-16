@@ -650,6 +650,7 @@ timeRouter.get("/supervisor-overview", requireRole([Role.SUPERVISOR, Role.ADMIN]
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59));
   const historyStart = new Date(Date.UTC(2000, 0, 1));
+  const prevMonthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0, 23, 59, 59));
 
   const [users, config, holidaysAll] = await Promise.all([
     prisma.user.findMany({ where: { isActive: true }, select: { id: true, dailyWorkHours: true } }),
@@ -723,8 +724,7 @@ timeRouter.get("/supervisor-overview", requireRole([Role.SUPERVISOR, Role.ADMIN]
       manualByDay.set(k, (manualByDay.get(k) ?? 0) + a.hours);
     }
 
-    let plannedCurrent = 0;
-    let overtimeCurrent = 0;
+    let requiredCurrentMonthHours = 0;
     let overtimeBeforeCurrent = 0;
 
     for (let d = new Date(historyStart); d <= monthEnd; d = new Date(d.getTime() + 86400000)) {
@@ -746,18 +746,17 @@ timeRouter.get("/supervisor-overview", requireRole([Role.SUPERVISOR, Role.ADMIN]
       const absenceHours = isWorkday ? ((leaveDays.has(k) ? dailyHours : 0) + (sickDays.has(k) ? dailyHours : 0)) : 0;
       const dayOvertime = netWorked + absenceHours - planned + (manualByDay.get(k) ?? 0);
       if (d >= monthStart) {
-        plannedCurrent += planned;
-        overtimeCurrent += dayOvertime;
-      } else {
+        requiredCurrentMonthHours += planned;
+      }
+      if (d <= prevMonthEnd) {
         overtimeBeforeCurrent += dayOvertime;
       }
     }
 
     return {
       userId: u.id,
-      istHours: Number((plannedCurrent - overtimeCurrent).toFixed(2)),
-      overtimeWithoutCurrentMonth: Number(overtimeBeforeCurrent.toFixed(2)),
-      currentMonthOvertime: Number(overtimeCurrent.toFixed(2))
+      istHours: Number(requiredCurrentMonthHours.toFixed(2)),
+      overtimeHours: Number(overtimeBeforeCurrent.toFixed(2))
     };
   }));
 

@@ -122,7 +122,7 @@ export const api = {
     ),
 
   supervisorOverview: () =>
-    request<Array<{ userId: string; istHours: number; overtimeWithoutCurrentMonth: number; currentMonthOvertime: number }>>(
+    request<Array<{ userId: string; istHours: number; overtimeHours: number }>>(
       "/api/time/supervisor-overview"
     ),
 
