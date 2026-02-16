@@ -359,3 +359,24 @@ leaveRouter.get("/pending", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (_
 
   res.json(enriched);
 });
+
+leaveRouter.get("/availability/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+  if (!req.auth) {
+    res.status(401).json({ message: "Nicht authentifiziert." });
+    return;
+  }
+  const userId = String(req.params.userId);
+  if (req.auth.role === Role.EMPLOYEE && req.auth.userId !== userId) {
+    res.status(403).json({ message: "Keine Berechtigung." });
+    return;
+  }
+
+  const now = new Date();
+  const availableVacationDays = await getVacationAvailabilityDays(userId, now, now);
+  const availableOvertimeHours = await getCurrentMonthOvertimeHours(userId);
+  res.json({
+    userId,
+    availableVacationDays: Number(availableVacationDays.toFixed(2)),
+    availableOvertimeHours: Number(availableOvertimeHours.toFixed(2))
+  });
+});

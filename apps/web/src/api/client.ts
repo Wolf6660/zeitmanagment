@@ -186,6 +186,9 @@ export const api = {
       }>
     >("/api/leave/pending"),
 
+  leaveAvailability: (userId: string) =>
+    request<{ userId: string; availableVacationDays: number; availableOvertimeHours: number }>(`/api/leave/availability/${userId}`),
+
   decideLeave: (payload: { leaveId: string; decision: "APPROVED" | "REJECTED"; decisionNote: string }) =>
     request("/api/leave/decision", { method: "POST", body: JSON.stringify(payload) }),
 

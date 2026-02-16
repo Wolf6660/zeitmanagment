@@ -157,12 +157,24 @@ employeesRouter.patch("/:id", requireRole([Role.SUPERVISOR, Role.ADMIN]), async 
     return;
   }
 
-  if (req.auth?.role === Role.SUPERVISOR && parsed.data.role && parsed.data.role !== Role.EMPLOYEE) {
-    res.status(403).json({ message: "Vorgesetzte duerfen keine Admins/Vorgesetzten setzen." });
+  const userId = String(req.params.id);
+  const current = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, role: true } });
+  if (!current) {
+    res.status(404).json({ message: "Mitarbeiter nicht gefunden." });
     return;
   }
 
-  const userId = String(req.params.id);
+  // Vorgesetzte duerfen keine Rolle auf ADMIN/SUPERVISOR aendern,
+  // aber andere Felder auch bei bestehenden Vorgesetzten/Admins bearbeiten.
+  if (
+    req.auth?.role === Role.SUPERVISOR
+    && parsed.data.role
+    && parsed.data.role !== current.role
+    && parsed.data.role !== Role.EMPLOYEE
+  ) {
+    res.status(403).json({ message: "Vorgesetzte duerfen keine Admins/Vorgesetzten setzen." });
+    return;
+  }
 
   try {
     const updated = await prisma.user.update({

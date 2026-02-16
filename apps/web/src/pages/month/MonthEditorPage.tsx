@@ -10,8 +10,7 @@ export function MonthEditorPage() {
   const [monthView, setMonthView] = useState<any>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [overrideNote, setOverrideNote] = useState("");
-  const [overrideIn, setOverrideIn] = useState("");
-  const [overrideOut, setOverrideOut] = useState("");
+  const [overrideEvents, setOverrideEvents] = useState<Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; time: string }>>([]);
   const [msg, setMsg] = useState("");
 
   async function loadEmployees() {
@@ -24,6 +23,7 @@ export function MonthEditorPage() {
     if (!monthUserId) return;
     const mv = await api.monthView(monthUserId, monthYear, monthNum);
     setMonthView(mv);
+    return mv;
   }
 
   useEffect(() => {
@@ -62,11 +62,15 @@ export function MonthEditorPage() {
                     <td>
                       <button className="secondary" onClick={() => {
                         setSelectedDay(expanded ? null : d.date);
-                        const inEntry = d.entries.find((e: any) => e.type === "CLOCK_IN");
-                        const outEntry = d.entries.find((e: any) => e.type === "CLOCK_OUT");
-                        setOverrideIn(inEntry?.time || "");
-                        setOverrideOut(outEntry?.time || "");
+                        setOverrideEvents(
+                          (d.entries || []).map((e: any, idx: number) => ({
+                            id: e.id || `${d.date}-${idx}`,
+                            type: e.type,
+                            time: e.time
+                          }))
+                        );
                         setOverrideNote("");
+                        setMsg("");
                       }}>Bearbeiten</button>
                     </td>
                   </tr>
@@ -75,22 +79,74 @@ export function MonthEditorPage() {
                       <td colSpan={5}>
                         <div className="card" style={{ padding: 10 }}>
                           <strong>Tag bearbeiten: {d.date}</strong>
-                          <div className="grid grid-2" style={{ marginTop: 8 }}>
-                            <label>Kommen<input type="time" value={overrideIn} onChange={(e) => setOverrideIn(e.target.value)} /></label>
-                            <label>Gehen<input type="time" value={overrideOut} onChange={(e) => setOverrideOut(e.target.value)} /></label>
+                          <div className="grid" style={{ marginTop: 8 }}>
+                            {overrideEvents.map((evt, idx) => (
+                              <div key={evt.id} className="row">
+                                <select
+                                  value={evt.type}
+                                  onChange={(e) => {
+                                    const next = [...overrideEvents];
+                                    next[idx] = { ...next[idx], type: e.target.value as "CLOCK_IN" | "CLOCK_OUT" };
+                                    setOverrideEvents(next);
+                                  }}
+                                >
+                                  <option value="CLOCK_IN">Kommen</option>
+                                  <option value="CLOCK_OUT">Gehen</option>
+                                </select>
+                                <input
+                                  type="time"
+                                  value={evt.time}
+                                  onChange={(e) => {
+                                    const next = [...overrideEvents];
+                                    next[idx] = { ...next[idx], time: e.target.value };
+                                    setOverrideEvents(next);
+                                  }}
+                                />
+                                <button
+                                  className="secondary"
+                                  type="button"
+                                  onClick={() => setOverrideEvents((prev) => prev.filter((x) => x.id !== evt.id))}
+                                >
+                                  Entfernen
+                                </button>
+                              </div>
+                            ))}
+                            <button
+                              className="secondary"
+                              type="button"
+                              onClick={() => setOverrideEvents((prev) => [...prev, { id: `new-${Date.now()}`, type: "CLOCK_IN", time: "" }])}
+                            >
+                              Ereignis hinzufuegen
+                            </button>
                           </div>
                           <textarea style={{ marginTop: 8 }} placeholder="Notiz (Pflichtfeld)" value={overrideNote} onChange={(e) => setOverrideNote(e.target.value)} />
                           <div className="row" style={{ marginTop: 8 }}>
                             <button onClick={async () => {
                               try {
                                 if (!overrideNote.trim()) { setMsg("Notiz ist Pflicht."); return; }
-                                const events: Array<{ type: "CLOCK_IN" | "CLOCK_OUT"; time: string }> = [];
-                                if (overrideIn) events.push({ type: "CLOCK_IN", time: overrideIn });
-                                if (overrideOut) events.push({ type: "CLOCK_OUT", time: overrideOut });
+                                const events = overrideEvents
+                                  .map((x) => ({ type: x.type, time: x.time.trim() }))
+                                  .filter((x) => x.time.length > 0);
                                 if (events.length === 0) { setMsg("Mindestens ein Ereignis erforderlich."); return; }
+                                if (events.some((x) => !/^([01]\d|2[0-3]):([0-5]\d)$/.test(x.time))) {
+                                  setMsg("Ungueltige Uhrzeit.");
+                                  return;
+                                }
+                                events.sort((a, b) => a.time.localeCompare(b.time));
                                 await api.dayOverrideBySupervisor({ userId: monthUserId, date: d.date, note: overrideNote.trim(), events });
+                                const mv = await loadMonth();
+                                const updatedDay = mv?.days?.find((x: any) => x.date === d.date);
+                                if (updatedDay) {
+                                  setOverrideEvents(
+                                    (updatedDay.entries || []).map((x: any, idx: number) => ({
+                                      id: x.id || `${updatedDay.date}-${idx}`,
+                                      type: x.type,
+                                      time: x.time
+                                    }))
+                                  );
+                                }
                                 setMsg("Tag aktualisiert.");
-                                await loadMonth();
+                                setSelectedDay(d.date);
                               } catch (e) { setMsg((e as Error).message); }
                             }}>Tag speichern</button>
                             <button className="secondary" onClick={() => setSelectedDay(null)}>Abbrechen</button>

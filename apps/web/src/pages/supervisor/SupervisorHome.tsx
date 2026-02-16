@@ -7,6 +7,7 @@ function kindLabel(kind: string): string {
 
 export function SupervisorHome() {
   const [employees, setEmployees] = useState<Array<{ id: string; name: string; loginName?: string; role: string; annualVacationDays: number; carryOverVacationDays: number }>>([]);
+  const [availability, setAvailability] = useState<Record<string, { availableVacationDays: number; availableOvertimeHours: number }>>({});
   const [pending, setPending] = useState<Array<{ id: string; kind: string; startDate: string; endDate: string; note?: string; userId: string; availableVacationDays: number; requestedWorkingDays: number; remainingVacationAfterRequest: number; availableOvertimeHours: number; user: { name: string } }>>([]);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [editNotes, setEditNotes] = useState<Record<string, string>>({});
@@ -19,6 +20,11 @@ export function SupervisorHome() {
     const [e, p] = await Promise.all([api.employees(), api.pendingLeaves()]);
     setEmployees(e);
     setPending(p);
+    const rows = await Promise.all(e.map(async (emp) => {
+      const a = await api.leaveAvailability(emp.id);
+      return [emp.id, { availableVacationDays: a.availableVacationDays, availableOvertimeHours: a.availableOvertimeHours }] as const;
+    }));
+    setAvailability(Object.fromEntries(rows));
   }
 
   useEffect(() => {
@@ -31,11 +37,19 @@ export function SupervisorHome() {
         <h2>Stundenaufzeichnung Mitarbeiter</h2>
         <table>
           <thead>
-            <tr><th>Name</th><th>Rolle</th><th>Jahresurlaub</th><th>Resturlaub Vorjahr</th></tr>
+            <tr><th>Name</th><th>Rolle</th><th>Verfuegbarer Urlaub</th><th>Ueberstunden</th></tr>
           </thead>
           <tbody>
             {employees.map((e) => (
-              <tr key={e.id}><td>{e.name}</td><td>{e.role}</td><td>{e.annualVacationDays}</td><td>{e.carryOverVacationDays}</td></tr>
+              <tr key={e.id}>
+                <td>{e.name}</td>
+                <td>{e.role}</td>
+                <td>{(availability[e.id]?.availableVacationDays ?? 0).toFixed(2)} Tage</td>
+                <td>{(availability[e.id]?.availableOvertimeHours ?? 0).toFixed(2)} h</td>
+              </tr>
+            ))}
+            {employees.length === 0 && (
+              <tr><td colSpan={4}>Keine Mitarbeiter.</td></tr>
             ))}
           </tbody>
         </table>

@@ -182,7 +182,7 @@ const overtimeAdjustmentSchema = z.object({
 timeRouter.post("/overtime-adjustment", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
   const parsed = overtimeAdjustmentSchema.safeParse(req.body);
   if (!parsed.success || !req.auth) {
-    res.status(400).json({ message: "Ungueltige Eingaben. Notiz ist Pflicht." });
+    res.status(400).json({ message: "Ungueltige Eingaben." });
     return;
   }
 

@@ -76,6 +76,7 @@ export function AdminHome() {
   const [otUserId, setOtUserId] = useState("");
   const [otDate, setOtDate] = useState("");
   const [otHours, setOtHours] = useState(0);
+  const [otCurrentHours, setOtCurrentHours] = useState(0);
   const [otNote, setOtNote] = useState("");
   const [otHistory, setOtHistory] = useState<Array<{ id: string; date: string; hours: number; reason: string; createdAt: string }>>([]);
 
@@ -99,6 +100,7 @@ export function AdminHome() {
     setTerminals(trms);
     setEmployees(emps as Employee[]);
     setOtUserId((prev) => prev || (emps[0]?.id ?? ""));
+    setOtDate((prev) => prev || new Date().toISOString().slice(0, 10));
     applyTheme(cfg as PublicConfig);
   }
 
@@ -114,7 +116,12 @@ export function AdminHome() {
 
   useEffect(() => {
     if (section === "overtime" && otUserId) {
-      api.overtimeAdjustments(otUserId).then(setOtHistory).catch((e) => setMsg((e as Error).message));
+      Promise.all([api.overtimeAdjustments(otUserId), api.summary(otUserId)])
+        .then(([history, summary]) => {
+          setOtHistory(history);
+          setOtCurrentHours(summary.overtimeHours);
+        })
+        .catch((e) => setMsg((e as Error).message));
     }
   }, [section, otUserId]);
 
@@ -235,10 +242,21 @@ export function AdminHome() {
       )}
 
       {section === "colors" && (
-        <div className="grid grid-2">
+        <div className="grid">
           {COLOR_FIELDS.map((field) => (
-            <label key={field.key}>
-              {field.label}
+            <div key={field.key} className="row" style={{ justifyContent: "space-between" }}>
+              <span
+                style={{
+                  background: (config[field.key] as string) || "#000000",
+                  color: "#111827",
+                  borderRadius: 8,
+                  padding: "8px 10px",
+                  minWidth: 280,
+                  fontWeight: 600
+                }}
+              >
+                {field.label}
+              </span>
               <input
                 type="color"
                 value={(config[field.key] as string) || "#000000"}
@@ -247,9 +265,9 @@ export function AdminHome() {
                   setConfig(updated);
                   applyTheme(updated as PublicConfig);
                 }}
+                style={{ width: 72, height: 42, padding: 4 }}
               />
-              <div style={{ marginTop: 6, width: 44, height: 20, borderRadius: 6, border: "1px solid var(--border)", background: (config[field.key] as string) || "#000000" }} />
-            </label>
+            </div>
           ))}
         </div>
       )}
@@ -271,6 +289,10 @@ export function AdminHome() {
               <input type="date" value={otDate} onChange={(e) => setOtDate(e.target.value)} />
             </label>
             <label>
+              Aktuelle Ueberstunden (DB)
+              <input type="number" value={otCurrentHours} readOnly />
+            </label>
+            <label>
               Stunden (+/-)
               <input type="number" step="0.25" value={otHours} onChange={(e) => setOtHours(Number(e.target.value))} />
             </label>
@@ -283,6 +305,18 @@ export function AdminHome() {
             style={{ marginTop: 8 }}
             onClick={async () => {
               try {
+                if (!otUserId) {
+                  setMsg("Bitte Mitarbeiter auswaehlen.");
+                  return;
+                }
+                if (!otDate) {
+                  setMsg("Datum ist Pflicht.");
+                  return;
+                }
+                if (!Number.isFinite(otHours)) {
+                  setMsg("Stunden sind ungueltig.");
+                  return;
+                }
                 if (!otNote.trim()) {
                   setMsg("Notiz ist Pflicht.");
                   return;
@@ -291,7 +325,9 @@ export function AdminHome() {
                 setMsg("Ueberstundenanpassung gespeichert.");
                 setOtHours(0);
                 setOtNote("");
-                setOtHistory(await api.overtimeAdjustments(otUserId));
+                const [history, summary] = await Promise.all([api.overtimeAdjustments(otUserId), api.summary(otUserId)]);
+                setOtHistory(history);
+                setOtCurrentHours(summary.overtimeHours);
               } catch (e) {
                 setMsg((e as Error).message);
               }
@@ -449,6 +485,7 @@ export function AdminHome() {
                 <th>Resturlaub</th>
                 <th>Soll/Tag</th>
                 <th>RFID</th>
+                <th>Mailversand</th>
                 <th>Weblogin</th>
                 <th>Aktiv</th>
                 <th>Aktion</th>
@@ -466,8 +503,10 @@ export function AdminHome() {
                       {editing ? (
                         <select value={(editingEmployee.role ?? e.role) as string} onChange={(ev) => setEditingEmployee({ ...editingEmployee, role: ev.target.value as Employee["role"] })}>
                           <option value="EMPLOYEE">Mitarbeiter</option>
-                          <option value="SUPERVISOR">Vorgesetzter</option>
-                          <option value="ADMIN">Admin</option>
+                          {session?.user.role !== "ADMIN" && (editingEmployee.role ?? e.role) === "SUPERVISOR" && <option value="SUPERVISOR">Vorgesetzter</option>}
+                          {session?.user.role !== "ADMIN" && (editingEmployee.role ?? e.role) === "ADMIN" && <option value="ADMIN">Admin</option>}
+                          {session?.user.role === "ADMIN" && <option value="SUPERVISOR">Vorgesetzter</option>}
+                          {session?.user.role === "ADMIN" && <option value="ADMIN">Admin</option>}
                         </select>
                       ) : (
                         e.role
@@ -516,6 +555,17 @@ export function AdminHome() {
                       ) : (
                         e.rfidTag || "-"
                       )}
+                    </td>
+                    <td>
+                      {editing ? (
+                        <select
+                          value={String(editingEmployee.mailNotificationsEnabled ?? e.mailNotificationsEnabled)}
+                          onChange={(ev) => setEditingEmployee({ ...editingEmployee, mailNotificationsEnabled: ev.target.value === "true" })}
+                        >
+                          <option value="true">Ja</option>
+                          <option value="false">Nein</option>
+                        </select>
+                      ) : e.mailNotificationsEnabled ? "Ja" : "Nein"}
                     </td>
                     <td>
                       {editing ? (
