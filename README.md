@@ -92,6 +92,7 @@ Hinweis zu Ports:
 Hinweis Admin-Bootstrap:
 - Beim API-Start wird ein Admin aus den `.env`-Werten automatisch angelegt/aktualisiert.
 - Aenderst du `ADMIN_LOGIN_NAME` oder `ADMIN_PASSWORD`, dann nach Rebuild/Restart mit den neuen Daten einloggen.
+- Falls `ADMIN_*` leer sind, werden sichere Defaults verwendet (`admin` / `Admin1234!`).
 
 ## Synology Docker
 

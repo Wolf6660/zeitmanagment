@@ -34,10 +34,10 @@ services:
       WEB_ORIGIN: http://localhost:${WEB_PORT}
       JWT_SECRET: ${JWT_SECRET}
       DATABASE_URL: mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE}
-      ADMIN_LOGIN_NAME: ${ADMIN_LOGIN_NAME}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
-      ADMIN_NAME: ${ADMIN_NAME}
-      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_LOGIN_NAME: ${ADMIN_LOGIN_NAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin1234!}
+      ADMIN_NAME: ${ADMIN_NAME:-System Admin}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
     depends_on:
       db:
         condition: service_healthy
