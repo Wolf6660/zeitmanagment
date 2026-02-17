@@ -1,5 +1,3 @@
-#include <LiquidCrystal_I2C.h>
-
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
@@ -26,6 +24,12 @@
 #define HAS_LOCAL_CONFIG 1
 #else
 #define HAS_LOCAL_CONFIG 0
+#endif
+
+#if HAS_LOCAL_CONFIG
+#ifndef LOCAL_TIME_OFFSET_HOURS
+#define LOCAL_TIME_OFFSET_HOURS 0
+#endif
 #endif
 
 struct Config {
@@ -55,6 +59,7 @@ struct Config {
   String idleLine1 = "Firmenname";
   String timezone = "CET-1CEST,M3.5.0/2,M10.5.0/3";
   String ntpServer = "pool.ntp.org";
+  int timeOffsetHours = 0;
 };
 
 Config cfg;
@@ -100,12 +105,65 @@ uint8_t parseAddress(const String &v) {
   return (uint8_t) v.toInt();
 }
 
+bool isBerlinDstAtUtcEpoch(time_t utcEpoch) {
+  struct tm utc = {};
+  gmtime_r(&utcEpoch, &utc);
+  int y = utc.tm_year + 1900;
+
+  auto lastSundayDay = [](int year, int monthIndex) -> int {
+    struct tm firstNext = {};
+    firstNext.tm_year = year - 1900;
+    firstNext.tm_mon = monthIndex + 1;
+    firstNext.tm_mday = 1;
+    time_t t = timegm(&firstNext) - 86400;
+    struct tm lastDay = {};
+    gmtime_r(&t, &lastDay);
+    return lastDay.tm_mday - lastDay.tm_wday;
+  };
+
+  int marchSunday = lastSundayDay(y, 2);
+  int octSunday = lastSundayDay(y, 9);
+
+  struct tm startTm = {};
+  startTm.tm_year = y - 1900;
+  startTm.tm_mon = 2;
+  startTm.tm_mday = marchSunday;
+  startTm.tm_hour = 1;
+  time_t dstStartUtc = timegm(&startTm);
+
+  struct tm endTm = {};
+  endTm.tm_year = y - 1900;
+  endTm.tm_mon = 9;
+  endTm.tm_mday = octSunday;
+  endTm.tm_hour = 1;
+  time_t dstEndUtc = timegm(&endTm);
+
+  return utcEpoch >= dstStartUtc && utcEpoch < dstEndUtc;
+}
+
 String nowDateTime() {
-  struct tm t;
-  if (!getLocalTime(&t)) return "Zeit nicht verfuegbar";
+  time_t nowUtc = time(nullptr);
+  if (nowUtc <= 0) return "Zeit nicht verfuegbar";
+  int baseOffsetHours = isBerlinDstAtUtcEpoch(nowUtc) ? 2 : 1;
+  time_t localTs = nowUtc + ((baseOffsetHours + cfg.timeOffsetHours) * 3600);
+  struct tm adj = {};
+  gmtime_r(&localTs, &adj);
   char buf[24];
-  strftime(buf, sizeof(buf), "%d.%m.%Y %H:%M", &t);
+  strftime(buf, sizeof(buf), "%d.%m.%Y %H:%M", &adj);
   return String(buf);
+}
+
+String addHourOffsetToHHMM(const String &hhmm, int offsetHours) {
+  if (hhmm.length() < 5 || hhmm.charAt(2) != ':') return hhmm;
+  int h = hhmm.substring(0, 2).toInt();
+  int m = hhmm.substring(3, 5).toInt();
+  int total = ((h * 60 + m) + (offsetHours * 60)) % (24 * 60);
+  if (total < 0) total += 24 * 60;
+  int nh = total / 60;
+  int nm = total % 60;
+  char b[6];
+  snprintf(b, sizeof(b), "%02d:%02d", nh, nm);
+  return String(b);
 }
 
 void drawDisplay() {
@@ -203,6 +261,7 @@ bool loadConfig() {
         cfg.idleLine1 = String((const char*) (doc["displayBehaviour"]["idleLine1"] | "Firmenname"));
         cfg.timezone = String((const char*) (doc["timezone"] | "CET-1CEST,M3.5.0/2,M10.5.0/3"));
         cfg.ntpServer = String((const char*) (doc["ntpServer"] | "pool.ntp.org"));
+        cfg.timeOffsetHours = doc["timeOffsetHours"] | 0;
 
         return cfg.wifiSsid.length() > 0 && cfg.endpoint.length() > 0 && cfg.terminalKey.length() > 0;
       }
@@ -238,6 +297,7 @@ bool loadConfig() {
   cfg.idleLine1 = String(LOCAL_IDLE_LINE1);
   cfg.timezone = String(LOCAL_TIMEZONE);
   cfg.ntpServer = String(LOCAL_NTP_SERVER);
+  cfg.timeOffsetHours = LOCAL_TIME_OFFSET_HOURS;
   Serial.println("Konfiguration aus config_local.h geladen.");
   return cfg.wifiSsid.length() > 0 && cfg.endpoint.length() > 0 && cfg.terminalKey.length() > 0;
   #else
@@ -365,6 +425,7 @@ bool sendPunch(const String &uid, const String &type, String &employeeName, Stri
 
   const char* displayTime = in["displayTime"] | "";
   if (strlen(displayTime) >= 4) {
+    // Server liefert bereits Berlin-Zeit.
     timeLabel = String(displayTime);
   } else {
     String local = nowDateTime();
@@ -374,7 +435,8 @@ bool sendPunch(const String &uid, const String &type, String &employeeName, Stri
   return true;
 }
 
-bool fetchNextType(const String &uid, String &nextType, String &errText) {
+bool fetchNextType(const String &uid, String &nextType, String &errText, bool &blockedDuplicate) {
+  blockedDuplicate = false;
   if (WiFi.status() != WL_CONNECTED) {
     errText = "Kein WLAN";
     return false;
@@ -419,11 +481,8 @@ bool fetchNextType(const String &uid, String &nextType, String &errText) {
   }
   bool blocked = in["blockedDuplicate"] | false;
   if (blocked) {
-    employeeName = String((const char*) (in["employeeName"] | "Mitarbeiter"));
-    const char* dt = in["displayTime"] | "";
-    timeLabel = strlen(dt) >= 4 ? String(dt) : nowDateTime().substring(11);
-    actionLabel = "BLOCKIERT";
-    workedTodayHours = in["workedTodayHours"] | 0.0;
+    blockedDuplicate = true;
+    errText = "Doppelbuchung blockiert";
     return false;
   }
   nextType = String((const char*) (in["nextType"] | "CLOCK_IN"));
@@ -499,8 +558,26 @@ void loop() {
     String type = getNextType(uid);
     String statusErr;
     String serverType;
-    if (fetchNextType(uid, serverType, statusErr) && (serverType == "CLOCK_IN" || serverType == "CLOCK_OUT")) {
+    bool blockedDuplicate = false;
+    bool hasServerStatus = fetchNextType(uid, serverType, statusErr, blockedDuplicate);
+    if (!hasServerStatus) {
+      if (blockedDuplicate) {
+        showMessage("Buchung blockiert", "Doppeltes Scannen");
+        Serial.println("Doppelbuchung blockiert");
+      } else {
+        showMessage("Status Fehler", "Serverstatus fehlt");
+        Serial.printf("Status Fehler: %s\n", statusErr.c_str());
+      }
+      delay(700);
+      return;
+    }
+    if (serverType == "CLOCK_IN" || serverType == "CLOCK_OUT") {
       type = serverType;
+    } else {
+      showMessage("Buchung blockiert", "Doppeltes Scannen");
+      Serial.println("Unbekannter Serverstatus");
+      delay(700);
+      return;
     }
     String employeeName;
     String actionLabel;

@@ -129,6 +129,7 @@ function buildConfigLocalHeaderFromProvisionJson(raw: string): string {
     "",
     `#define LOCAL_TIMEZONE "${toStr(obj?.timezone || "CET-1CEST,M3.5.0/2,M10.5.0/3")}"`,
     `#define LOCAL_NTP_SERVER "${toStr(obj?.ntpServer || "pool.ntp.org")}"`,
+    `#define LOCAL_TIME_OFFSET_HOURS ${toNum(obj?.timeOffsetHours, 0)}`,
     ""
   ];
   return lines.join("\n");

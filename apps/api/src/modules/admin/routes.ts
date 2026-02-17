@@ -524,7 +524,8 @@ adminRouter.post("/esp/provision-config", async (req: AuthRequest, res) => {
       onClockOut: "zusaetzlich Tagesarbeitszeit (aufsummiert)"
     },
     timezone: "CET-1CEST,M3.5.0/2,M10.5.0/3",
-    ntpServer: "pool.ntp.org"
+    ntpServer: "pool.ntp.org",
+    timeOffsetHours: 0
   };
 
   await writeAuditLog({

@@ -117,9 +117,10 @@ terminalRouter.post("/next-type", async (req, res) => {
     res.status(403).json({ message: "Zeiterfassung ist fuer diesen Mitarbeiter deaktiviert." });
     return;
   }
+  const now = new Date();
   const lastEntry = await prisma.timeEntry.findFirst({
-    where: { userId: user.id },
-    orderBy: { occurredAt: "desc" },
+    where: { userId: user.id, occurredAt: { lte: now } },
+    orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
     select: { type: true, occurredAt: true, source: true }
   });
   const nextType = lastEntry?.type === TimeEntryType.CLOCK_IN ? TimeEntryType.CLOCK_OUT : TimeEntryType.CLOCK_IN;
@@ -182,8 +183,8 @@ terminalRouter.post("/punch", async (req, res) => {
     await tx.$queryRaw`SELECT GET_LOCK(${lockKey}, 5)`;
     try {
       const lastEntry = await tx.timeEntry.findFirst({
-        where: { userId: user.id },
-        orderBy: { occurredAt: "desc" },
+        where: { userId: user.id, occurredAt: { lte: now } },
+        orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
         select: { type: true, source: true, occurredAt: true, id: true }
       });
       if (lastEntry && lastEntry.source === TimeEntrySource.RFID && now.getTime() - lastEntry.occurredAt.getTime() < 30_000) {

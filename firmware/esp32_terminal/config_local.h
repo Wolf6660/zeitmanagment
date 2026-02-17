@@ -28,3 +28,4 @@
 
 #define LOCAL_TIMEZONE "CET-1CEST,M3.5.0/2,M10.5.0/3"
 #define LOCAL_NTP_SERVER "pool.ntp.org"
+#define LOCAL_TIME_OFFSET_HOURS 0
