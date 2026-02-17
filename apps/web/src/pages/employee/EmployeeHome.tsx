@@ -1,21 +1,12 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { api, getSession } from "../../api/client";
 import { StatusBadge } from "../../components/StatusBadge";
 
-type LeaveFilter = "APPROVED" | "REJECTED";
-
-function kindLabel(kind: string): string {
-  return kind === "VACATION" ? "Urlaub" : "Ueberstunden";
-}
-
 export function EmployeeHome() {
   const session = getSession();
-  const today = new Date();
   const [summary, setSummary] = useState<{ plannedHours: number; workedHours: number; overtimeHours: number; longShiftAlert: boolean; manualAdjustmentHours?: number } | null>(null);
   const [reasonText, setReasonText] = useState("");
   const [message, setMessage] = useState("");
-  const [leaveMessage, setLeaveMessage] = useState("");
-  const [leaveList, setLeaveList] = useState<Array<{ id: string; kind: string; status: string; startDate: string; endDate: string; note?: string }>>([]);
   const [todayEntries, setTodayEntries] = useState<Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; occurredAt: string; source: string; reasonText?: string }>>([]);
   const [manualMode, setManualMode] = useState(false);
   const [manualNote, setManualNote] = useState("");
@@ -24,37 +15,19 @@ export function EmployeeHome() {
   const [manualDate, setManualDate] = useState("");
   const [maxBackDays, setMaxBackDays] = useState(3);
 
-  const [leaveKind, setLeaveKind] = useState<"VACATION" | "OVERTIME">("VACATION");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [leaveNote, setLeaveNote] = useState("");
-  const [filter, setFilter] = useState<LeaveFilter>("APPROVED");
-
-  const [monthYear, setMonthYear] = useState(today.getFullYear());
-  const [monthNum, setMonthNum] = useState(today.getMonth() + 1);
-  const [monthView, setMonthView] = useState<{
-    monthPlanned: number;
-    monthWorked: number;
-    days: Array<{ date: string; plannedHours: number; workedHours: number; isHoliday: boolean; isWeekend: boolean; hasManualCorrection: boolean; entries: Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; time: string; source: string; reasonText?: string }> }>;
-  } | null>(null);
-
   async function reloadData() {
     if (!session) return;
-    const [s, leaves, events, mv] = await Promise.all([
+    const [s, events] = await Promise.all([
       api.summary(session.user.id),
-      api.myLeaves(),
-      api.todayEntries(session.user.id),
-      api.monthView(session.user.id, monthYear, monthNum)
+      api.todayEntries(session.user.id)
     ]);
     setSummary(s);
-    setLeaveList(leaves);
     setTodayEntries(events);
-    setMonthView(mv);
   }
 
   useEffect(() => {
     reloadData().catch((e) => setMessage((e as Error).message));
-  }, [monthYear, monthNum]);
+  }, []);
 
   useEffect(() => {
     api.publicConfig()
@@ -68,7 +41,6 @@ export function EmployeeHome() {
     }
   }, [manualMode, manualDate]);
 
-  const filteredLeaves = useMemo(() => leaveList.filter((l) => l.status === filter), [leaveList, filter]);
   const openClockIn = todayEntries.length > 0 && todayEntries[todayEntries.length - 1].type === "CLOCK_IN";
 
   if (!session) return null;
@@ -203,104 +175,6 @@ export function EmployeeHome() {
         )}
       </div>
 
-      <div className="card">
-        <h2>Urlaubsantrag / Ueberstundenabbau</h2>
-        <div className="grid">
-          <select value={leaveKind} onChange={(e) => setLeaveKind(e.target.value as "VACATION" | "OVERTIME")}>
-            <option value="VACATION">Urlaub</option>
-            <option value="OVERTIME">Ueberstunden</option>
-          </select>
-          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-          <textarea value={leaveNote} onChange={(e) => setLeaveNote(e.target.value)} placeholder="Notiz (Pflichtfeld)" />
-          <button
-            onClick={async () => {
-              try {
-                if (!leaveNote.trim()) {
-                  setLeaveMessage("Notiz ist Pflicht.");
-                  return;
-                }
-                const created = await api.createLeave({ kind: leaveKind, startDate, endDate, note: leaveNote.trim() });
-                setLeaveMessage(
-                  created.warningOverdrawn
-                    ? `Warnung: Urlaub reicht nicht aus. Verfuegbar: ${created.availableVacationDays.toFixed(2)} Tage.`
-                    : "Antrag gestellt."
-                );
-                await reloadData();
-              } catch (e) {
-                setLeaveMessage((e as Error).message);
-              }
-            }}
-          >
-            Antrag senden
-          </button>
-          {leaveMessage && <div className={leaveMessage.startsWith("Warnung") || leaveMessage.includes("Pflicht") ? "error" : "success"}>{leaveMessage}</div>}
-        </div>
-      </div>
-
-      <div className="card">
-        <h2>Meine Antraege</h2>
-        <div className="row" style={{ marginBottom: 8 }}>
-          <button className={filter === "APPROVED" ? "" : "secondary"} onClick={() => setFilter("APPROVED")}>Genehmigt</button>
-          <button className={filter === "REJECTED" ? "" : "secondary"} onClick={() => setFilter("REJECTED")}>Abgelehnt</button>
-        </div>
-        <table>
-          <thead>
-            <tr><th>Status</th><th>Typ</th><th>Von</th><th>Bis</th><th>Notiz</th></tr>
-          </thead>
-          <tbody>
-            {filteredLeaves.map((l) => (
-              <tr key={l.id}>
-                <td>{l.status === "APPROVED" ? <StatusBadge text="Genehmigt" color="var(--approved)" /> : <StatusBadge text="Abgelehnt" color="var(--rejected)" />}</td>
-                <td>{kindLabel(l.kind)}</td>
-                <td>{l.startDate.slice(0, 10)}</td>
-                <td>{l.endDate.slice(0, 10)}</td>
-                <td>{l.note || "-"}</td>
-              </tr>
-            ))}
-            {filteredLeaves.length === 0 && <tr><td colSpan={5}>Keine Eintraege.</td></tr>}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="card" style={{ gridColumn: "1 / -1" }}>
-        <h2>Monatsansicht</h2>
-        <div className="row" style={{ marginBottom: 8 }}>
-          <input type="number" value={monthYear} onChange={(e) => setMonthYear(Number(e.target.value))} style={{ maxWidth: 120 }} />
-          <input type="number" min={1} max={12} value={monthNum} onChange={(e) => setMonthNum(Number(e.target.value))} style={{ maxWidth: 90 }} />
-          <button className="secondary" onClick={() => reloadData()}>Laden</button>
-          {monthView && (
-            <>
-              <span>Monat Soll: <strong>{monthView.monthPlanned.toFixed(2)} h</strong></span>
-              <span>Monat Ist: <strong>{monthView.monthWorked.toFixed(2)} h</strong></span>
-            </>
-          )}
-        </div>
-        {monthView && (
-          <table>
-            <thead>
-              <tr><th>Datum</th><th>Soll</th><th>Ist</th><th>Buchungen</th></tr>
-            </thead>
-            <tbody>
-              {monthView.days.map((d) => (
-                <tr key={d.date} style={{ background: d.isHoliday || d.isWeekend ? "rgba(249,115,22,0.08)" : "transparent" }}>
-                  <td>{d.date}</td>
-                  <td>{d.plannedHours.toFixed(2)}</td>
-                  <td>{d.workedHours.toFixed(2)}</td>
-                  <td>
-                    {d.entries.map((e) => (
-                      <span key={e.id} style={{ marginRight: 8, color: e.source === "MANUAL_CORRECTION" ? "var(--manual)" : "inherit" }}>
-                        {e.type === "CLOCK_IN" ? "K" : "G"} {e.time}
-                        {e.reasonText ? ` (${e.reasonText})` : ""}
-                      </span>
-                    ))}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { LoginPage } from "./pages/auth/LoginPage";
 import { HomeRouter } from "./pages/HomeRouter";
 import { AdminHome } from "./pages/admin/AdminHome";
 import { MonthEditorPage } from "./pages/month/MonthEditorPage";
+import { EmployeeMonthPage } from "./pages/month/EmployeeMonthPage";
 import { HolidaysPage } from "./pages/holidays/HolidaysPage";
 import { SupervisorEmployeesPage } from "./pages/supervisor/SupervisorEmployeesPage";
 import { RequestsPage } from "./pages/requests/RequestsPage";
@@ -69,6 +70,16 @@ export default function App() {
               <MonthEditorPage />
             </AppLayout>
           </SupervisorOrAdminRoute>
+        }
+      />
+      <Route
+        path="/app/month-self"
+        element={
+          <PrivateRoute>
+            <AppLayout>
+              <EmployeeMonthPage />
+            </AppLayout>
+          </PrivateRoute>
         }
       />
       <Route
