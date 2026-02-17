@@ -958,18 +958,6 @@ export function AdminHome() {
                     LCD Zeilen
                     <input type="number" min={1} max={8} value={espDisplayRows} onChange={(e) => setEspDisplayRows(Number(e.target.value))} />
                   </label>
-                  <label>
-                    LCD SDA (I2C)
-                    <input type="number" min={0} max={39} value={espDisplaySda} onChange={(e) => setEspDisplaySda(Number(e.target.value))} />
-                  </label>
-                  <label>
-                    LCD SCL (I2C)
-                    <input type="number" min={0} max={39} value={espDisplayScl} onChange={(e) => setEspDisplayScl(Number(e.target.value))} />
-                  </label>
-                  <label>
-                    LCD I2C Adresse
-                    <input placeholder="0x27" value={espDisplayAddress} onChange={(e) => setEspDisplayAddress(e.target.value)} />
-                  </label>
                 </>
               )}
             </div>
