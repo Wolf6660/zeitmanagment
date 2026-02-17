@@ -52,6 +52,24 @@ a {
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 
+.layout-2-1 {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+}
+
+.admin-section {
+  margin-top: 4px;
+}
+
+.admin-section-card {
+  border-radius: 12px;
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+}
+
 .row {
   display: flex;
   gap: 8px;
@@ -171,5 +189,11 @@ td {
   .brand-logo {
     max-width: 140px;
     max-height: 70px;
+  }
+}
+
+@media (max-width: 980px) {
+  .layout-2-1 {
+    grid-template-columns: 1fr;
   }
 }

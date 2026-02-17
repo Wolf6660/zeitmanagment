@@ -156,7 +156,7 @@ export function AdminHome() {
       <h3>{sectionTitle}</h3>
 
       {section === "company" && (
-        <div className="grid grid-2">
+        <div className="grid grid-2 admin-section">
           <label>
             Firmenname
             <input value={config.companyName || ""} onChange={(e) => setConfig({ ...config, companyName: e.target.value })} />
@@ -191,7 +191,7 @@ export function AdminHome() {
       )}
 
       {section === "rules" && (
-        <div className="grid grid-2">
+        <div className="grid grid-2 admin-section">
           <label>
             Standard Sollarbeitszeit/Tag
             <input type="number" step="0.25" value={config.defaultDailyHours} onChange={(e) => setConfig({ ...config, defaultDailyHours: Number(e.target.value) })} />
@@ -242,7 +242,7 @@ export function AdminHome() {
       )}
 
       {section === "colors" && (
-        <div className="grid">
+        <div className="grid admin-section">
           {COLOR_FIELDS.map((field) => (
             <div key={field.key} className="row" style={{ justifyContent: "space-between" }}>
               <span
@@ -273,7 +273,7 @@ export function AdminHome() {
       )}
 
       {section === "overtime" && (
-        <div className="card" style={{ padding: 12 }}>
+        <div className="card admin-section-card" style={{ padding: 12 }}>
           <h4>Ueberstunden bearbeiten</h4>
           <div className="grid grid-2">
             <label>
@@ -331,57 +331,61 @@ export function AdminHome() {
           >
             Ueberstunden speichern
           </button>
-          <table style={{ marginTop: 10 }}>
+          <div className="admin-table-wrap" style={{ marginTop: 10 }}>
+            <table>
+              <thead>
+                <tr><th>Datum</th><th>Stunden</th><th>Notiz</th></tr>
+              </thead>
+              <tbody>
+                {otHistory.map((h) => (
+                  <tr key={h.id}>
+                    <td>{h.date.slice(0, 10)}</td>
+                    <td>{h.hours.toFixed(2)}</td>
+                    <td>{h.reason}</td>
+                  </tr>
+                ))}
+                {otHistory.length === 0 && <tr><td colSpan={3}>Keine Eintraege.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {section === "logs" && (
+        <div className="admin-section admin-table-wrap">
+          <table>
             <thead>
-              <tr><th>Datum</th><th>Stunden</th><th>Notiz</th></tr>
+              <tr>
+                <th>Zeit</th>
+                <th>Loginname</th>
+                <th>Aktion</th>
+                <th>Ziel</th>
+                <th>Daten</th>
+              </tr>
             </thead>
             <tbody>
-              {otHistory.map((h) => (
-                <tr key={h.id}>
-                  <td>{h.date.slice(0, 10)}</td>
-                  <td>{h.hours.toFixed(2)}</td>
-                  <td>{h.reason}</td>
+              {logs.map((l) => (
+                <tr key={l.id}>
+                  <td>{new Date(l.createdAt).toLocaleString("de-DE")}</td>
+                  <td>{l.actorLoginName}</td>
+                  <td>{l.action}</td>
+                  <td>{l.targetType || "-"}</td>
+                  <td style={{ maxWidth: 340, wordBreak: "break-word" }}>{l.payloadJson || "-"}</td>
                 </tr>
               ))}
-              {otHistory.length === 0 && <tr><td colSpan={3}>Keine Eintraege.</td></tr>}
+              {logs.length === 0 && (
+                <tr>
+                  <td colSpan={5}>Keine Logeintraege.</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
       )}
 
-      {section === "logs" && (
-        <table>
-          <thead>
-            <tr>
-              <th>Zeit</th>
-              <th>Loginname</th>
-              <th>Aktion</th>
-              <th>Ziel</th>
-              <th>Daten</th>
-            </tr>
-          </thead>
-          <tbody>
-            {logs.map((l) => (
-              <tr key={l.id}>
-                <td>{new Date(l.createdAt).toLocaleString("de-DE")}</td>
-                <td>{l.actorLoginName}</td>
-                <td>{l.action}</td>
-                <td>{l.targetType || "-"}</td>
-                <td style={{ maxWidth: 340, wordBreak: "break-word" }}>{l.payloadJson || "-"}</td>
-              </tr>
-            ))}
-            {logs.length === 0 && (
-              <tr>
-                <td colSpan={5}>Keine Logeintraege.</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      )}
-
       {section === "employees" && (
-        <div className="grid">
-          <div className="card" style={{ padding: 12 }}>
+        <div className="grid admin-section">
+          <div className="card admin-section-card" style={{ padding: 12 }}>
             <h4>Neuen Mitarbeiter anlegen</h4>
             <div className="grid grid-2">
               <input placeholder="Name" value={newEmployee.name} onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })} />
@@ -470,26 +474,27 @@ export function AdminHome() {
             </button>
           </div>
 
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Login</th>
-                <th>E-Mail</th>
-                <th>Rolle</th>
-                <th>Jahresurlaub</th>
-                <th>Resturlaub</th>
-                <th>Soll/Tag</th>
-                <th>RFID</th>
-                <th>Mailversand</th>
-                <th>Weblogin</th>
-                <th>Zeiterfassung</th>
-                <th>Aktiv</th>
-                <th>Aktion</th>
-              </tr>
-            </thead>
-            <tbody>
-              {employees.map((e) => {
+          <div className="card admin-section-card admin-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Login</th>
+                  <th>E-Mail</th>
+                  <th>Rolle</th>
+                  <th>Jahresurlaub</th>
+                  <th>Resturlaub</th>
+                  <th>Soll/Tag</th>
+                  <th>RFID</th>
+                  <th>Mailversand</th>
+                  <th>Weblogin</th>
+                  <th>Zeiterfassung</th>
+                  <th>Aktiv</th>
+                  <th>Aktion</th>
+                </tr>
+              </thead>
+              <tbody>
+                {employees.map((e) => {
                 const editing = editingEmployeeId === e.id;
                 return (
                   <tr key={e.id}>
@@ -655,14 +660,15 @@ export function AdminHome() {
                     </td>
                   </tr>
                 );
-              })}
-            </tbody>
-          </table>
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
       {section === "terminals" && (
-        <>
+        <div className="admin-section">
           <div className="grid grid-2" style={{ marginBottom: 10 }}>
             <input value={terminalName} onChange={(e) => setTerminalName(e.target.value)} placeholder="Terminalname" />
             <input value={terminalLocation} onChange={(e) => setTerminalLocation(e.target.value)} placeholder="Standort (optional)" />
@@ -685,7 +691,7 @@ export function AdminHome() {
 
           <div className="grid" style={{ marginTop: 12 }}>
             {terminals.map((t) => (
-              <div className="card" key={t.id} style={{ padding: 12 }}>
+              <div className="card admin-section-card" key={t.id} style={{ padding: 12 }}>
                 <div className="row" style={{ justifyContent: "space-between" }}>
                   <strong>{t.name}</strong>
                   <span>{t.isActive ? "Aktiv" : "Deaktiviert"}</span>
@@ -727,7 +733,7 @@ export function AdminHome() {
               </div>
             ))}
           </div>
-        </>
+        </div>
       )}
 
       <div className="row" style={{ marginTop: 12 }}>
