@@ -16,6 +16,13 @@
 #define HAS_LCD_I2C 0
 #endif
 
+#if __has_include("config_local.h")
+#include "config_local.h"
+#define HAS_LOCAL_CONFIG 1
+#else
+#define HAS_LOCAL_CONFIG 0
+#endif
+
 struct Config {
   String wifiSsid;
   String wifiPassword;
@@ -156,53 +163,79 @@ void rememberAction(const String &uid, const String &action) {
 }
 
 bool loadConfig() {
-  if (!SPIFFS.begin(true)) {
-    Serial.println("SPIFFS konnte nicht gestartet werden");
-    return false;
+  if (SPIFFS.begin(true)) {
+    File f = SPIFFS.open("/config.json", "r");
+    if (f) {
+      StaticJsonDocument<4096> doc;
+      DeserializationError err = deserializeJson(doc, f);
+      f.close();
+      if (!err) {
+        cfg.wifiSsid = String((const char*) doc["network"]["wifiSsid"]);
+        cfg.wifiPassword = String((const char*) doc["network"]["wifiPassword"]);
+        cfg.endpoint = String((const char*) doc["server"]["endpoint"]);
+        cfg.useTls = doc["server"]["useTls"] | false;
+        cfg.terminalKey = String((const char*) doc["terminal"]["key"]);
+
+        cfg.readerType = String((const char*) doc["hardware"]["readerType"]);
+        cfg.pn532Mode = String((const char*) doc["hardware"]["pn532Mode"]);
+        cfg.sda = doc["hardware"]["pins"]["sda"] | cfg.sda;
+        cfg.scl = doc["hardware"]["pins"]["scl"] | cfg.scl;
+        cfg.mosi = doc["hardware"]["pins"]["mosi"] | cfg.mosi;
+        cfg.miso = doc["hardware"]["pins"]["miso"] | cfg.miso;
+        cfg.sck = doc["hardware"]["pins"]["sck"] | cfg.sck;
+        cfg.ss = doc["hardware"]["pins"]["ss"] | cfg.ss;
+        cfg.rst = doc["hardware"]["pins"]["rst"] | cfg.rst;
+        cfg.irq = doc["hardware"]["pins"]["irq"] | cfg.irq;
+
+        cfg.displayEnabled = doc["hardware"]["display"]["enabled"] | false;
+        cfg.displayRows = doc["hardware"]["display"]["rows"] | 4;
+        cfg.displaySda = doc["hardware"]["display"]["pins"]["sda"] | 21;
+        cfg.displayScl = doc["hardware"]["display"]["pins"]["scl"] | 22;
+        cfg.displayAddress = String((const char*) (doc["hardware"]["display"]["pins"]["address"] | "0x27"));
+
+        cfg.idleLine1 = String((const char*) (doc["displayBehaviour"]["idleLine1"] | "Firmenname"));
+        cfg.timezone = String((const char*) (doc["timezone"] | "CET-1CEST,M3.5.0/2,M10.5.0/3"));
+        cfg.ntpServer = String((const char*) (doc["ntpServer"] | "pool.ntp.org"));
+
+        return cfg.wifiSsid.length() > 0 && cfg.endpoint.length() > 0 && cfg.terminalKey.length() > 0;
+      }
+      Serial.printf("JSON Fehler: %s\n", err.c_str());
+    } else {
+      Serial.println("/config.json nicht gefunden, pruefe lokale config_local.h");
+    }
+  } else {
+    Serial.println("SPIFFS konnte nicht gestartet werden, pruefe lokale config_local.h");
   }
 
-  File f = SPIFFS.open("/config.json", "r");
-  if (!f) {
-    Serial.println("/config.json nicht gefunden");
-    return false;
-  }
-
-  StaticJsonDocument<4096> doc;
-  DeserializationError err = deserializeJson(doc, f);
-  f.close();
-  if (err) {
-    Serial.printf("JSON Fehler: %s\n", err.c_str());
-    return false;
-  }
-
-  cfg.wifiSsid = String((const char*) doc["network"]["wifiSsid"]);
-  cfg.wifiPassword = String((const char*) doc["network"]["wifiPassword"]);
-  cfg.endpoint = String((const char*) doc["server"]["endpoint"]);
-  cfg.useTls = doc["server"]["useTls"] | false;
-  cfg.terminalKey = String((const char*) doc["terminal"]["key"]);
-
-  cfg.readerType = String((const char*) doc["hardware"]["readerType"]);
-  cfg.pn532Mode = String((const char*) doc["hardware"]["pn532Mode"]);
-  cfg.sda = doc["hardware"]["pins"]["sda"] | cfg.sda;
-  cfg.scl = doc["hardware"]["pins"]["scl"] | cfg.scl;
-  cfg.mosi = doc["hardware"]["pins"]["mosi"] | cfg.mosi;
-  cfg.miso = doc["hardware"]["pins"]["miso"] | cfg.miso;
-  cfg.sck = doc["hardware"]["pins"]["sck"] | cfg.sck;
-  cfg.ss = doc["hardware"]["pins"]["ss"] | cfg.ss;
-  cfg.rst = doc["hardware"]["pins"]["rst"] | cfg.rst;
-  cfg.irq = doc["hardware"]["pins"]["irq"] | cfg.irq;
-
-  cfg.displayEnabled = doc["hardware"]["display"]["enabled"] | false;
-  cfg.displayRows = doc["hardware"]["display"]["rows"] | 4;
-  cfg.displaySda = doc["hardware"]["display"]["pins"]["sda"] | 21;
-  cfg.displayScl = doc["hardware"]["display"]["pins"]["scl"] | 22;
-  cfg.displayAddress = String((const char*) (doc["hardware"]["display"]["pins"]["address"] | "0x27"));
-
-  cfg.idleLine1 = String((const char*) (doc["displayBehaviour"]["idleLine1"] | "Firmenname"));
-  cfg.timezone = String((const char*) (doc["timezone"] | "CET-1CEST,M3.5.0/2,M10.5.0/3"));
-  cfg.ntpServer = String((const char*) (doc["ntpServer"] | "pool.ntp.org"));
-
+  #if HAS_LOCAL_CONFIG
+  cfg.wifiSsid = String(LOCAL_WIFI_SSID);
+  cfg.wifiPassword = String(LOCAL_WIFI_PASSWORD);
+  cfg.endpoint = String(LOCAL_SERVER_ENDPOINT);
+  cfg.useTls = LOCAL_USE_TLS;
+  cfg.terminalKey = String(LOCAL_TERMINAL_KEY);
+  cfg.readerType = String(LOCAL_READER_TYPE);
+  cfg.pn532Mode = String(LOCAL_PN532_MODE);
+  cfg.sda = LOCAL_PIN_SDA;
+  cfg.scl = LOCAL_PIN_SCL;
+  cfg.mosi = LOCAL_PIN_MOSI;
+  cfg.miso = LOCAL_PIN_MISO;
+  cfg.sck = LOCAL_PIN_SCK;
+  cfg.ss = LOCAL_PIN_SS;
+  cfg.rst = LOCAL_PIN_RST;
+  cfg.irq = LOCAL_PIN_IRQ;
+  cfg.displayEnabled = LOCAL_DISPLAY_ENABLED;
+  cfg.displayRows = LOCAL_DISPLAY_ROWS;
+  cfg.displaySda = LOCAL_DISPLAY_SDA;
+  cfg.displayScl = LOCAL_DISPLAY_SCL;
+  cfg.displayAddress = String(LOCAL_DISPLAY_ADDRESS);
+  cfg.idleLine1 = String(LOCAL_IDLE_LINE1);
+  cfg.timezone = String(LOCAL_TIMEZONE);
+  cfg.ntpServer = String(LOCAL_NTP_SERVER);
+  Serial.println("Konfiguration aus config_local.h geladen.");
   return cfg.wifiSsid.length() > 0 && cfg.endpoint.length() > 0 && cfg.terminalKey.length() > 0;
+  #else
+  return false;
+  #endif
 }
 
 void initDisplay() {

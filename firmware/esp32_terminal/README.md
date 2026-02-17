@@ -30,6 +30,17 @@ Vorgehen:
 
 Hinweis: Falls das Upload-Tool in deiner IDE fehlt, musst du das passende Dateisystem-Plugin fuer die Arduino IDE installieren.
 
+### Alternative ohne Data-Upload-Menue (Arduino IDE 2.x)
+
+Wenn `Werkzeuge > ESP32 Sketch Data Upload` nicht vorhanden ist:
+
+1. Datei kopieren:
+   - `config_local.h.example` -> `config_local.h`
+2. In `config_local.h` WLAN, Endpoint und `LOCAL_TERMINAL_KEY` eintragen.
+3. Sketch normal kompilieren und hochladen.
+
+Die Firmware laedt dann die Konfiguration aus `config_local.h`, falls `/config.json` auf SPIFFS nicht gefunden wird.
+
 ## 4) Flashen
 
 1. Board: passendes ESP32-Board waehlen (z. B. ESP32 Dev Module)

@@ -68,6 +68,66 @@ const COLOR_FIELDS: Array<{ key: keyof AdminConfig; label: string }> = [
   { key: "colorVacationWarning", label: "Urlaub-Warnung" }
 ];
 
+function toBoolLiteral(v: unknown): string {
+  return v ? "true" : "false";
+}
+
+function toNum(v: unknown, fallback: number): number {
+  return Number.isFinite(Number(v)) ? Number(v) : fallback;
+}
+
+function toStr(v: unknown, fallback = ""): string {
+  const s = String(v ?? fallback);
+  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+function buildConfigLocalHeaderFromProvisionJson(raw: string): string {
+  const obj = JSON.parse(raw) as any;
+  const network = obj?.network || {};
+  const server = obj?.server || {};
+  const terminal = obj?.terminal || {};
+  const hardware = obj?.hardware || {};
+  const pins = hardware?.pins || {};
+  const display = hardware?.display || {};
+  const displayPins = display?.pins || {};
+  const behaviour = obj?.displayBehaviour || {};
+
+  const lines = [
+    "#pragma once",
+    "",
+    "// Automatisch aus ESP32 Provisioning erzeugt",
+    `#define LOCAL_WIFI_SSID "${toStr(network.wifiSsid)}"`,
+    `#define LOCAL_WIFI_PASSWORD "${toStr(network.wifiPassword)}"`,
+    `#define LOCAL_SERVER_ENDPOINT "${toStr(server.endpoint)}"`,
+    `#define LOCAL_USE_TLS ${toBoolLiteral(server.useTls)}`,
+    `#define LOCAL_TERMINAL_KEY "${toStr(terminal.key)}"`,
+    "",
+    `#define LOCAL_READER_TYPE "${toStr(hardware.readerType || "RC522")}"`,
+    `#define LOCAL_PN532_MODE "${toStr(hardware.pn532Mode || "I2C")}"`,
+    "",
+    `#define LOCAL_PIN_SDA ${toNum(pins.sda, 21)}`,
+    `#define LOCAL_PIN_SCL ${toNum(pins.scl, 22)}`,
+    `#define LOCAL_PIN_MOSI ${toNum(pins.mosi, 23)}`,
+    `#define LOCAL_PIN_MISO ${toNum(pins.miso, 19)}`,
+    `#define LOCAL_PIN_SCK ${toNum(pins.sck, 18)}`,
+    `#define LOCAL_PIN_SS ${toNum(pins.ss, 5)}`,
+    `#define LOCAL_PIN_RST ${toNum(pins.rst, 22)}`,
+    `#define LOCAL_PIN_IRQ ${toNum(pins.irq, 4)}`,
+    "",
+    `#define LOCAL_DISPLAY_ENABLED ${toBoolLiteral(display.enabled)}`,
+    `#define LOCAL_DISPLAY_ROWS ${toNum(display.rows, 4)}`,
+    `#define LOCAL_DISPLAY_SDA ${toNum(displayPins.sda, 21)}`,
+    `#define LOCAL_DISPLAY_SCL ${toNum(displayPins.scl, 22)}`,
+    `#define LOCAL_DISPLAY_ADDRESS "${toStr(displayPins.address || "0x27")}"`,
+    `#define LOCAL_IDLE_LINE1 "${toStr(behaviour.idleLine1 || "Firmenname")}"`,
+    "",
+    `#define LOCAL_TIMEZONE "${toStr(obj?.timezone || "CET-1CEST,M3.5.0/2,M10.5.0/3")}"`,
+    `#define LOCAL_NTP_SERVER "${toStr(obj?.ntpServer || "pool.ntp.org")}"`,
+    ""
+  ];
+  return lines.join("\n");
+}
+
 export function AdminHome() {
   const [searchParams, setSearchParams] = useSearchParams();
   const section = searchParams.get("section") || "company";
@@ -1062,6 +1122,29 @@ export function AdminHome() {
                 }}
               >
                 JSON herunterladen
+              </button>
+              <button
+                className="secondary"
+                onClick={() => {
+                  try {
+                    if (!espConfigPreview) {
+                      setMsg("Bitte zuerst Konfiguration erzeugen.");
+                      return;
+                    }
+                    const header = buildConfigLocalHeaderFromProvisionJson(espConfigPreview);
+                    const blob = new Blob([header], { type: "text/plain" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = "config_local.h";
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  } catch {
+                    setMsg("config_local.h konnte nicht erstellt werden.");
+                  }
+                }}
+              >
+                config_local.h herunterladen
               </button>
             </div>
 
