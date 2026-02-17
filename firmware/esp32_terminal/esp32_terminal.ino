@@ -7,8 +7,14 @@
 #include <ArduinoJson.h>
 #include <MFRC522.h>
 #include <Adafruit_PN532.h>
-#include <LiquidCrystal_I2C.h>
 #include <time.h>
+
+#if __has_include(<LiquidCrystal_I2C.h>)
+#include <LiquidCrystal_I2C.h>
+#define HAS_LCD_I2C 1
+#else
+#define HAS_LCD_I2C 0
+#endif
 
 struct Config {
   String wifiSsid;
@@ -43,7 +49,9 @@ Config cfg;
 
 MFRC522 *mfrc = nullptr;
 Adafruit_PN532 *pn532 = nullptr;
+#if HAS_LCD_I2C
 LiquidCrystal_I2C *lcd = nullptr;
+#endif
 
 unsigned long lastIdleRefresh = 0;
 unsigned long messageUntil = 0;
@@ -87,6 +95,7 @@ String nowDateTime() {
 }
 
 void drawDisplay() {
+  #if HAS_LCD_I2C
   if (!lcd || !cfg.displayEnabled) return;
   lcd->clear();
   lcd->setCursor(0, 0);
@@ -103,6 +112,7 @@ void drawDisplay() {
     lcd->setCursor(0, 3);
     lcd->print(line4.substring(0, 20));
   }
+  #endif
 }
 
 void showIdle() {
@@ -197,11 +207,17 @@ bool loadConfig() {
 
 void initDisplay() {
   if (!cfg.displayEnabled) return;
+  #if !HAS_LCD_I2C
+  Serial.println("Hinweis: LiquidCrystal_I2C Bibliothek fehlt, Display ist deaktiviert.");
+  cfg.displayEnabled = false;
+  return;
+  #else
   Wire.begin(cfg.displaySda, cfg.displayScl);
   lcd = new LiquidCrystal_I2C(parseAddress(cfg.displayAddress), 20, cfg.displayRows >= 4 ? 4 : 2);
   lcd->init();
   lcd->backlight();
   showMessage("Starte...", "Display aktiv");
+  #endif
 }
 
 void initReader() {
@@ -219,7 +235,8 @@ void initReader() {
     pn532 = new Adafruit_PN532(cfg.ss);
   } else {
     Wire.begin(cfg.sda, cfg.scl);
-    pn532 = new Adafruit_PN532(&Wire);
+    // Kompatibel mit Adafruit_PN532 Bibliotheken, die fuer I2C IRQ+RST erwarten.
+    pn532 = new Adafruit_PN532((uint8_t)cfg.irq, (uint8_t)cfg.rst);
   }
 
   pn532->begin();

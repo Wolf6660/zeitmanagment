@@ -11,6 +11,7 @@ import { HolidaysPage } from "./pages/holidays/HolidaysPage";
 import { SupervisorEmployeesPage } from "./pages/supervisor/SupervisorEmployeesPage";
 import { RequestsPage } from "./pages/requests/RequestsPage";
 import { MyRequestsPage } from "./pages/requests/MyRequestsPage";
+import { GuidesPage } from "./pages/guides/GuidesPage";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const session = getSession();
@@ -118,6 +119,16 @@ export default function App() {
           <PrivateRoute>
             <AppLayout>
               <MyRequestsPage />
+            </AppLayout>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/app/guides"
+        element={
+          <PrivateRoute>
+            <AppLayout>
+              <GuidesPage />
             </AppLayout>
           </PrivateRoute>
         }

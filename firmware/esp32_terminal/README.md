@@ -9,7 +9,7 @@ Dieses Projekt ist fuer `ESP32-WROOM-32` gedacht und nutzt die im Adminbereich e
   - `ArduinoJson`
   - `MFRC522`
   - `Adafruit PN532`
-  - `LiquidCrystal I2C`
+  - `LiquidCrystal I2C` (johnrickman): `https://github.com/johnrickman/LiquidCrystal_I2C`
 
 ## 2) Projekt oeffnen
 

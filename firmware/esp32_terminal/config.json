@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "generatedAt": "2026-02-17T08:22:56.520Z",
+  "terminal": {
+    "id": "cmlq9megc0000lo01m4l2wmkk",
+    "name": "test",
+    "key": "1f2c1770fa442a646d417bce5901fab5d685617426dbffee",
+    "active": true
+  },
+  "network": {
+    "wifiSsid": "IoT",
+    "wifiPassword": "!desischmeiWlanduNudeldunger\""
+  },
+  "server": {
+    "endpoint": "http://192.168.0.100:26400/api/terminal/punch",
+    "host": "192.168.0.100",
+    "port": 26400,
+    "useTls": false
+  },
+  "hardware": {
+    "readerType": "RC522",
+    "pins": {
+      "mosi": 23,
+      "miso": 19,
+      "sck": 18,
+      "ss": 5,
+      "rst": 22
+    },
+    "display": {
+      "enabled": true,
+      "rows": 4,
+      "pins": {
+        "sda": 21,
+        "scl": 17,
+        "address": "0x27"
+      }
+    }
+  },
+  "displayBehaviour": {
+    "idleLine1": "Metallbau Kopf",
+    "idleLine2": "Datum + Uhrzeit",
+    "onScan": "Name + Kommen/Gehen + Uhrzeit",
+    "onClockOut": "zusaetzlich Tagesarbeitszeit (aufsummiert)"
+  },
+  "timezone": "CET-1CEST,M3.5.0/2,M10.5.0/3",
+  "ntpServer": "pool.ntp.org"
+}
