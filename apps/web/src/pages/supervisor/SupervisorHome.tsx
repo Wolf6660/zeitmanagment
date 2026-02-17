@@ -46,29 +46,6 @@ export function SupervisorHome() {
   return (
     <div className="layout-2-1">
       <div className="card">
-        <h2>Uebersicht Mitarbeiter</h2>
-        <table>
-          <thead>
-            <tr><th>Name</th><th>Rolle</th><th>Ist-Stunden</th><th>Ueberstunden</th><th>Vorhandener Urlaub</th></tr>
-          </thead>
-          <tbody>
-            {employees.map((e) => (
-              <tr key={e.id}>
-                <td>{e.name}</td>
-                <td>{e.role}</td>
-                <td>{(overview[e.id]?.istHours ?? 0).toFixed(2)} h</td>
-                <td>{(overview[e.id]?.overtimeHours ?? 0).toFixed(2)} h</td>
-                <td>{(vacationAvailable[e.id] ?? 0).toFixed(2)} Tage</td>
-              </tr>
-            ))}
-            {employees.length === 0 && (
-              <tr><td colSpan={5}>Keine Mitarbeiter.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="card">
         <h2>Eigene Stempeluhr</h2>
         <div className="grid">
           <input value={reasonText} onChange={(e) => setReasonText(e.target.value)} placeholder="Grund / Kommentar (Pflicht)" />
@@ -101,6 +78,29 @@ export function SupervisorHome() {
             ))}
           </div>
         </div>
+      </div>
+
+      <div className="card">
+        <h2>Uebersicht Mitarbeiter</h2>
+        <table>
+          <thead>
+            <tr><th>Name</th><th>Rolle</th><th>Ist-Stunden</th><th>Ueberstunden</th><th>Vorhandener Urlaub</th></tr>
+          </thead>
+          <tbody>
+            {employees.map((e) => (
+              <tr key={e.id}>
+                <td>{e.name}</td>
+                <td>{e.role}</td>
+                <td>{(overview[e.id]?.istHours ?? 0).toFixed(2)} h</td>
+                <td>{(overview[e.id]?.overtimeHours ?? 0).toFixed(2)} h</td>
+                <td>{(vacationAvailable[e.id] ?? 0).toFixed(2)} Tage</td>
+              </tr>
+            ))}
+            {employees.length === 0 && (
+              <tr><td colSpan={5}>Keine Mitarbeiter.</td></tr>
+            )}
+          </tbody>
+        </table>
       </div>
 
       <div className="card" style={{ gridColumn: "1 / -1" }}>
