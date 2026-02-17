@@ -9,6 +9,7 @@ export function SupervisorHome() {
   const session = getSession();
   const [employees, setEmployees] = useState<Array<{ id: string; name: string; loginName?: string; role: string; annualVacationDays: number; carryOverVacationDays: number }>>([]);
   const [overview, setOverview] = useState<Record<string, { istHours: number; overtimeHours: number }>>({});
+  const [vacationAvailable, setVacationAvailable] = useState<Record<string, number>>({});
   const [pending, setPending] = useState<Array<{ id: string; kind: string; startDate: string; endDate: string; note?: string; userId: string; availableVacationDays: number; requestedWorkingDays: number; remainingVacationAfterRequest: number; availableOvertimeHours: number; user: { name: string } }>>([]);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [editNotes, setEditNotes] = useState<Record<string, string>>({});
@@ -29,6 +30,13 @@ export function SupervisorHome() {
     setOverview(Object.fromEntries(ov.map((x) => [x.userId, { istHours: x.istHours, overtimeHours: x.overtimeHours }])));
     setSpecialPending(sp);
     setTodayEntries(t);
+    const vacRows = await Promise.all(
+      e.map(async (emp) => {
+        const v = await api.leaveAvailability(emp.id);
+        return [emp.id, v.availableVacationDays] as const;
+      })
+    );
+    setVacationAvailable(Object.fromEntries(vacRows));
   }
 
   useEffect(() => {
@@ -73,10 +81,10 @@ export function SupervisorHome() {
       </div>
 
       <div className="card">
-        <h2>Stundenaufzeichnung Mitarbeiter</h2>
+        <h2>Uebersicht Mitarbeiter</h2>
         <table>
           <thead>
-            <tr><th>Name</th><th>Rolle</th><th>Ist-Stunden</th><th>Ueberstunden</th></tr>
+            <tr><th>Name</th><th>Rolle</th><th>Ist-Stunden</th><th>Ueberstunden</th><th>Vorhandener Urlaub</th></tr>
           </thead>
           <tbody>
             {employees.map((e) => (
@@ -85,10 +93,11 @@ export function SupervisorHome() {
                 <td>{e.role}</td>
                 <td>{(overview[e.id]?.istHours ?? 0).toFixed(2)} h</td>
                 <td>{(overview[e.id]?.overtimeHours ?? 0).toFixed(2)} h</td>
+                <td>{(vacationAvailable[e.id] ?? 0).toFixed(2)} Tage</td>
               </tr>
             ))}
             {employees.length === 0 && (
-              <tr><td colSpan={4}>Keine Mitarbeiter.</td></tr>
+              <tr><td colSpan={5}>Keine Mitarbeiter.</td></tr>
             )}
           </tbody>
         </table>

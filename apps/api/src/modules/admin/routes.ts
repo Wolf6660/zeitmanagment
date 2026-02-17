@@ -196,6 +196,15 @@ adminRouter.post("/year-end-rollover/:year", async (_req, res) => {
   }
 
   const users = await prisma.user.findMany({ where: { isActive: true } });
+  const holidays = await prisma.holiday.findMany({
+    where: {
+      date: {
+        gte: new Date(Date.UTC(year, 0, 1)),
+        lte: new Date(Date.UTC(year, 11, 31, 23, 59, 59))
+      }
+    }
+  });
+  const holidaySet = new Set(holidays.map((h) => h.date.toISOString().slice(0, 10)));
   const changes = [] as { userId: string; carryOverVacationDays: number }[];
 
   for (const user of users) {
@@ -210,11 +219,19 @@ adminRouter.post("/year-end-rollover/:year", async (_req, res) => {
     });
 
     const usedDays = approved.reduce((acc, request) => {
-      const days = Math.ceil((request.endDate.getTime() - request.startDate.getTime()) / 86400000) + 1;
-      return acc + Math.max(days, 0);
+      const days = [];
+      const start = new Date(Date.UTC(request.startDate.getUTCFullYear(), request.startDate.getUTCMonth(), request.startDate.getUTCDate()));
+      const end = new Date(Date.UTC(request.endDate.getUTCFullYear(), request.endDate.getUTCMonth(), request.endDate.getUTCDate()));
+      for (let d = new Date(start); d <= end; d = new Date(d.getTime() + 86400000)) {
+        const key = d.toISOString().slice(0, 10);
+        const weekend = d.getUTCDay() === 0 || d.getUTCDay() === 6;
+        if (!weekend && !holidaySet.has(key)) days.push(key);
+      }
+      return acc + days.length;
     }, 0);
 
-    const remaining = Math.max(user.carryOverVacationDays + user.annualVacationDays - usedDays, 0);
+    // Plus-/Minusurlaub wird unveraendert ins Folgejahr uebertragen.
+    const remaining = user.carryOverVacationDays + user.annualVacationDays - usedDays;
 
     const updated = await prisma.user.update({
       where: { id: user.id },

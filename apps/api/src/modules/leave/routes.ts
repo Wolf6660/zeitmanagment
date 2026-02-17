@@ -48,6 +48,10 @@ async function getVacationAvailabilityDays(userId: string, targetStart: Date, ta
     return acc + days;
   }, 0);
 
+  // Regel:
+  // - positiver Resturlaub wird zuerst verbraucht
+  // - negativer Resturlaub belastet zuerst den Jahresurlaub
+  // Das resultierende Urlaubskonto entspricht annual + carryOver - consumed.
   return employee.carryOverVacationDays + employee.annualVacationDays - consumedDays;
 }
 
@@ -147,9 +151,16 @@ leaveRouter.post("/", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMIN]),
   }
 
   const availableVacationDays = await getVacationAvailabilityDays(req.auth.userId, parsed.data.startDate, parsed.data.endDate);
-  const warningOverdrawn = parsed.data.kind === LeaveKind.VACATION
-    ? listDays(parsed.data.startDate, parsed.data.endDate).filter((d) => !isWeekend(d)).length > availableVacationDays
-    : false;
+  let warningOverdrawn = false;
+  if (parsed.data.kind === LeaveKind.VACATION) {
+    const holidays = await prisma.holiday.findMany({ where: { date: { gte: parsed.data.startDate, lte: parsed.data.endDate } } });
+    const holidaySet = new Set(holidays.map((h) => h.date.toISOString().slice(0, 10)));
+    const requestedWorkingDays = listDays(parsed.data.startDate, parsed.data.endDate).filter((d) => {
+      const key = d.toISOString().slice(0, 10);
+      return !isWeekend(d) && !holidaySet.has(key);
+    }).length;
+    warningOverdrawn = requestedWorkingDays > availableVacationDays;
+  }
 
   const leave = await prisma.leaveRequest.create({
     data: {

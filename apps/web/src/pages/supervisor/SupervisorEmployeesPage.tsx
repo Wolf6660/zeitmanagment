@@ -35,7 +35,7 @@ export function SupervisorEmployeesPage() {
 
   async function load() {
     const rows = await api.employees();
-    setEmployees(rows.filter((x) => x.role === "EMPLOYEE") as Employee[]);
+    setEmployees(rows as Employee[]);
   }
 
   useEffect(() => {
@@ -113,6 +113,7 @@ export function SupervisorEmployeesPage() {
         <thead>
           <tr>
             <th>Name</th>
+            <th>Rolle</th>
             <th>Login</th>
             <th>E-Mail</th>
             <th>Jahresurlaub</th>
@@ -127,9 +128,11 @@ export function SupervisorEmployeesPage() {
         <tbody>
           {employees.map((e) => {
             const isEdit = editingId === e.id;
+            const canEdit = e.role === "EMPLOYEE";
             return (
               <tr key={e.id}>
                 <td>{isEdit ? <input value={editing.name ?? e.name} onChange={(ev) => setEditing({ ...editing, name: ev.target.value })} /> : e.name}</td>
+                <td>{e.role}</td>
                 <td>{e.loginName}</td>
                 <td>{isEdit ? <input value={editing.email ?? e.email} onChange={(ev) => setEditing({ ...editing, email: ev.target.value })} /> : e.email}</td>
                 <td>{isEdit ? <input type="number" value={editing.annualVacationDays ?? e.annualVacationDays} onChange={(ev) => setEditing({ ...editing, annualVacationDays: Number(ev.target.value) })} /> : e.annualVacationDays}</td>
@@ -153,7 +156,8 @@ export function SupervisorEmployeesPage() {
                   ) : e.isActive ? "Ja" : "Nein"}
                 </td>
                 <td>
-                  {!isEdit && <button className="secondary" onClick={() => { setEditingId(e.id); setEditing(e); }}>Bearbeiten</button>}
+                  {!isEdit && canEdit && <button className="secondary" onClick={() => { setEditingId(e.id); setEditing(e); }}>Bearbeiten</button>}
+                  {!isEdit && !canEdit && <span>Nur Ansicht</span>}
                   {isEdit && (
                     <div className="row">
                       <button onClick={async () => {
@@ -177,7 +181,7 @@ export function SupervisorEmployeesPage() {
               </tr>
             );
           })}
-          {employees.length === 0 && <tr><td colSpan={10}>Keine Mitarbeiter.</td></tr>}
+          {employees.length === 0 && <tr><td colSpan={11}>Keine Mitarbeiter.</td></tr>}
         </tbody>
       </table>
 
