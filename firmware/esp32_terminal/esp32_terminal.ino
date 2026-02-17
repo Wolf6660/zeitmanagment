@@ -67,6 +67,8 @@ LiquidCrystal_I2C *lcd = nullptr;
 
 unsigned long lastIdleRefresh = 0;
 unsigned long messageUntil = 0;
+unsigned long lastScanAt = 0;
+String lastScanUid = "";
 String line1 = "";
 String line2 = "";
 String line3 = "";
@@ -361,14 +363,8 @@ bool sendPunch(const String &uid, const String &type, String &employeeName, Stri
   actionLabel = String((const char*) (in["action"] | (type == "CLOCK_IN" ? "KOMMEN" : "GEHEN")));
   workedTodayHours = in["workedTodayHours"] | 0.0;
 
-  const char* occurredAt = in["occurredAt"] | "";
-  if (strlen(occurredAt) >= 16) {
-    // ISO: 2026-02-17T08:10:00.000Z
-    String hhmm = String(occurredAt).substring(11, 16);
-    timeLabel = hhmm;
-  } else {
-    timeLabel = nowDateTime().substring(11);
-  }
+  String local = nowDateTime();
+  timeLabel = local.length() >= 16 ? local.substring(11, 16) : local;
 
   return true;
 }
@@ -430,6 +426,13 @@ void loop() {
 
   String uid = scanUid();
   if (uid.length() > 0) {
+    if (uid == lastScanUid && millis() - lastScanAt < 3000) {
+      delay(40);
+      return;
+    }
+    lastScanUid = uid;
+    lastScanAt = millis();
+
     Serial.printf("Karte erkannt: %s\n", uid.c_str());
 
     String type = getNextType(uid);

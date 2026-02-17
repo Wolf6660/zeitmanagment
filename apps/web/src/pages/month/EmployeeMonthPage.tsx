@@ -44,13 +44,19 @@ export function EmployeeMonthPage() {
           <thead><tr><th>Datum</th><th>Soll</th><th>Ist</th><th>Buchungen</th></tr></thead>
           <tbody>
             {monthView.days.map((d) => (
-              <tr key={d.date} style={{ background: d.isHoliday || d.isWeekend ? "rgba(249,115,22,0.08)" : "transparent" }}>
+              <tr key={d.date} style={{ background: d.isHoliday || d.isWeekend ? "color-mix(in srgb, var(--holiday) 18%, white)" : "transparent" }}>
                 <td>{d.date}</td>
                 <td>{d.plannedHours.toFixed(2)}</td>
                 <td>{d.workedHours.toFixed(2)}</td>
                 <td>
                   {d.entries.map((e) => (
-                    <span key={e.id} style={{ marginRight: 8, color: e.source === "WEB" ? "var(--web-entry)" : "inherit" }}>
+                    <span
+                      key={e.id}
+                      style={{
+                        marginRight: 8,
+                        color: e.source === "MANUAL_CORRECTION" ? "var(--manual)" : e.source === "WEB" ? "var(--web-entry)" : "inherit"
+                      }}
+                    >
                       {e.type === "CLOCK_IN" ? "K" : "G"} {e.time}
                       {e.reasonText ? ` (${e.reasonText})` : ""}
                     </span>

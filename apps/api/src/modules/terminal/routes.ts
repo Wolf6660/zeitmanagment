@@ -36,6 +36,28 @@ function calculateWorkedMinutes(entries: { type: TimeEntryType; occurredAt: Date
   return minutes;
 }
 
+async function computeWorkedTodayHours(userId: string, dayStart: Date, dayEnd: Date): Promise<number> {
+  const [dayEntries, breakCredits, config] = await Promise.all([
+    prisma.timeEntry.findMany({
+      where: { userId, occurredAt: { gte: dayStart, lte: dayEnd } },
+      orderBy: { occurredAt: "asc" },
+      select: { type: true, occurredAt: true }
+    }),
+    prisma.breakCredit.findMany({
+      where: { userId, date: { gte: dayStart, lte: dayEnd } },
+      select: { minutes: true }
+    }),
+    prisma.systemConfig.findUnique({ where: { id: 1 }, select: { autoBreakMinutes: true, autoBreakAfterHours: true } })
+  ]);
+  const grossMinutes = calculateWorkedMinutes(dayEntries);
+  const breakMinutes = config?.autoBreakMinutes ?? 30;
+  const breakAfterHours = config?.autoBreakAfterHours ?? 6;
+  const autoBreakApplies = grossMinutes >= breakAfterHours * 60;
+  const creditMinutes = breakCredits.reduce((sum, c) => sum + c.minutes, 0);
+  const netMinutes = Math.max(grossMinutes - (autoBreakApplies ? breakMinutes : 0) + creditMinutes, 0);
+  return Number((netMinutes / 60).toFixed(2));
+}
+
 const punchSchema = z.object({
   terminalKey: z.string().min(16),
   rfidTag: z.string().min(1),
@@ -91,11 +113,29 @@ terminalRouter.post("/punch", async (req, res) => {
     return;
   }
 
+  const now = new Date();
   const lastEntry = await prisma.timeEntry.findFirst({
     where: { userId: user.id },
     orderBy: { occurredAt: "desc" },
-    select: { type: true }
+    select: { type: true, source: true, occurredAt: true, id: true }
   });
+  // Schutz gegen doppelte RFID-Buchung bei Reboot/mehrfacher Kartenerkennung.
+  if (lastEntry && lastEntry.source === TimeEntrySource.RFID && now.getTime() - lastEntry.occurredAt.getTime() < 15_000) {
+    const dayStart = dayStartUtc(now);
+    const dayEnd = dayEndUtc(now);
+    const workedTodayHours = await computeWorkedTodayHours(user.id, dayStart, dayEnd);
+    res.status(200).json({
+      ok: true,
+      ignoredDuplicate: true,
+      terminalId: terminal.id,
+      entryId: lastEntry.id,
+      occurredAt: lastEntry.occurredAt,
+      employeeName: user.name,
+      action: lastEntry.type === TimeEntryType.CLOCK_IN ? "KOMMEN" : "GEHEN",
+      workedTodayHours
+    });
+    return;
+  }
   const effectiveType: TimeEntryType = lastEntry?.type === TimeEntryType.CLOCK_IN ? TimeEntryType.CLOCK_OUT : TimeEntryType.CLOCK_IN;
 
   const entry = await prisma.timeEntry.create({
@@ -104,7 +144,7 @@ terminalRouter.post("/punch", async (req, res) => {
       type: effectiveType,
       source: TimeEntrySource.RFID,
       reasonText: parsed.data.reasonText,
-      occurredAt: new Date()
+      occurredAt: now
     }
   });
 
@@ -127,26 +167,7 @@ terminalRouter.post("/punch", async (req, res) => {
     data: { lastSeenAt: new Date() }
   });
 
-  const [dayEntries, breakCredits, config] = await Promise.all([
-    prisma.timeEntry.findMany({
-      where: { userId: user.id, occurredAt: { gte: dayStart, lte: dayEnd } },
-      orderBy: { occurredAt: "asc" },
-      select: { type: true, occurredAt: true }
-    }),
-    prisma.breakCredit.findMany({
-      where: { userId: user.id, date: { gte: dayStart, lte: dayEnd } },
-      select: { minutes: true }
-    }),
-    prisma.systemConfig.findUnique({ where: { id: 1 }, select: { autoBreakMinutes: true, autoBreakAfterHours: true } })
-  ]);
-
-  const grossMinutes = calculateWorkedMinutes(dayEntries);
-  const breakMinutes = config?.autoBreakMinutes ?? 30;
-  const breakAfterHours = config?.autoBreakAfterHours ?? 6;
-  const autoBreakApplies = grossMinutes >= breakAfterHours * 60;
-  const creditMinutes = breakCredits.reduce((sum, c) => sum + c.minutes, 0);
-  const netMinutes = Math.max(grossMinutes - (autoBreakApplies ? breakMinutes : 0) + creditMinutes, 0);
-  const workedTodayHours = Number((netMinutes / 60).toFixed(2));
+  const workedTodayHours = await computeWorkedTodayHours(user.id, dayStart, dayEnd);
 
   res.status(201).json({
     ok: true,

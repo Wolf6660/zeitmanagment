@@ -183,6 +183,30 @@ export function SupervisorHome() {
       </div>
 
       <div className="card" style={{ gridColumn: "1 / -1" }}>
+        <h2>Stempelungen heute</h2>
+        <div className="admin-table-wrap">
+          <table>
+            <thead>
+              <tr><th>Mitarbeiter</th><th>Login</th><th>Typ</th><th>Zeit</th><th>Quelle</th><th>Notiz</th></tr>
+            </thead>
+            <tbody>
+              {todayOverview.map((e) => (
+                <tr key={e.id} style={{ background: e.source === "WEB" ? "color-mix(in srgb, var(--web-entry) 25%, white)" : "transparent" }}>
+                  <td>{e.userName}</td>
+                  <td>{e.loginName}</td>
+                  <td>{e.type === "CLOCK_IN" ? "Kommen" : "Gehen"}</td>
+                  <td>{new Date(e.occurredAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}</td>
+                  <td>{e.source}</td>
+                  <td>{e.reasonText || "-"}</td>
+                </tr>
+              ))}
+              {todayOverview.length === 0 && <tr><td colSpan={6}>Heute keine Stempelungen.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="card" style={{ gridColumn: "1 / -1" }}>
         <h2>Antraege</h2>
         <div className="grid">
           {pending.map((p) => (
@@ -277,29 +301,6 @@ export function SupervisorHome() {
               </div>
             </div>
           ))}
-          <div className="card" style={{ padding: 12 }}>
-            <h4 style={{ marginTop: 0 }}>Stempelungen heute</h4>
-            <div className="admin-table-wrap">
-              <table>
-                <thead>
-                  <tr><th>Mitarbeiter</th><th>Login</th><th>Typ</th><th>Zeit</th><th>Quelle</th><th>Notiz</th></tr>
-                </thead>
-                <tbody>
-                  {todayOverview.map((e) => (
-                    <tr key={e.id} style={{ background: e.source === "WEB" ? "color-mix(in srgb, var(--web-entry) 25%, transparent)" : "transparent" }}>
-                      <td>{e.userName}</td>
-                      <td>{e.loginName}</td>
-                      <td>{e.type === "CLOCK_IN" ? "Kommen" : "Gehen"}</td>
-                      <td>{new Date(e.occurredAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}</td>
-                      <td>{e.source}</td>
-                      <td>{e.reasonText || "-"}</td>
-                    </tr>
-                  ))}
-                  {todayOverview.length === 0 && <tr><td colSpan={6}>Heute keine Stempelungen.</td></tr>}
-                </tbody>
-              </table>
-            </div>
-          </div>
           {pending.length === 0 && specialPending.length === 0 && <div>Keine offenen Antraege.</div>}
           {msg && <div className="error">{msg}</div>}
         </div>
