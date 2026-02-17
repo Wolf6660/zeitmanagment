@@ -110,8 +110,8 @@ function buildConfigLocalHeaderFromProvisionJson(raw: string): string {
     `#define LOCAL_PIN_MOSI ${toNum(pins.mosi, 23)}`,
     `#define LOCAL_PIN_MISO ${toNum(pins.miso, 19)}`,
     `#define LOCAL_PIN_SCK ${toNum(pins.sck, 18)}`,
-    `#define LOCAL_PIN_SS ${toNum(pins.ss, 5)}`,
-    `#define LOCAL_PIN_RST ${toNum(pins.rst, 22)}`,
+    `#define LOCAL_PIN_SS ${toNum(pins.ss, 27)}`,
+    `#define LOCAL_PIN_RST ${toNum(pins.rst, 26)}`,
     `#define LOCAL_PIN_IRQ ${toNum(pins.irq, 4)}`,
     "",
     `#define LOCAL_DISPLAY_ENABLED ${toBoolLiteral(display.enabled)}`,
@@ -157,8 +157,8 @@ export function AdminHome() {
     sck: 18,
     miso: 19,
     mosi: 23,
-    ss: 5,
-    rst: 22
+    ss: 27,
+    rst: 26
   });
   const [espConfigPreview, setEspConfigPreview] = useState("");
   const [unassignedRfid, setUnassignedRfid] = useState<UnassignedRfidScan[]>([]);
@@ -987,7 +987,7 @@ export function AdminHome() {
                   const rt = e.target.value as "RC522" | "PN532";
                   setEspReaderType(rt);
                   if (rt === "RC522") {
-                    setEspPins({ sck: 18, miso: 19, mosi: 23, ss: 5, rst: 22 });
+                    setEspPins({ sck: 18, miso: 19, mosi: 23, ss: 27, rst: 26 });
                   } else {
                     setEspPins({ sda: 21, scl: 22, irq: 4, rst: 16 });
                   }
@@ -1041,8 +1041,8 @@ export function AdminHome() {
                       <tr><td>SCK</td><td><input type="number" value={espPins.sck ?? 18} onChange={(e) => setEspPins({ ...espPins, sck: Number(e.target.value) })} /></td><td>SPI Clock</td></tr>
                       <tr><td>MISO</td><td><input type="number" value={espPins.miso ?? 19} onChange={(e) => setEspPins({ ...espPins, miso: Number(e.target.value) })} /></td><td>SPI MISO</td></tr>
                       <tr><td>MOSI</td><td><input type="number" value={espPins.mosi ?? 23} onChange={(e) => setEspPins({ ...espPins, mosi: Number(e.target.value) })} /></td><td>SPI MOSI</td></tr>
-                      <tr><td>SS(SDA)</td><td><input type="number" value={espPins.ss ?? 5} onChange={(e) => setEspPins({ ...espPins, ss: Number(e.target.value) })} /></td><td>Chip Select</td></tr>
-                      <tr><td>RST</td><td><input type="number" value={espPins.rst ?? 22} onChange={(e) => setEspPins({ ...espPins, rst: Number(e.target.value) })} /></td><td>Reset</td></tr>
+                      <tr><td>SS(SDA)</td><td><input type="number" value={espPins.ss ?? 27} onChange={(e) => setEspPins({ ...espPins, ss: Number(e.target.value) })} /></td><td>Chip Select</td></tr>
+                      <tr><td>RST</td><td><input type="number" value={espPins.rst ?? 26} onChange={(e) => setEspPins({ ...espPins, rst: Number(e.target.value) })} /></td><td>Reset</td></tr>
                     </>
                   )}
                   {espReaderType === "PN532" && espPn532Mode === "I2C" && (

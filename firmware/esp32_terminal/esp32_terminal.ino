@@ -37,8 +37,8 @@ struct Config {
   int mosi = 23;
   int miso = 19;
   int sck = 18;
-  int ss = 5;
-  int rst = 22;
+  int ss = 27;
+  int rst = 26;
   int irq = 4;
 
   bool displayEnabled = false;

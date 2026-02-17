@@ -20,8 +20,8 @@
 #define LOCAL_PIN_MOSI 23
 #define LOCAL_PIN_MISO 19
 #define LOCAL_PIN_SCK 18
-#define LOCAL_PIN_SS 5
-#define LOCAL_PIN_RST 22
+#define LOCAL_PIN_SS 27
+#define LOCAL_PIN_RST 26
 #define LOCAL_PIN_IRQ 4
 
 // Display

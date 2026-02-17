@@ -35,7 +35,7 @@ const GUIDES: Guide[] = [
     title: "Pinbelegung und Verdrahtung",
     intro: "Uebersicht fuer haeufige Standard-Pinbelegungen am ESP32-WROOM-32.",
     steps: [
-      "RC522 (SPI): SCK=GPIO18, MISO=GPIO19, MOSI=GPIO23, SS=GPIO5, RST=GPIO22, 3.3V und GND.",
+      "RC522 (SPI): SCK=GPIO18, MISO=GPIO19, MOSI=GPIO23, SS=GPIO27, RST=GPIO26, 3.3V und GND.",
       "PN532 (I2C): SDA=GPIO21, SCL=GPIO22, optional IRQ=GPIO4, optional RST=GPIO16, 3.3V und GND.",
       "LCD2004 (I2C): SDA=GPIO21, SCL=GPIO22, Adresse meist 0x27 oder 0x3F, 5V und GND.",
       "Nie 5V-Logik direkt auf ESP32 GPIO geben, nur 3.3V-Logik an den Signalleitungen.",
@@ -104,4 +104,3 @@ export function GuidesPage() {
     </div>
   );
 }
-
