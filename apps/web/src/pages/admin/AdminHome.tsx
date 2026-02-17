@@ -32,6 +32,16 @@ type Terminal = {
   lastSeenAt?: string;
 };
 
+type UnassignedRfidScan = {
+  rfidTag: string;
+  seenCount: number;
+  lastSeenAt: string;
+  terminalId?: string;
+  terminalName?: string;
+  lastType?: string;
+  lastReasonText?: string | null;
+};
+
 type Employee = {
   id: string;
   name: string;
@@ -70,6 +80,10 @@ export function AdminHome() {
   const [editingEmployee, setEditingEmployee] = useState<Partial<Employee>>({});
   const [terminalName, setTerminalName] = useState("");
   const [terminalLocation, setTerminalLocation] = useState("");
+  const [unassignedRfid, setUnassignedRfid] = useState<UnassignedRfidScan[]>([]);
+  const [assignRfidTag, setAssignRfidTag] = useState("");
+  const [assignRfidUserId, setAssignRfidUserId] = useState("");
+  const [assignRfidNote, setAssignRfidNote] = useState("");
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [msg, setMsg] = useState("");
   const session = getSession();
@@ -95,11 +109,13 @@ export function AdminHome() {
   });
 
   async function loadData() {
-    const [cfg, trms, emps] = await Promise.all([api.getConfig(), api.listTerminals(), api.employees()]);
+    const [cfg, trms, emps, scans] = await Promise.all([api.getConfig(), api.listTerminals(), api.employees(), api.listUnassignedRfidScans()]);
     setConfig(cfg);
     setTerminals(trms);
     setEmployees(emps as Employee[]);
+    setUnassignedRfid(scans);
     setOtUserId((prev) => prev || (emps[0]?.id ?? ""));
+    setAssignRfidUserId((prev) => prev || (emps[0]?.id ?? ""));
     applyTheme(cfg as PublicConfig);
   }
 
@@ -669,6 +685,115 @@ export function AdminHome() {
 
       {section === "terminals" && (
         <div className="admin-section">
+          <div className="card admin-section-card" style={{ padding: 12, marginBottom: 12 }}>
+            <h4>RFID Chip auslesen und zuweisen</h4>
+            <div className="grid">
+              <label>
+                Erkannter RFID Tag
+                <input
+                  placeholder="RFID Tag"
+                  value={assignRfidTag}
+                  onChange={(e) => setAssignRfidTag(e.target.value)}
+                />
+              </label>
+              <label>
+                Mitarbeiter
+                <select value={assignRfidUserId} onChange={(e) => setAssignRfidUserId(e.target.value)}>
+                  {employees.map((e) => (
+                    <option key={e.id} value={e.id}>{e.name} ({e.loginName})</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Notiz (optional)
+                <input
+                  placeholder="z.B. Neuer Chip zugewiesen"
+                  value={assignRfidNote}
+                  onChange={(e) => setAssignRfidNote(e.target.value)}
+                />
+              </label>
+            </div>
+            <div className="row" style={{ marginTop: 8 }}>
+              <button
+                onClick={async () => {
+                  try {
+                    if (!assignRfidTag.trim()) {
+                      setMsg("Bitte zuerst einen RFID Tag auswaehlen oder eingeben.");
+                      return;
+                    }
+                    if (!assignRfidUserId) {
+                      setMsg("Bitte Mitarbeiter auswaehlen.");
+                      return;
+                    }
+                    await api.assignRfidTag({
+                      userId: assignRfidUserId,
+                      rfidTag: assignRfidTag.trim(),
+                      note: assignRfidNote.trim() || undefined
+                    });
+                    setMsg("RFID Tag zugewiesen.");
+                    setAssignRfidNote("");
+                    const [emps, scans] = await Promise.all([api.employees(), api.listUnassignedRfidScans()]);
+                    setEmployees(emps as Employee[]);
+                    setUnassignedRfid(scans);
+                  } catch (e) {
+                    setMsg((e as Error).message);
+                  }
+                }}
+              >
+                RFID zuweisen
+              </button>
+              <button
+                className="secondary"
+                onClick={async () => {
+                  try {
+                    setUnassignedRfid(await api.listUnassignedRfidScans());
+                  } catch (e) {
+                    setMsg((e as Error).message);
+                  }
+                }}
+              >
+                Liste aktualisieren
+              </button>
+            </div>
+
+            <div className="admin-table-wrap" style={{ marginTop: 10 }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>RFID Tag</th>
+                    <th>Zuletzt erkannt</th>
+                    <th>Terminal</th>
+                    <th>Anzahl</th>
+                    <th>Aktion</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {unassignedRfid.map((s) => (
+                    <tr key={s.rfidTag}>
+                      <td><code>{s.rfidTag}</code></td>
+                      <td>{new Date(s.lastSeenAt).toLocaleString("de-DE")}</td>
+                      <td>{s.terminalName || "-"}</td>
+                      <td>{s.seenCount}</td>
+                      <td>
+                        <button
+                          className="secondary"
+                          onClick={() => setAssignRfidTag(s.rfidTag)}
+                        >
+                          Uebernehmen
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {unassignedRfid.length === 0 && (
+                    <tr>
+                      <td colSpan={5}>Keine unbekannten RFID-Scans vorhanden.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           <div className="grid grid-2" style={{ marginBottom: 10 }}>
             <input value={terminalName} onChange={(e) => setTerminalName(e.target.value)} placeholder="Terminalname" />
             <input value={terminalLocation} onChange={(e) => setTerminalLocation(e.target.value)} placeholder="Standort (optional)" />

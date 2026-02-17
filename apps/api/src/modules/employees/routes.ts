@@ -98,6 +98,10 @@ employeesRouter.post("/", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req
     res.status(403).json({ message: "Vorgesetzte duerfen Zeiterfassung nicht deaktivieren." });
     return;
   }
+  if (req.auth?.role === Role.SUPERVISOR && parsed.data.rfidTag !== undefined) {
+    res.status(403).json({ message: "RFID-Zuweisung ist nur fuer Admin erlaubt." });
+    return;
+  }
 
   const hash = await bcrypt.hash(parsed.data.password, 12);
 
@@ -189,8 +193,8 @@ employeesRouter.patch("/:id", requireRole([Role.SUPERVISOR, Role.ADMIN]), async 
     return;
   }
   if (req.auth?.role === Role.SUPERVISOR) {
-    if (parsed.data.overtimeBalanceHours !== undefined || parsed.data.timeTrackingEnabled !== undefined) {
-      res.status(403).json({ message: "Vorgesetzte duerfen Ueberstundenkonto/Zeiterfassung nicht aendern." });
+    if (parsed.data.overtimeBalanceHours !== undefined || parsed.data.timeTrackingEnabled !== undefined || parsed.data.rfidTag !== undefined) {
+      res.status(403).json({ message: "Vorgesetzte duerfen Ueberstundenkonto/Zeiterfassung/RFID nicht aendern." });
       return;
     }
   }

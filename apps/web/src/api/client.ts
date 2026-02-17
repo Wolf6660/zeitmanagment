@@ -265,6 +265,23 @@ export const api = {
   regenerateTerminalKey: (id: string) =>
     request<{ id: string; apiKey: string }>(`/api/admin/terminals/${id}/regenerate-key`, { method: "POST" }),
 
+  listUnassignedRfidScans: () =>
+    request<Array<{
+      rfidTag: string;
+      seenCount: number;
+      lastSeenAt: string;
+      terminalId?: string;
+      terminalName?: string;
+      lastType?: string;
+      lastReasonText?: string | null;
+    }>>("/api/admin/rfid/unassigned"),
+
+  assignRfidTag: (payload: { userId: string; rfidTag: string; note?: string }) =>
+    request<{ id: string; name: string; loginName: string; rfidTag: string | null }>("/api/admin/rfid/assign", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+
   createOvertimeAdjustment: (payload: { userId: string; date: string; hours: number; note: string }) =>
     request("/api/time/overtime-adjustment", { method: "POST", body: JSON.stringify(payload) }),
 

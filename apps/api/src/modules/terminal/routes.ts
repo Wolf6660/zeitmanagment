@@ -2,6 +2,7 @@ import { ApprovalStatus, TimeEntryType } from "@prisma/client";
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../../db/prisma.js";
+import { writeAuditLog } from "../../utils/audit.js";
 
 export const terminalRouter = Router();
 
@@ -39,6 +40,24 @@ terminalRouter.post("/punch", async (req, res) => {
   });
 
   if (!user) {
+    await writeAuditLog({
+      actorLoginName: `terminal:${terminal.name}`,
+      action: "RFID_UNASSIGNED_SCAN",
+      targetType: "RfidTerminal",
+      targetId: terminal.id,
+      payload: {
+        rfidTag: parsed.data.rfidTag,
+        type: parsed.data.type,
+        reasonText: parsed.data.reasonText ?? null,
+        terminalId: terminal.id,
+        terminalName: terminal.name,
+        scannedAt: new Date().toISOString()
+      }
+    });
+    await prisma.rfidTerminal.update({
+      where: { id: terminal.id },
+      data: { lastSeenAt: new Date() }
+    });
     res.status(404).json({ message: "RFID nicht zugeordnet." });
     return;
   }

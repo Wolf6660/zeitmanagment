@@ -332,6 +332,106 @@ adminRouter.post("/terminals/:id/regenerate-key", async (req, res) => {
   res.json(updated);
 });
 
+adminRouter.get("/rfid/unassigned", async (_req, res) => {
+  const logs = await prisma.auditLog.findMany({
+    where: { action: "RFID_UNASSIGNED_SCAN" },
+    orderBy: { createdAt: "desc" },
+    take: 300
+  });
+
+  const byTag = new Map<string, {
+    rfidTag: string;
+    seenCount: number;
+    lastSeenAt: string;
+    terminalId?: string;
+    terminalName?: string;
+    lastType?: string;
+    lastReasonText?: string | null;
+  }>();
+
+  for (const log of logs) {
+    let payload: Record<string, unknown> = {};
+    if (log.payloadJson) {
+      try {
+        payload = JSON.parse(log.payloadJson) as Record<string, unknown>;
+      } catch {
+        payload = {};
+      }
+    }
+    const tag = String(payload.rfidTag || "").trim();
+    if (!tag) continue;
+    const existing = byTag.get(tag);
+    if (existing) {
+      existing.seenCount += 1;
+      continue;
+    }
+    byTag.set(tag, {
+      rfidTag: tag,
+      seenCount: 1,
+      lastSeenAt: log.createdAt.toISOString(),
+      terminalId: typeof payload.terminalId === "string" ? payload.terminalId : undefined,
+      terminalName: typeof payload.terminalName === "string" ? payload.terminalName : undefined,
+      lastType: typeof payload.type === "string" ? payload.type : undefined,
+      lastReasonText: typeof payload.reasonText === "string" || payload.reasonText === null ? (payload.reasonText as string | null) : null
+    });
+  }
+
+  res.json(Array.from(byTag.values()));
+});
+
+const assignRfidSchema = z.object({
+  userId: z.string().min(1),
+  rfidTag: z.string().trim().min(1),
+  note: z.string().trim().max(500).optional()
+});
+
+adminRouter.post("/rfid/assign", async (req: AuthRequest, res) => {
+  const parsed = assignRfidSchema.safeParse(req.body);
+  if (!parsed.success || !req.auth) {
+    res.status(400).json({ message: "Ungueltige Eingaben." });
+    return;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: parsed.data.userId },
+    select: { id: true, name: true, loginName: true, rfidTag: true }
+  });
+  if (!user) {
+    res.status(404).json({ message: "Mitarbeiter nicht gefunden." });
+    return;
+  }
+
+  const existing = await prisma.user.findFirst({
+    where: { rfidTag: parsed.data.rfidTag, NOT: { id: parsed.data.userId } },
+    select: { id: true, name: true, loginName: true }
+  });
+  if (existing) {
+    res.status(409).json({ message: `RFID ist bereits zugewiesen (${existing.name}/${existing.loginName}).` });
+    return;
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: parsed.data.userId },
+    data: { rfidTag: parsed.data.rfidTag },
+    select: { id: true, name: true, loginName: true, rfidTag: true }
+  });
+
+  await writeAuditLog({
+    actorUserId: req.auth.userId,
+    actorLoginName: await resolveActorLoginName(req.auth.userId),
+    action: "RFID_ASSIGNED",
+    targetType: "User",
+    targetId: updated.id,
+    payload: {
+      oldRfidTag: user.rfidTag,
+      newRfidTag: updated.rfidTag,
+      note: parsed.data.note || null
+    }
+  });
+
+  res.json(updated);
+});
+
 adminRouter.get("/audit-logs", async (_req, res) => {
   const logs = await prisma.auditLog.findMany({
     orderBy: { createdAt: "desc" },

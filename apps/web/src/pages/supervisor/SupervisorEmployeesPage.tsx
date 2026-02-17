@@ -13,7 +13,6 @@ type Employee = {
   mailNotificationsEnabled: boolean;
   webLoginEnabled: boolean;
   dailyWorkHours?: number | null;
-  rfidTag?: string | null;
 };
 
 export function SupervisorEmployeesPage() {
@@ -29,8 +28,7 @@ export function SupervisorEmployeesPage() {
     annualVacationDays: 30,
     dailyWorkHours: 8,
     carryOverVacationDays: 0,
-    webLoginEnabled: true,
-    rfidTag: ""
+    webLoginEnabled: true
   });
 
   async function load() {
@@ -72,10 +70,6 @@ export function SupervisorEmployeesPage() {
               <option value="no">Nein</option>
             </select>
           </label>
-          <label>
-            RFID Tag
-            <input value={newEmployee.rfidTag} onChange={(e) => setNewEmployee({ ...newEmployee, rfidTag: e.target.value })} />
-          </label>
         </div>
         <button
           style={{ marginTop: 8 }}
@@ -84,8 +78,7 @@ export function SupervisorEmployeesPage() {
               await api.createEmployee({
                 ...newEmployee,
                 role: "EMPLOYEE",
-                mailNotificationsEnabled: true,
-                rfidTag: newEmployee.rfidTag.trim() ? newEmployee.rfidTag.trim() : undefined
+                mailNotificationsEnabled: true
               });
               setMsg("Mitarbeiter angelegt.");
               setNewEmployee({
@@ -96,8 +89,7 @@ export function SupervisorEmployeesPage() {
                 annualVacationDays: 30,
                 dailyWorkHours: 8,
                 carryOverVacationDays: 0,
-                webLoginEnabled: true,
-                rfidTag: ""
+                webLoginEnabled: true
               });
               await load();
             } catch (e) {
@@ -119,7 +111,6 @@ export function SupervisorEmployeesPage() {
             <th>Jahresurlaub</th>
             <th>Resturlaub</th>
             <th>Soll/Tag</th>
-            <th>RFID</th>
             <th>Weblogin</th>
             <th>Aktiv</th>
             <th>Aktion</th>
@@ -138,7 +129,6 @@ export function SupervisorEmployeesPage() {
                 <td>{isEdit ? <input type="number" value={editing.annualVacationDays ?? e.annualVacationDays} onChange={(ev) => setEditing({ ...editing, annualVacationDays: Number(ev.target.value) })} /> : e.annualVacationDays}</td>
                 <td>{isEdit ? <input type="number" value={editing.carryOverVacationDays ?? e.carryOverVacationDays} onChange={(ev) => setEditing({ ...editing, carryOverVacationDays: Number(ev.target.value) })} /> : e.carryOverVacationDays}</td>
                 <td>{isEdit ? <input type="number" step="0.25" value={editing.dailyWorkHours ?? e.dailyWorkHours ?? 8} onChange={(ev) => setEditing({ ...editing, dailyWorkHours: Number(ev.target.value) })} /> : (e.dailyWorkHours ?? 8).toFixed(2)}</td>
-                <td>{isEdit ? <input value={editing.rfidTag ?? e.rfidTag ?? ""} onChange={(ev) => setEditing({ ...editing, rfidTag: ev.target.value })} /> : e.rfidTag || "-"}</td>
                 <td>
                   {isEdit ? (
                     <select value={String(editing.webLoginEnabled ?? e.webLoginEnabled)} onChange={(ev) => setEditing({ ...editing, webLoginEnabled: ev.target.value === "true" })}>
@@ -162,10 +152,7 @@ export function SupervisorEmployeesPage() {
                     <div className="row">
                       <button onClick={async () => {
                         try {
-                          await api.updateEmployee(e.id, {
-                            ...editing,
-                            rfidTag: typeof editing.rfidTag === "string" && editing.rfidTag.trim() === "" ? null : editing.rfidTag
-                          });
+                          await api.updateEmployee(e.id, editing);
                           setEditingId(null);
                           setEditing({});
                           setMsg("Mitarbeiter aktualisiert.");
@@ -181,7 +168,7 @@ export function SupervisorEmployeesPage() {
               </tr>
             );
           })}
-          {employees.length === 0 && <tr><td colSpan={11}>Keine Mitarbeiter.</td></tr>}
+          {employees.length === 0 && <tr><td colSpan={10}>Keine Mitarbeiter.</td></tr>}
         </tbody>
       </table>
 
