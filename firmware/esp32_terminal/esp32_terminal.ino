@@ -363,9 +363,66 @@ bool sendPunch(const String &uid, const String &type, String &employeeName, Stri
   actionLabel = String((const char*) (in["action"] | (type == "CLOCK_IN" ? "KOMMEN" : "GEHEN")));
   workedTodayHours = in["workedTodayHours"] | 0.0;
 
-  String local = nowDateTime();
-  timeLabel = local.length() >= 16 ? local.substring(11, 16) : local;
+  const char* displayTime = in["displayTime"] | "";
+  if (strlen(displayTime) >= 4) {
+    timeLabel = String(displayTime);
+  } else {
+    String local = nowDateTime();
+    timeLabel = local.length() >= 16 ? local.substring(11, 16) : local;
+  }
 
+  return true;
+}
+
+bool fetchNextType(const String &uid, String &nextType, String &errText) {
+  if (WiFi.status() != WL_CONNECTED) {
+    errText = "Kein WLAN";
+    return false;
+  }
+  String endpoint = cfg.endpoint;
+  endpoint.replace("/punch", "/next-type");
+
+  HTTPClient http;
+  WiFiClient client;
+  WiFiClientSecure secure;
+  if (cfg.useTls) {
+    secure.setInsecure();
+    if (!http.begin(secure, endpoint)) {
+      errText = "HTTP init fehlgeschlagen";
+      return false;
+    }
+  } else {
+    if (!http.begin(client, endpoint)) {
+      errText = "HTTP init fehlgeschlagen";
+      return false;
+    }
+  }
+  http.addHeader("Content-Type", "application/json");
+  StaticJsonDocument<256> out;
+  out["terminalKey"] = cfg.terminalKey;
+  out["rfidTag"] = uid;
+  String body;
+  serializeJson(out, body);
+  int code = http.POST(body);
+  if (code < 200 || code >= 300) {
+    errText = http.getString();
+    http.end();
+    return false;
+  }
+  String response = http.getString();
+  http.end();
+  StaticJsonDocument<512> in;
+  DeserializationError err = deserializeJson(in, response);
+  if (err) {
+    errText = "Antwort-JSON ungueltig";
+    return false;
+  }
+  bool blocked = in["blockedDuplicate"] | false;
+  if (blocked) {
+    errText = "Doppelbuchung blockiert";
+    return false;
+  }
+  nextType = String((const char*) (in["nextType"] | "CLOCK_IN"));
   return true;
 }
 
@@ -436,6 +493,11 @@ void loop() {
     Serial.printf("Karte erkannt: %s\n", uid.c_str());
 
     String type = getNextType(uid);
+    String statusErr;
+    String serverType;
+    if (fetchNextType(uid, serverType, statusErr) && (serverType == "CLOCK_IN" || serverType == "CLOCK_OUT")) {
+      type = serverType;
+    }
     String employeeName;
     String actionLabel;
     String timeLabel;

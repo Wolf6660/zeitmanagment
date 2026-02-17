@@ -44,7 +44,17 @@ export function EmployeeMonthPage() {
           <thead><tr><th>Datum</th><th>Soll</th><th>Ist</th><th>Buchungen</th></tr></thead>
           <tbody>
             {monthView.days.map((d) => (
-              <tr key={d.date} style={{ background: d.isHoliday || d.isWeekend ? "color-mix(in srgb, var(--holiday) 18%, white)" : "transparent" }}>
+              <tr
+                key={d.date}
+                style={{
+                  background:
+                    d.isHoliday || d.isWeekend
+                      ? d.workedHours > 0
+                        ? "color-mix(in srgb, var(--holiday) 22%, white)"
+                        : "color-mix(in srgb, var(--holiday-day) 28%, white)"
+                      : "transparent"
+                }}
+              >
                 <td>{d.date}</td>
                 <td>{d.plannedHours.toFixed(2)}</td>
                 <td>{d.workedHours.toFixed(2)}</td>

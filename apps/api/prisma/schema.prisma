@@ -257,6 +257,7 @@ model SystemConfig {
   colorManualCorrection             String   @default("#DC2626")
   colorBreakCredit                  String   @default("#EC4899")
   colorSickLeave                    String   @default("#3B82F6")
+  colorHolidayOrWeekend             String   @default("#FDE68A")
   colorHolidayOrWeekendWork         String   @default("#F97316")
   colorVacationWarning              String   @default("#F59E0B")
   colorWebEntry                     String   @default("#7DD3FC")

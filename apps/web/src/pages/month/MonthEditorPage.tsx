@@ -56,7 +56,16 @@ export function MonthEditorPage() {
               const expanded = selectedDay === d.date;
               return (
                 <React.Fragment key={d.date}>
-                  <tr style={{ background: d.isHoliday || d.isWeekend ? "color-mix(in srgb, var(--holiday) 18%, white)" : "transparent" }}>
+                  <tr
+                    style={{
+                      background:
+                        d.isHoliday || d.isWeekend
+                          ? d.workedHours > 0
+                            ? "color-mix(in srgb, var(--holiday) 22%, white)"
+                            : "color-mix(in srgb, var(--holiday-day) 28%, white)"
+                          : "transparent"
+                    }}
+                  >
                     <td>{d.date}</td>
                     <td>{d.plannedHours.toFixed(2)}</td>
                     <td>{d.workedHours.toFixed(2)}</td>

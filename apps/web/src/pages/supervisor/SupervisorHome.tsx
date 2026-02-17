@@ -149,7 +149,15 @@ export function SupervisorHome() {
             <strong>Heute erfasst</strong>
             {todayEntries.length === 0 && <div>Keine Ereignisse heute.</div>}
             {todayEntries.map((e) => (
-              <div key={e.id} style={{ color: e.source === "WEB" ? "var(--web-entry)" : "inherit" }}>
+              <div
+                key={e.id}
+                style={{
+                  color: e.source === "WEB" ? "var(--web-entry)" : "inherit",
+                  background: e.source === "WEB" ? "color-mix(in srgb, var(--web-entry) 20%, white)" : "transparent",
+                  borderRadius: 8,
+                  padding: "4px 6px"
+                }}
+              >
                 {e.type === "CLOCK_IN" ? "Kommen" : "Gehen"} {new Date(e.occurredAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
                 {e.reasonText ? ` - ${e.reasonText}` : ""}
               </div>

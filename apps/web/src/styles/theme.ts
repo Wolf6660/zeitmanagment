@@ -8,6 +8,7 @@ export type PublicConfig = {
   colorManualCorrection: string;
   colorBreakCredit: string;
   colorSickLeave: string;
+  colorHolidayOrWeekend: string;
   colorHolidayOrWeekendWork: string;
   colorVacationWarning: string;
   colorWebEntry: string;
@@ -21,6 +22,7 @@ export function applyTheme(config: PublicConfig): void {
   root.style.setProperty("--manual", config.colorManualCorrection);
   root.style.setProperty("--break-credit", config.colorBreakCredit);
   root.style.setProperty("--sick", config.colorSickLeave);
+  root.style.setProperty("--holiday-day", config.colorHolidayOrWeekend);
   root.style.setProperty("--holiday", config.colorHolidayOrWeekendWork);
   root.style.setProperty("--warning", config.colorVacationWarning);
   root.style.setProperty("--web-entry", config.colorWebEntry);

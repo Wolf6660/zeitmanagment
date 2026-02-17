@@ -252,6 +252,7 @@ export const api = {
       colorManualCorrection: string;
       colorBreakCredit: string;
       colorSickLeave: string;
+      colorHolidayOrWeekend: string;
       colorHolidayOrWeekendWork: string;
       colorVacationWarning: string;
       colorWebEntry: string;

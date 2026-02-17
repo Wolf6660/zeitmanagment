@@ -65,6 +65,45 @@ const punchSchema = z.object({
   reasonText: z.string().max(255).optional()
 });
 
+const nextTypeSchema = z.object({
+  terminalKey: z.string().min(16),
+  rfidTag: z.string().min(1)
+});
+
+terminalRouter.post("/next-type", async (req, res) => {
+  const parsed = nextTypeSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: "Ungueltige Eingaben." });
+    return;
+  }
+  const terminal = await prisma.rfidTerminal.findUnique({ where: { apiKey: parsed.data.terminalKey } });
+  if (!terminal || !terminal.isActive) {
+    res.status(401).json({ message: "Terminal nicht autorisiert oder deaktiviert." });
+    return;
+  }
+  const user = await prisma.user.findFirst({
+    where: { rfidTag: parsed.data.rfidTag, isActive: true },
+    select: { id: true, name: true, timeTrackingEnabled: true }
+  });
+  if (!user) {
+    res.status(404).json({ message: "RFID nicht zugeordnet." });
+    return;
+  }
+  if (!user.timeTrackingEnabled) {
+    res.status(403).json({ message: "Zeiterfassung ist fuer diesen Mitarbeiter deaktiviert." });
+    return;
+  }
+  const lastEntry = await prisma.timeEntry.findFirst({
+    where: { userId: user.id },
+    orderBy: { occurredAt: "desc" },
+    select: { type: true, occurredAt: true, source: true }
+  });
+  const nextType = lastEntry?.type === TimeEntryType.CLOCK_IN ? TimeEntryType.CLOCK_OUT : TimeEntryType.CLOCK_IN;
+  const blockedDuplicate = !!(lastEntry && lastEntry.source === TimeEntrySource.RFID && Date.now() - lastEntry.occurredAt.getTime() < 30_000);
+  const displayTime = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Europe/Berlin" }).format(new Date());
+  res.json({ nextType, blockedDuplicate, employeeName: user.name, displayTime });
+});
+
 terminalRouter.post("/punch", async (req, res) => {
   const parsed = punchSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -120,10 +159,11 @@ terminalRouter.post("/punch", async (req, res) => {
     select: { type: true, source: true, occurredAt: true, id: true }
   });
   // Schutz gegen doppelte RFID-Buchung bei Reboot/mehrfacher Kartenerkennung.
-  if (lastEntry && lastEntry.source === TimeEntrySource.RFID && now.getTime() - lastEntry.occurredAt.getTime() < 15_000) {
+  if (lastEntry && lastEntry.source === TimeEntrySource.RFID && now.getTime() - lastEntry.occurredAt.getTime() < 30_000) {
     const dayStart = dayStartUtc(now);
     const dayEnd = dayEndUtc(now);
     const workedTodayHours = await computeWorkedTodayHours(user.id, dayStart, dayEnd);
+    const displayTime = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Europe/Berlin" }).format(now);
     res.status(200).json({
       ok: true,
       ignoredDuplicate: true,
@@ -132,7 +172,8 @@ terminalRouter.post("/punch", async (req, res) => {
       occurredAt: lastEntry.occurredAt,
       employeeName: user.name,
       action: lastEntry.type === TimeEntryType.CLOCK_IN ? "KOMMEN" : "GEHEN",
-      workedTodayHours
+      workedTodayHours,
+      displayTime
     });
     return;
   }
@@ -168,6 +209,7 @@ terminalRouter.post("/punch", async (req, res) => {
   });
 
   const workedTodayHours = await computeWorkedTodayHours(user.id, dayStart, dayEnd);
+  const displayTime = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Europe/Berlin" }).format(now);
 
   res.status(201).json({
     ok: true,
@@ -176,6 +218,7 @@ terminalRouter.post("/punch", async (req, res) => {
     occurredAt: entry.occurredAt,
     employeeName: user.name,
     action: effectiveType === TimeEntryType.CLOCK_IN ? "KOMMEN" : "GEHEN",
-    workedTodayHours
+    workedTodayHours,
+    displayTime
   });
 });

@@ -19,6 +19,7 @@ type AdminConfig = {
   colorManualCorrection: string;
   colorBreakCredit: string;
   colorSickLeave: string;
+  colorHolidayOrWeekend: string;
   colorHolidayOrWeekendWork: string;
   colorVacationWarning: string;
   colorWebEntry: string;
@@ -67,6 +68,7 @@ const COLOR_FIELDS: Array<{ key: keyof AdminConfig; label: string }> = [
   { key: "colorWebEntry", label: "Web-Einstempeln" },
   { key: "colorBreakCredit", label: "Pausengutschrift" },
   { key: "colorSickLeave", label: "Krankheit" },
+  { key: "colorHolidayOrWeekend", label: "Wochenende / Feiertag" },
   { key: "colorHolidayOrWeekendWork", label: "Arbeit Feiertag/Wochenende" },
   { key: "colorVacationWarning", label: "Urlaub" },
   { key: "colorOvertime", label: "Ueberstunden" }

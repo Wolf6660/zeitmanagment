@@ -32,6 +32,7 @@ const configSchema = z.object({
   colorManualCorrection: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
   colorBreakCredit: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
   colorSickLeave: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+  colorHolidayOrWeekend: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
   colorHolidayOrWeekendWork: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
   colorVacationWarning: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
   colorWebEntry: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
