@@ -282,6 +282,33 @@ export const api = {
       body: JSON.stringify(payload)
     }),
 
+  generateEspProvisionConfig: (payload: {
+    terminalId: string;
+    wifiSsid: string;
+    wifiPassword: string;
+    serverHost: string;
+    serverPort: number;
+    useTls: boolean;
+    displayEnabled: boolean;
+    displayRows: number;
+    readerType: "RC522" | "PN532";
+    pn532Mode?: "I2C" | "SPI";
+    pins: {
+      sda?: number;
+      scl?: number;
+      mosi?: number;
+      miso?: number;
+      sck?: number;
+      ss?: number;
+      rst?: number;
+      irq?: number;
+    };
+  }) =>
+    request<Record<string, unknown>>("/api/admin/esp/provision-config", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+
   createOvertimeAdjustment: (payload: { userId: string; date: string; hours: number; note: string }) =>
     request("/api/time/overtime-adjustment", { method: "POST", body: JSON.stringify(payload) }),
 

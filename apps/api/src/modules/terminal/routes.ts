@@ -1,4 +1,4 @@
-import { ApprovalStatus, TimeEntryType } from "@prisma/client";
+import { ApprovalStatus, TimeEntrySource, TimeEntryType } from "@prisma/client";
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../../db/prisma.js";
@@ -9,6 +9,31 @@ export const terminalRouter = Router();
 function isWeekendUtc(date: Date): boolean {
   const day = date.getUTCDay();
   return day === 0 || day === 6;
+}
+
+function dayStartUtc(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0));
+}
+
+function dayEndUtc(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 23, 59, 59, 999));
+}
+
+function calculateWorkedMinutes(entries: { type: TimeEntryType; occurredAt: Date }[]): number {
+  const sorted = [...entries].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
+  let currentIn: Date | null = null;
+  let minutes = 0;
+  for (const e of sorted) {
+    if (e.type === TimeEntryType.CLOCK_IN) {
+      currentIn = e.occurredAt;
+      continue;
+    }
+    if (e.type === TimeEntryType.CLOCK_OUT && currentIn) {
+      minutes += Math.max(0, Math.floor((e.occurredAt.getTime() - currentIn.getTime()) / 60000));
+      currentIn = null;
+    }
+  }
+  return minutes;
 }
 
 const punchSchema = z.object({
@@ -36,7 +61,7 @@ terminalRouter.post("/punch", async (req, res) => {
 
   const user = await prisma.user.findFirst({
     where: { rfidTag: parsed.data.rfidTag, isActive: true },
-    select: { id: true, timeTrackingEnabled: true }
+    select: { id: true, name: true, timeTrackingEnabled: true }
   });
 
   if (!user) {
@@ -70,23 +95,19 @@ terminalRouter.post("/punch", async (req, res) => {
     data: {
       userId: user.id,
       type: parsed.data.type,
-      source: "RFID",
+      source: TimeEntrySource.RFID,
       reasonText: parsed.data.reasonText,
       occurredAt: new Date()
     }
   });
 
+  const dayStart = dayStartUtc(entry.occurredAt);
+  const dayEnd = dayEndUtc(entry.occurredAt);
   const isHoliday = await prisma.holiday.findFirst({
-    where: {
-      date: {
-        gte: new Date(Date.UTC(entry.occurredAt.getUTCFullYear(), entry.occurredAt.getUTCMonth(), entry.occurredAt.getUTCDate(), 0, 0, 0)),
-        lte: new Date(Date.UTC(entry.occurredAt.getUTCFullYear(), entry.occurredAt.getUTCMonth(), entry.occurredAt.getUTCDate(), 23, 59, 59, 999))
-      }
-    },
+    where: { date: { gte: dayStart, lte: dayEnd } },
     select: { id: true }
   });
   if (isHoliday || isWeekendUtc(entry.occurredAt)) {
-    const dayStart = new Date(Date.UTC(entry.occurredAt.getUTCFullYear(), entry.occurredAt.getUTCMonth(), entry.occurredAt.getUTCDate(), 0, 0, 0));
     await prisma.specialWorkApproval.upsert({
       where: { userId_date: { userId: user.id, date: dayStart } },
       create: { userId: user.id, date: dayStart, status: ApprovalStatus.SUBMITTED, note: parsed.data.reasonText ?? "RFID Buchung" },
@@ -99,10 +120,34 @@ terminalRouter.post("/punch", async (req, res) => {
     data: { lastSeenAt: new Date() }
   });
 
+  const [dayEntries, breakCredits, config] = await Promise.all([
+    prisma.timeEntry.findMany({
+      where: { userId: user.id, occurredAt: { gte: dayStart, lte: dayEnd } },
+      orderBy: { occurredAt: "asc" },
+      select: { type: true, occurredAt: true }
+    }),
+    prisma.breakCredit.findMany({
+      where: { userId: user.id, date: { gte: dayStart, lte: dayEnd } },
+      select: { minutes: true }
+    }),
+    prisma.systemConfig.findUnique({ where: { id: 1 }, select: { autoBreakMinutes: true, autoBreakAfterHours: true } })
+  ]);
+
+  const grossMinutes = calculateWorkedMinutes(dayEntries);
+  const breakMinutes = config?.autoBreakMinutes ?? 30;
+  const breakAfterHours = config?.autoBreakAfterHours ?? 6;
+  const autoBreakApplies = grossMinutes >= breakAfterHours * 60;
+  const creditMinutes = breakCredits.reduce((sum, c) => sum + c.minutes, 0);
+  const netMinutes = Math.max(grossMinutes - (autoBreakApplies ? breakMinutes : 0) + creditMinutes, 0);
+  const workedTodayHours = Number((netMinutes / 60).toFixed(2));
+
   res.status(201).json({
     ok: true,
     terminalId: terminal.id,
     entryId: entry.id,
-    occurredAt: entry.occurredAt
+    occurredAt: entry.occurredAt,
+    employeeName: user.name,
+    action: parsed.data.type === TimeEntryType.CLOCK_IN ? "KOMMEN" : "GEHEN",
+    workedTodayHours
   });
 });

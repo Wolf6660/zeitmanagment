@@ -80,6 +80,24 @@ export function AdminHome() {
   const [editingEmployee, setEditingEmployee] = useState<Partial<Employee>>({});
   const [terminalName, setTerminalName] = useState("");
   const [terminalLocation, setTerminalLocation] = useState("");
+  const [espTerminalId, setEspTerminalId] = useState("");
+  const [espWifiSsid, setEspWifiSsid] = useState("");
+  const [espWifiPassword, setEspWifiPassword] = useState("");
+  const [espServerHost, setEspServerHost] = useState("");
+  const [espServerPort, setEspServerPort] = useState(4000);
+  const [espUseTls, setEspUseTls] = useState(false);
+  const [espReaderType, setEspReaderType] = useState<"RC522" | "PN532">("RC522");
+  const [espPn532Mode, setEspPn532Mode] = useState<"I2C" | "SPI">("I2C");
+  const [espDisplayEnabled, setEspDisplayEnabled] = useState(true);
+  const [espDisplayRows, setEspDisplayRows] = useState(4);
+  const [espPins, setEspPins] = useState<{ sda?: number; scl?: number; mosi?: number; miso?: number; sck?: number; ss?: number; rst?: number; irq?: number }>({
+    sck: 18,
+    miso: 19,
+    mosi: 23,
+    ss: 5,
+    rst: 22
+  });
+  const [espConfigPreview, setEspConfigPreview] = useState("");
   const [unassignedRfid, setUnassignedRfid] = useState<UnassignedRfidScan[]>([]);
   const [assignRfidTag, setAssignRfidTag] = useState("");
   const [assignRfidUserId, setAssignRfidUserId] = useState("");
@@ -116,6 +134,7 @@ export function AdminHome() {
     setUnassignedRfid(scans);
     setOtUserId((prev) => prev || (emps[0]?.id ?? ""));
     setAssignRfidUserId((prev) => prev || (emps[0]?.id ?? ""));
+    setEspTerminalId((prev) => prev || (trms[0]?.id ?? ""));
     applyTheme(cfg as PublicConfig);
   }
 
@@ -148,6 +167,7 @@ export function AdminHome() {
     if (section === "employees") return "Mitarbeiter";
     if (section === "overtime") return "Ueberstunden";
     if (section === "terminals") return "RFID-Terminals";
+    if (section === "esp") return "ESP32 Provisioning";
     if (section === "logs") return "Log";
     return "Admin";
   }, [section]);
@@ -166,6 +186,7 @@ export function AdminHome() {
         <button onClick={() => setSearchParams({ section: "employees" })}>Mitarbeiter</button>
         <button onClick={() => setSearchParams({ section: "overtime" })}>Ueberstunden</button>
         <button onClick={() => setSearchParams({ section: "terminals" })}>RFID-Terminals</button>
+        <button onClick={() => setSearchParams({ section: "esp" })}>ESP32 Provisioning</button>
         <button onClick={() => setSearchParams({ section: "logs" })}>Log</button>
       </div>
 
@@ -857,6 +878,184 @@ export function AdminHome() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {section === "esp" && (
+        <div className="admin-section">
+          <div className="card admin-section-card" style={{ padding: 12 }}>
+            <h4>ESP32 Konfiguration erstellen</h4>
+            <div className="grid">
+              <label>
+                RFID-Terminal
+                <select value={espTerminalId} onChange={(e) => setEspTerminalId(e.target.value)}>
+                  {terminals.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name} ({t.location || "ohne Standort"})</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                WLAN SSID
+                <input value={espWifiSsid} onChange={(e) => setEspWifiSsid(e.target.value)} />
+              </label>
+              <label>
+                WLAN Passwort
+                <input type="password" value={espWifiPassword} onChange={(e) => setEspWifiPassword(e.target.value)} />
+              </label>
+              <label>
+                Server IP / DynDNS
+                <input placeholder="z.B. zeit.example.de oder 192.168.178.10" value={espServerHost} onChange={(e) => setEspServerHost(e.target.value)} />
+              </label>
+              <label>
+                Server Port
+                <input type="number" min={1} max={65535} value={espServerPort} onChange={(e) => setEspServerPort(Number(e.target.value))} />
+              </label>
+              <label>
+                HTTPS verwenden
+                <select value={espUseTls ? "yes" : "no"} onChange={(e) => setEspUseTls(e.target.value === "yes")}>
+                  <option value="no">Nein (http)</option>
+                  <option value="yes">Ja (https)</option>
+                </select>
+              </label>
+              <label>
+                RFID/NFC Modul
+                <select value={espReaderType} onChange={(e) => {
+                  const rt = e.target.value as "RC522" | "PN532";
+                  setEspReaderType(rt);
+                  if (rt === "RC522") {
+                    setEspPins({ sck: 18, miso: 19, mosi: 23, ss: 5, rst: 22 });
+                  } else {
+                    setEspPins({ sda: 21, scl: 22, irq: 4, rst: 16 });
+                  }
+                }}>
+                  <option value="RC522">RC522 (SPI)</option>
+                  <option value="PN532">PN532 / NFC Module V3</option>
+                </select>
+              </label>
+              {espReaderType === "PN532" && (
+                <label>
+                  PN532 Modus
+                  <select value={espPn532Mode} onChange={(e) => setEspPn532Mode(e.target.value as "I2C" | "SPI")}>
+                    <option value="I2C">I2C</option>
+                    <option value="SPI">SPI</option>
+                  </select>
+                </label>
+              )}
+              <label>
+                LCD aktiviert
+                <select value={espDisplayEnabled ? "yes" : "no"} onChange={(e) => setEspDisplayEnabled(e.target.value === "yes")}>
+                  <option value="yes">Ja</option>
+                  <option value="no">Nein</option>
+                </select>
+              </label>
+              {espDisplayEnabled && (
+                <label>
+                  LCD Zeilen
+                  <input type="number" min={1} max={8} value={espDisplayRows} onChange={(e) => setEspDisplayRows(Number(e.target.value))} />
+                </label>
+              )}
+            </div>
+
+            <h4 style={{ marginTop: 12 }}>Pinbelegung</h4>
+            <div className="admin-table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Signal</th><th>GPIO</th><th>Hinweis</th></tr>
+                </thead>
+                <tbody>
+                  {espReaderType === "RC522" && (
+                    <>
+                      <tr><td>SCK</td><td><input type="number" value={espPins.sck ?? 18} onChange={(e) => setEspPins({ ...espPins, sck: Number(e.target.value) })} /></td><td>SPI Clock</td></tr>
+                      <tr><td>MISO</td><td><input type="number" value={espPins.miso ?? 19} onChange={(e) => setEspPins({ ...espPins, miso: Number(e.target.value) })} /></td><td>SPI MISO</td></tr>
+                      <tr><td>MOSI</td><td><input type="number" value={espPins.mosi ?? 23} onChange={(e) => setEspPins({ ...espPins, mosi: Number(e.target.value) })} /></td><td>SPI MOSI</td></tr>
+                      <tr><td>SS(SDA)</td><td><input type="number" value={espPins.ss ?? 5} onChange={(e) => setEspPins({ ...espPins, ss: Number(e.target.value) })} /></td><td>Chip Select</td></tr>
+                      <tr><td>RST</td><td><input type="number" value={espPins.rst ?? 22} onChange={(e) => setEspPins({ ...espPins, rst: Number(e.target.value) })} /></td><td>Reset</td></tr>
+                    </>
+                  )}
+                  {espReaderType === "PN532" && espPn532Mode === "I2C" && (
+                    <>
+                      <tr><td>SDA</td><td><input type="number" value={espPins.sda ?? 21} onChange={(e) => setEspPins({ ...espPins, sda: Number(e.target.value) })} /></td><td>I2C Data</td></tr>
+                      <tr><td>SCL</td><td><input type="number" value={espPins.scl ?? 22} onChange={(e) => setEspPins({ ...espPins, scl: Number(e.target.value) })} /></td><td>I2C Clock</td></tr>
+                      <tr><td>IRQ</td><td><input type="number" value={espPins.irq ?? 4} onChange={(e) => setEspPins({ ...espPins, irq: Number(e.target.value) })} /></td><td>Interrupt (optional)</td></tr>
+                      <tr><td>RSTO</td><td><input type="number" value={espPins.rst ?? 16} onChange={(e) => setEspPins({ ...espPins, rst: Number(e.target.value) })} /></td><td>Reset (optional)</td></tr>
+                    </>
+                  )}
+                  {espReaderType === "PN532" && espPn532Mode === "SPI" && (
+                    <>
+                      <tr><td>SCK</td><td><input type="number" value={espPins.sck ?? 18} onChange={(e) => setEspPins({ ...espPins, sck: Number(e.target.value) })} /></td><td>SPI Clock</td></tr>
+                      <tr><td>MISO</td><td><input type="number" value={espPins.miso ?? 19} onChange={(e) => setEspPins({ ...espPins, miso: Number(e.target.value) })} /></td><td>SPI MISO</td></tr>
+                      <tr><td>MOSI</td><td><input type="number" value={espPins.mosi ?? 23} onChange={(e) => setEspPins({ ...espPins, mosi: Number(e.target.value) })} /></td><td>SPI MOSI</td></tr>
+                      <tr><td>SS</td><td><input type="number" value={espPins.ss ?? 5} onChange={(e) => setEspPins({ ...espPins, ss: Number(e.target.value) })} /></td><td>Chip Select</td></tr>
+                      <tr><td>RSTO</td><td><input type="number" value={espPins.rst ?? 16} onChange={(e) => setEspPins({ ...espPins, rst: Number(e.target.value) })} /></td><td>Reset (optional)</td></tr>
+                    </>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="card" style={{ marginTop: 10, padding: 10 }}>
+              <strong>Anzeigeverhalten (LCD)</strong>
+              <div>Ruhezustand: Firmenname + Datum/Uhrzeit.</div>
+              <div>Scan: Mitarbeitername + Kommen/Gehen + Uhrzeit.</div>
+              <div>Bei Gehen: Tagesarbeitszeit (aufsummiert) anzeigen.</div>
+            </div>
+
+            <div className="row" style={{ marginTop: 10 }}>
+              <button
+                onClick={async () => {
+                  try {
+                    const configJson = await api.generateEspProvisionConfig({
+                      terminalId: espTerminalId,
+                      wifiSsid: espWifiSsid.trim(),
+                      wifiPassword: espWifiPassword,
+                      serverHost: espServerHost.trim(),
+                      serverPort: Number(espServerPort),
+                      useTls: espUseTls,
+                      displayEnabled: espDisplayEnabled,
+                      displayRows: Number(espDisplayRows),
+                      readerType: espReaderType,
+                      pn532Mode: espReaderType === "PN532" ? espPn532Mode : undefined,
+                      pins: espPins
+                    });
+                    const pretty = JSON.stringify(configJson, null, 2);
+                    setEspConfigPreview(pretty);
+                    setMsg("ESP32 Konfiguration erstellt.");
+                  } catch (e) {
+                    setMsg((e as Error).message);
+                  }
+                }}
+              >
+                Konfiguration erzeugen
+              </button>
+              <button
+                className="secondary"
+                onClick={() => {
+                  if (!espConfigPreview) {
+                    setMsg("Bitte zuerst Konfiguration erzeugen.");
+                    return;
+                  }
+                  const blob = new Blob([espConfigPreview], { type: "application/json" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = "esp32-terminal-config.json";
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+              >
+                JSON herunterladen
+              </button>
+            </div>
+
+            <label style={{ marginTop: 10 }}>
+              JSON Vorschau
+              <textarea
+                value={espConfigPreview}
+                readOnly
+                style={{ minHeight: 240, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
+              />
+            </label>
           </div>
         </div>
       )}

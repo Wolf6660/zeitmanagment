@@ -432,6 +432,101 @@ adminRouter.post("/rfid/assign", async (req: AuthRequest, res) => {
   res.json(updated);
 });
 
+const espProvisionSchema = z.object({
+  terminalId: z.string().min(1),
+  wifiSsid: z.string().min(1),
+  wifiPassword: z.string().min(1),
+  serverHost: z.string().min(1),
+  serverPort: z.number().int().min(1).max(65535),
+  useTls: z.boolean(),
+  displayEnabled: z.boolean(),
+  displayRows: z.number().int().min(1).max(8),
+  readerType: z.enum(["RC522", "PN532"]),
+  pn532Mode: z.enum(["I2C", "SPI"]).optional(),
+  pins: z.object({
+    sda: z.number().int().min(0).max(39).optional(),
+    scl: z.number().int().min(0).max(39).optional(),
+    mosi: z.number().int().min(0).max(39).optional(),
+    miso: z.number().int().min(0).max(39).optional(),
+    sck: z.number().int().min(0).max(39).optional(),
+    ss: z.number().int().min(0).max(39).optional(),
+    rst: z.number().int().min(0).max(39).optional(),
+    irq: z.number().int().min(0).max(39).optional()
+  })
+});
+
+adminRouter.post("/esp/provision-config", async (req: AuthRequest, res) => {
+  const parsed = espProvisionSchema.safeParse(req.body);
+  if (!parsed.success || !req.auth) {
+    res.status(400).json({ message: "Ungueltige Eingaben." });
+    return;
+  }
+
+  const terminal = await prisma.rfidTerminal.findUnique({
+    where: { id: parsed.data.terminalId },
+    select: { id: true, name: true, apiKey: true, isActive: true }
+  });
+  if (!terminal) {
+    res.status(404).json({ message: "Terminal nicht gefunden." });
+    return;
+  }
+
+  const endpoint = `${parsed.data.useTls ? "https" : "http"}://${parsed.data.serverHost}:${parsed.data.serverPort}/api/terminal/punch`;
+  const payload = {
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    terminal: {
+      id: terminal.id,
+      name: terminal.name,
+      key: terminal.apiKey,
+      active: terminal.isActive
+    },
+    network: {
+      wifiSsid: parsed.data.wifiSsid,
+      wifiPassword: parsed.data.wifiPassword
+    },
+    server: {
+      endpoint,
+      host: parsed.data.serverHost,
+      port: parsed.data.serverPort,
+      useTls: parsed.data.useTls
+    },
+    hardware: {
+      readerType: parsed.data.readerType,
+      pn532Mode: parsed.data.readerType === "PN532" ? (parsed.data.pn532Mode || "I2C") : undefined,
+      pins: parsed.data.pins,
+      display: {
+        enabled: parsed.data.displayEnabled,
+        rows: parsed.data.displayRows
+      }
+    },
+    displayBehaviour: {
+      idleLine1: "Firmenname",
+      idleLine2: "Datum + Uhrzeit",
+      onScan: "Name + Kommen/Gehen + Uhrzeit",
+      onClockOut: "zusaetzlich Tagesarbeitszeit (aufsummiert)"
+    }
+  };
+
+  await writeAuditLog({
+    actorUserId: req.auth.userId,
+    actorLoginName: await resolveActorLoginName(req.auth.userId),
+    action: "ESP_PROVISION_CONFIG_GENERATED",
+    targetType: "RfidTerminal",
+    targetId: terminal.id,
+    payload: {
+      terminalId: terminal.id,
+      readerType: parsed.data.readerType,
+      displayEnabled: parsed.data.displayEnabled,
+      displayRows: parsed.data.displayRows,
+      serverHost: parsed.data.serverHost,
+      serverPort: parsed.data.serverPort
+    }
+  });
+
+  res.json(payload);
+});
+
 adminRouter.get("/audit-logs", async (_req, res) => {
   const logs = await prisma.auditLog.findMany({
     orderBy: { createdAt: "desc" },
