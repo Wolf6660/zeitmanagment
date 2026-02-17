@@ -139,7 +139,7 @@ export const api = {
     ),
 
   supervisorOverview: () =>
-    request<Array<{ userId: string; istHours: number; overtimeHours: number }>>(
+    request<{ monthLabel: string; monthPlannedHours: number; rows: Array<{ userId: string; istHours: number; sollHours: number; overtimeHours: number }> }>(
       "/api/time/supervisor-overview"
     ),
 

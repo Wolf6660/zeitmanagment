@@ -156,7 +156,7 @@ export function AdminHome() {
       <h3>{sectionTitle}</h3>
 
       {section === "company" && (
-        <div className="grid grid-2 admin-section">
+        <div className="grid admin-section">
           <label>
             Firmenname
             <input value={config.companyName || ""} onChange={(e) => setConfig({ ...config, companyName: e.target.value })} />
@@ -191,7 +191,7 @@ export function AdminHome() {
       )}
 
       {section === "rules" && (
-        <div className="grid grid-2 admin-section">
+        <div className="grid admin-section">
           <label>
             Standard Sollarbeitszeit/Tag
             <input type="number" step="0.25" value={config.defaultDailyHours} onChange={(e) => setConfig({ ...config, defaultDailyHours: Number(e.target.value) })} />
@@ -387,7 +387,7 @@ export function AdminHome() {
         <div className="grid admin-section">
           <div className="card admin-section-card" style={{ padding: 12 }}>
             <h4>Neuen Mitarbeiter anlegen</h4>
-            <div className="grid grid-2">
+            <div className="grid">
               <input placeholder="Name" value={newEmployee.name} onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })} />
               <input placeholder="E-Mail" value={newEmployee.email} onChange={(e) => setNewEmployee({ ...newEmployee, email: e.target.value })} />
               <input placeholder="Loginname" value={newEmployee.loginName} onChange={(e) => setNewEmployee({ ...newEmployee, loginName: e.target.value })} />

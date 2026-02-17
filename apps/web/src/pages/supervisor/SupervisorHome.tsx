@@ -8,7 +8,8 @@ function kindLabel(kind: string): string {
 export function SupervisorHome() {
   const session = getSession();
   const [employees, setEmployees] = useState<Array<{ id: string; name: string; loginName?: string; role: string; annualVacationDays: number; carryOverVacationDays: number }>>([]);
-  const [overview, setOverview] = useState<Record<string, { istHours: number; overtimeHours: number }>>({});
+  const [overview, setOverview] = useState<Record<string, { istHours: number; sollHours: number; overtimeHours: number }>>({});
+  const [monthPlannedText, setMonthPlannedText] = useState("");
   const [vacationAvailable, setVacationAvailable] = useState<Record<string, number>>({});
   const [pending, setPending] = useState<Array<{ id: string; kind: string; startDate: string; endDate: string; note?: string; userId: string; availableVacationDays: number; requestedWorkingDays: number; remainingVacationAfterRequest: number; availableOvertimeHours: number; user: { name: string } }>>([]);
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -27,7 +28,8 @@ export function SupervisorHome() {
     const [e, p, ov, sp, t] = await Promise.all([api.employees(), api.pendingLeaves(), api.supervisorOverview(), api.pendingSpecialWork(), api.todayEntries(session.user.id)]);
     setEmployees(e);
     setPending(p);
-    setOverview(Object.fromEntries(ov.map((x) => [x.userId, { istHours: x.istHours, overtimeHours: x.overtimeHours }])));
+    setOverview(Object.fromEntries(ov.rows.map((x) => [x.userId, { istHours: x.istHours, sollHours: x.sollHours, overtimeHours: x.overtimeHours }])));
+    setMonthPlannedText(`${ov.monthLabel} - ${ov.monthPlannedHours.toFixed(2)} Stunden`);
     setSpecialPending(sp);
     setTodayEntries(t);
     const vacRows = await Promise.all(
@@ -44,7 +46,7 @@ export function SupervisorHome() {
   }, []);
 
   return (
-    <div className="layout-2-1">
+    <div className="layout-1-2">
       <div className="card">
         <h2>Eigene Stempeluhr</h2>
         <div className="grid">
@@ -82,6 +84,7 @@ export function SupervisorHome() {
 
       <div className="card">
         <h2>Uebersicht Mitarbeiter</h2>
+        {monthPlannedText && <div style={{ marginBottom: 8, color: "var(--muted)", fontWeight: 600 }}>Monat Sollstunden: {monthPlannedText}</div>}
         <table>
           <thead>
             <tr><th>Name</th><th>Rolle</th><th>Ist-Stunden</th><th>Ueberstunden</th><th>Vorhandener Urlaub</th></tr>

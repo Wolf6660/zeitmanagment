@@ -926,32 +926,96 @@ timeRouter.get("/supervisor-overview", requireRole([Role.SUPERVISOR, Role.ADMIN]
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59));
 
-  const [users, config, holidaysAll] = await Promise.all([
-    prisma.user.findMany({ where: { isActive: true }, select: { id: true, dailyWorkHours: true, overtimeBalanceHours: true } }),
+  const [users, config, holidaysAll, entries, credits, approvals] = await Promise.all([
+    prisma.user.findMany({
+      where: { isActive: true },
+      select: { id: true, dailyWorkHours: true, overtimeBalanceHours: true, timeTrackingEnabled: true }
+    }),
     prisma.systemConfig.findUnique({ where: { id: 1 } }),
-    prisma.holiday.findMany({ where: { date: { gte: monthStart, lte: monthEnd } } })
+    prisma.holiday.findMany({ where: { date: { gte: monthStart, lte: monthEnd } } }),
+    prisma.timeEntry.findMany({ where: { occurredAt: { gte: monthStart, lte: monthEnd } } }),
+    prisma.breakCredit.findMany({ where: { date: { gte: monthStart, lte: monthEnd } } }),
+    prisma.specialWorkApproval.findMany({ where: { date: { gte: monthStart, lte: monthEnd } } })
   ]);
 
   const workingDays = parseWorkingDaySet(config?.defaultWeeklyWorkingDays);
   const holidaySet = new Set(holidaysAll.map((h) => dayKey(h.date)));
+  const autoBreakMinutes = config?.autoBreakMinutes ?? 30;
+  const autoBreakAfterHours = config?.autoBreakAfterHours ?? 6;
+
+  const entriesByUserDay = new Map<string, { type: TimeEntryType; occurredAt: Date }[]>();
+  for (const entry of entries) {
+    const key = `${entry.userId}:${dayKey(entry.occurredAt)}`;
+    const list = entriesByUserDay.get(key) ?? [];
+    list.push({ type: entry.type, occurredAt: entry.occurredAt });
+    entriesByUserDay.set(key, list);
+  }
+
+  const creditsByUserDay = new Map<string, number>();
+  for (const credit of credits) {
+    const key = `${credit.userId}:${dayKey(credit.date)}`;
+    creditsByUserDay.set(key, (creditsByUserDay.get(key) ?? 0) + credit.minutes);
+  }
+
+  const approvalByUserDay = new Map<string, ApprovalStatus>();
+  for (const approval of approvals) {
+    const key = `${approval.userId}:${dayKey(approval.date)}`;
+    approvalByUserDay.set(key, approval.status);
+  }
+
+  let monthPlannedHours = 0;
+  const monthLabelDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const monthLabelRaw = monthLabelDate.toLocaleDateString("de-DE", { month: "long", year: "numeric", timeZone: "UTC" });
+  const monthLabel = monthLabelRaw.charAt(0).toUpperCase() + monthLabelRaw.slice(1);
+
+  for (let d = new Date(monthStart); d <= monthEnd; d = new Date(d.getTime() + 86400000)) {
+    const isWorkday = workingDays.has(d.getUTCDay()) && !holidaySet.has(dayKey(d));
+    if (isWorkday) {
+      monthPlannedHours += config?.defaultDailyHours ?? 8;
+    }
+  }
 
   const rows = users.map((u) => {
     const dailyHours = u.dailyWorkHours ?? config?.defaultDailyHours ?? 8;
     let requiredCurrentMonthHours = 0;
+    let workedCurrentMonthHours = 0;
 
     for (let d = new Date(monthStart); d <= monthEnd; d = new Date(d.getTime() + 86400000)) {
       const k = dayKey(d);
       const isWorkday = workingDays.has(d.getUTCDay()) && !holidaySet.has(k);
       const planned = isWorkday ? dailyHours : 0;
       requiredCurrentMonthHours += planned;
+
+      const dayEntries = entriesByUserDay.get(`${u.id}:${k}`) ?? [];
+      const grossMinutes = calculateWorkedMinutes(dayEntries);
+      const autoBreakApplies = grossMinutes >= autoBreakAfterHours * 60;
+      const creditMinutes = creditsByUserDay.get(`${u.id}:${k}`) ?? 0;
+      const netMinutes = Math.max(grossMinutes - (autoBreakApplies ? autoBreakMinutes : 0) + creditMinutes, 0);
+
+      const isHoliday = holidaySet.has(k);
+      const weekend = isWeekend(d);
+      const requiresApproval = isHoliday || weekend;
+      const approvalStatus = approvalByUserDay.get(`${u.id}:${k}`) ?? null;
+      if (!requiresApproval || approvalStatus === ApprovalStatus.APPROVED) {
+        workedCurrentMonthHours += netMinutes / 60;
+      }
+    }
+
+    if (u.timeTrackingEnabled === false) {
+      workedCurrentMonthHours = requiredCurrentMonthHours;
     }
 
     return {
       userId: u.id,
-      istHours: Number(requiredCurrentMonthHours.toFixed(2)),
+      istHours: Number(workedCurrentMonthHours.toFixed(2)),
+      sollHours: Number(requiredCurrentMonthHours.toFixed(2)),
       overtimeHours: Number((u.overtimeBalanceHours ?? 0).toFixed(2))
     };
   });
 
-  res.json(rows);
+  res.json({
+    monthLabel,
+    monthPlannedHours: Number(monthPlannedHours.toFixed(2)),
+    rows
+  });
 });
