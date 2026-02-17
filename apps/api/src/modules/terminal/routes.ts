@@ -19,6 +19,30 @@ function dayEndUtc(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 23, 59, 59, 999));
 }
 
+function lastSundayOfMonthUtc(year: number, monthIndex: number): Date {
+  const d = new Date(Date.UTC(year, monthIndex + 1, 0, 0, 0, 0, 0));
+  const dow = d.getUTCDay();
+  d.setUTCDate(d.getUTCDate() - dow);
+  return d;
+}
+
+function isBerlinDstAtUtc(date: Date): boolean {
+  const y = date.getUTCFullYear();
+  const startDay = lastSundayOfMonthUtc(y, 2); // March
+  const endDay = lastSundayOfMonthUtc(y, 9); // October
+  const start = new Date(Date.UTC(y, 2, startDay.getUTCDate(), 1, 0, 0)); // 01:00 UTC
+  const end = new Date(Date.UTC(y, 9, endDay.getUTCDate(), 1, 0, 0)); // 01:00 UTC
+  return date >= start && date < end;
+}
+
+function formatBerlinTime(date: Date): string {
+  const offsetHours = isBerlinDstAtUtc(date) ? 2 : 1;
+  const local = new Date(date.getTime() + offsetHours * 3600000);
+  const hh = String(local.getUTCHours()).padStart(2, "0");
+  const mm = String(local.getUTCMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
 function calculateWorkedMinutes(entries: { type: TimeEntryType; occurredAt: Date }[]): number {
   const sorted = [...entries].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
   let currentIn: Date | null = null;
@@ -100,7 +124,7 @@ terminalRouter.post("/next-type", async (req, res) => {
   });
   const nextType = lastEntry?.type === TimeEntryType.CLOCK_IN ? TimeEntryType.CLOCK_OUT : TimeEntryType.CLOCK_IN;
   const blockedDuplicate = !!(lastEntry && lastEntry.source === TimeEntrySource.RFID && Date.now() - lastEntry.occurredAt.getTime() < 30_000);
-  const displayTime = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Europe/Berlin" }).format(new Date());
+  const displayTime = formatBerlinTime(new Date());
   res.json({ nextType, blockedDuplicate, employeeName: user.name, displayTime });
 });
 
@@ -153,41 +177,54 @@ terminalRouter.post("/punch", async (req, res) => {
   }
 
   const now = new Date();
-  const lastEntry = await prisma.timeEntry.findFirst({
-    where: { userId: user.id },
-    orderBy: { occurredAt: "desc" },
-    select: { type: true, source: true, occurredAt: true, id: true }
+  const lockKey = `rfid:${user.id}`;
+  const txResult = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT GET_LOCK(${lockKey}, 5)`;
+    try {
+      const lastEntry = await tx.timeEntry.findFirst({
+        where: { userId: user.id },
+        orderBy: { occurredAt: "desc" },
+        select: { type: true, source: true, occurredAt: true, id: true }
+      });
+      if (lastEntry && lastEntry.source === TimeEntrySource.RFID && now.getTime() - lastEntry.occurredAt.getTime() < 30_000) {
+        return { duplicate: true as const, lastEntry };
+      }
+      const effectiveType: TimeEntryType = lastEntry?.type === TimeEntryType.CLOCK_IN ? TimeEntryType.CLOCK_OUT : TimeEntryType.CLOCK_IN;
+      const entry = await tx.timeEntry.create({
+        data: {
+          userId: user.id,
+          type: effectiveType,
+          source: TimeEntrySource.RFID,
+          reasonText: parsed.data.reasonText,
+          occurredAt: now
+        }
+      });
+      return { duplicate: false as const, entry, effectiveType };
+    } finally {
+      await tx.$queryRaw`DO RELEASE_LOCK(${lockKey})`;
+    }
   });
-  // Schutz gegen doppelte RFID-Buchung bei Reboot/mehrfacher Kartenerkennung.
-  if (lastEntry && lastEntry.source === TimeEntrySource.RFID && now.getTime() - lastEntry.occurredAt.getTime() < 30_000) {
+
+  if (txResult.duplicate) {
     const dayStart = dayStartUtc(now);
     const dayEnd = dayEndUtc(now);
     const workedTodayHours = await computeWorkedTodayHours(user.id, dayStart, dayEnd);
-    const displayTime = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Europe/Berlin" }).format(now);
+    const displayTime = formatBerlinTime(now);
     res.status(200).json({
       ok: true,
       ignoredDuplicate: true,
       terminalId: terminal.id,
-      entryId: lastEntry.id,
-      occurredAt: lastEntry.occurredAt,
+      entryId: txResult.lastEntry.id,
+      occurredAt: txResult.lastEntry.occurredAt,
       employeeName: user.name,
-      action: lastEntry.type === TimeEntryType.CLOCK_IN ? "KOMMEN" : "GEHEN",
+      action: txResult.lastEntry.type === TimeEntryType.CLOCK_IN ? "KOMMEN" : "GEHEN",
       workedTodayHours,
       displayTime
     });
     return;
   }
-  const effectiveType: TimeEntryType = lastEntry?.type === TimeEntryType.CLOCK_IN ? TimeEntryType.CLOCK_OUT : TimeEntryType.CLOCK_IN;
-
-  const entry = await prisma.timeEntry.create({
-    data: {
-      userId: user.id,
-      type: effectiveType,
-      source: TimeEntrySource.RFID,
-      reasonText: parsed.data.reasonText,
-      occurredAt: now
-    }
-  });
+  const entry = txResult.entry;
+  const effectiveType = txResult.effectiveType;
 
   const dayStart = dayStartUtc(entry.occurredAt);
   const dayEnd = dayEndUtc(entry.occurredAt);
@@ -209,7 +246,7 @@ terminalRouter.post("/punch", async (req, res) => {
   });
 
   const workedTodayHours = await computeWorkedTodayHours(user.id, dayStart, dayEnd);
-  const displayTime = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Europe/Berlin" }).format(now);
+  const displayTime = formatBerlinTime(now);
 
   res.status(201).json({
     ok: true,

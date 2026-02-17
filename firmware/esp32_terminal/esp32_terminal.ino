@@ -419,7 +419,11 @@ bool fetchNextType(const String &uid, String &nextType, String &errText) {
   }
   bool blocked = in["blockedDuplicate"] | false;
   if (blocked) {
-    errText = "Doppelbuchung blockiert";
+    employeeName = String((const char*) (in["employeeName"] | "Mitarbeiter"));
+    const char* dt = in["displayTime"] | "";
+    timeLabel = strlen(dt) >= 4 ? String(dt) : nowDateTime().substring(11);
+    actionLabel = "BLOCKIERT";
+    workedTodayHours = in["workedTodayHours"] | 0.0;
     return false;
   }
   nextType = String((const char*) (in["nextType"] | "CLOCK_IN"));
@@ -514,8 +518,13 @@ void loop() {
       }
       Serial.printf("%s %s %s / Heute %.2f h\n", employeeName.c_str(), actionLabel.c_str(), timeLabel.c_str(), workedTodayHours);
     } else {
-      showMessage("Buchung fehlgeschl.", errText.substring(0, 20));
-      Serial.printf("Punch Fehler: %s\n", errText.c_str());
+      if (actionLabel == "BLOCKIERT") {
+        showMessage(employeeName, "Doppelbuchung", "blockiert " + timeLabel);
+        Serial.printf("%s Doppelbuchung blockiert %s\n", employeeName.c_str(), timeLabel.c_str());
+      } else {
+        showMessage("Buchung fehlgeschl.", errText.substring(0, 20));
+        Serial.printf("Punch Fehler: %s\n", errText.c_str());
+      }
     }
 
     delay(700);
