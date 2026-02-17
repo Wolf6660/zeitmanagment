@@ -10,6 +10,8 @@ export type PublicConfig = {
   colorSickLeave: string;
   colorHolidayOrWeekendWork: string;
   colorVacationWarning: string;
+  colorWebEntry: string;
+  colorOvertime: string;
 };
 
 export function applyTheme(config: PublicConfig): void {
@@ -21,4 +23,6 @@ export function applyTheme(config: PublicConfig): void {
   root.style.setProperty("--sick", config.colorSickLeave);
   root.style.setProperty("--holiday", config.colorHolidayOrWeekendWork);
   root.style.setProperty("--warning", config.colorVacationWarning);
+  root.style.setProperty("--web-entry", config.colorWebEntry);
+  root.style.setProperty("--overtime", config.colorOvertime);
 }

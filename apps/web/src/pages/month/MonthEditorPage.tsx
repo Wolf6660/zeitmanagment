@@ -61,7 +61,13 @@ export function MonthEditorPage() {
                     <td>{d.plannedHours.toFixed(2)}</td>
                     <td>{d.workedHours.toFixed(2)}</td>
                     <td>
-                      <div>{d.entries.map((e: any) => `${e.type === "CLOCK_IN" ? "K" : "G"} ${e.time}`).join(" | ")}</div>
+                      <div>
+                        {d.entries.map((e: any) => (
+                          <span key={`entry-${d.date}-${e.id || e.time}`} style={{ marginRight: 8, color: e.source === "WEB" ? "var(--web-entry)" : "inherit" }}>
+                            {e.type === "CLOCK_IN" ? "K" : "G"} {e.time}
+                          </span>
+                        ))}
+                      </div>
                       {d.entries.some((e: any) => (e.reasonText || "").trim().length > 0) && (
                         <div style={{ marginTop: 6 }}>
                           <button

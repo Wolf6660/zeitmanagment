@@ -259,6 +259,8 @@ model SystemConfig {
   colorSickLeave                    String   @default("#3B82F6")
   colorHolidayOrWeekendWork         String   @default("#F97316")
   colorVacationWarning              String   @default("#F59E0B")
+  colorWebEntry                     String   @default("#7DD3FC")
+  colorOvertime                     String   @default("#0EA5E9")
 
   smtpEnabled                       Boolean  @default(false)
   smtpHost                          String?

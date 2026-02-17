@@ -9,7 +9,7 @@ export function EmployeeMonthPage() {
   const [monthView, setMonthView] = useState<{
     monthPlanned: number;
     monthWorked: number;
-    days: Array<{ date: string; plannedHours: number; workedHours: number; isHoliday: boolean; isWeekend: boolean; entries: Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; time: string; reasonText?: string }> }>;
+    days: Array<{ date: string; plannedHours: number; workedHours: number; isHoliday: boolean; isWeekend: boolean; entries: Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; time: string; source?: string; reasonText?: string }> }>;
   } | null>(null);
   const [msg, setMsg] = useState("");
 
@@ -50,7 +50,7 @@ export function EmployeeMonthPage() {
                 <td>{d.workedHours.toFixed(2)}</td>
                 <td>
                   {d.entries.map((e) => (
-                    <span key={e.id} style={{ marginRight: 8 }}>
+                    <span key={e.id} style={{ marginRight: 8, color: e.source === "WEB" ? "var(--web-entry)" : "inherit" }}>
                       {e.type === "CLOCK_IN" ? "K" : "G"} {e.time}
                       {e.reasonText ? ` (${e.reasonText})` : ""}
                     </span>

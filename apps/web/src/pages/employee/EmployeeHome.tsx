@@ -153,7 +153,7 @@ export function EmployeeHome() {
             <strong>Heute erfasst</strong>
             {todayEntries.length === 0 && <div>Keine Ereignisse heute.</div>}
             {todayEntries.map((e) => (
-              <div key={e.id} style={{ color: e.source === "MANUAL_CORRECTION" ? "var(--manual)" : "inherit" }}>
+              <div key={e.id} style={{ color: e.source === "MANUAL_CORRECTION" ? "var(--manual)" : e.source === "WEB" ? "var(--web-entry)" : "inherit" }}>
                 {e.type === "CLOCK_IN" ? "Kommen" : "Gehen"} {new Date(e.occurredAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
                 {e.reasonText ? ` - ${e.reasonText}` : ""}
               </div>
@@ -169,7 +169,7 @@ export function EmployeeHome() {
           <div className="grid">
             <div>Sollstunden: <strong>{summary.plannedHours.toFixed(2)}</strong></div>
             <div>Geleistete Stunden: <strong>{summary.workedHours.toFixed(2)}</strong></div>
-            <div>Ueberstunden: <strong>{summary.overtimeHours.toFixed(2)}</strong></div>
+            <div>Ueberstunden: <strong style={{ color: "var(--overtime)" }}>{summary.overtimeHours.toFixed(2)}</strong></div>
             {summary.longShiftAlert && <StatusBadge text=">12h erkannt" color="var(--warning)" />}
           </div>
         )}

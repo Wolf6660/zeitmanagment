@@ -22,16 +22,31 @@ export function SupervisorHome() {
   const [specialNotes, setSpecialNotes] = useState<Record<string, string>>({});
   const [reasonText, setReasonText] = useState("");
   const [todayEntries, setTodayEntries] = useState<Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; occurredAt: string; source: string; reasonText?: string }>>([]);
+  const [todayOverview, setTodayOverview] = useState<Array<{ id: string; userId: string; userName: string; loginName: string; type: "CLOCK_IN" | "CLOCK_OUT"; occurredAt: string; source: string; reasonText?: string | null }>>([]);
+  const [manualMode, setManualMode] = useState(false);
+  const [manualNote, setManualNote] = useState("");
+  const [manualIn, setManualIn] = useState("");
+  const [manualOut, setManualOut] = useState("");
+  const [manualDate, setManualDate] = useState("");
+  const [maxBackDays, setMaxBackDays] = useState(3);
 
   async function loadData() {
     if (!session) return;
-    const [e, p, ov, sp, t] = await Promise.all([api.employees(), api.pendingLeaves(), api.supervisorOverview(), api.pendingSpecialWork(), api.todayEntries(session.user.id)]);
+    const [e, p, ov, sp, t, to] = await Promise.all([
+      api.employees(),
+      api.pendingLeaves(),
+      api.supervisorOverview(),
+      api.pendingSpecialWork(),
+      api.todayEntries(session.user.id),
+      api.todayOverview()
+    ]);
     setEmployees(e);
     setPending(p);
     setOverview(Object.fromEntries(ov.rows.map((x) => [x.userId, { istHours: x.istHours, sollHours: x.sollHours, overtimeHours: x.overtimeHours }])));
     setMonthPlannedText(`${ov.monthLabel} - ${ov.monthPlannedHours.toFixed(2)} Stunden`);
     setSpecialPending(sp);
     setTodayEntries(t);
+    setTodayOverview(to);
     const vacRows = await Promise.all(
       e.map(async (emp) => {
         const v = await api.leaveAvailability(emp.id);
@@ -44,6 +59,18 @@ export function SupervisorHome() {
   useEffect(() => {
     loadData().catch((e) => setMsg((e as Error).message));
   }, []);
+
+  useEffect(() => {
+    api.publicConfig()
+      .then((cfg) => setMaxBackDays(cfg.selfCorrectionMaxDays ?? 3))
+      .catch(() => setMaxBackDays(3));
+  }, []);
+
+  useEffect(() => {
+    if (manualMode && !manualDate) {
+      setManualDate(new Date().toISOString().slice(0, 10));
+    }
+  }, [manualMode, manualDate]);
 
   return (
     <div className="layout-1-2">
@@ -69,11 +96,60 @@ export function SupervisorHome() {
               } catch (e) { setMsg((e as Error).message); }
             }}>Gehen</button>
           </div>
+          <button className="secondary" onClick={() => setManualMode((m) => !m)}>
+            {manualMode ? "Nachtragen schliessen" : "Nachtrag"}
+          </button>
+          {manualMode && (
+            <div className="card" style={{ padding: 10 }}>
+              <strong>Zeiten nachtragen</strong>
+              <div style={{ color: "var(--muted)" }}>Rueckwirkend bis {maxBackDays} Tage, nie in die Zukunft.</div>
+              <div className="grid" style={{ marginTop: 8 }}>
+                <label>
+                  Datum
+                  <input
+                    type="date"
+                    value={manualDate}
+                    onChange={(e) => setManualDate(e.target.value)}
+                    max={new Date().toISOString().slice(0, 10)}
+                    min={new Date(Date.now() - maxBackDays * 86400000).toISOString().slice(0, 10)}
+                  />
+                </label>
+                <label>
+                  Kommen
+                  <input type="time" step={60} value={manualIn} onChange={(e) => setManualIn(e.target.value.slice(0, 5))} />
+                </label>
+                <label>
+                  Gehen
+                  <input type="time" step={60} value={manualOut} onChange={(e) => setManualOut(e.target.value.slice(0, 5))} />
+                </label>
+                <textarea placeholder="Notiz (Pflichtfeld)" value={manualNote} onChange={(e) => setManualNote(e.target.value)} />
+                <button
+                  onClick={async () => {
+                    try {
+                      if (!manualNote.trim()) { setMsg("Notiz ist Pflicht."); return; }
+                      if (!manualDate) { setMsg("Datum ist Pflicht."); return; }
+                      const events: Array<{ type: "CLOCK_IN" | "CLOCK_OUT"; time: string }> = [];
+                      if (manualIn) events.push({ type: "CLOCK_IN", time: manualIn.slice(0, 5) });
+                      if (manualOut) events.push({ type: "CLOCK_OUT", time: manualOut.slice(0, 5) });
+                      if (events.length === 0) { setMsg("Mindestens eine Zeit ist erforderlich."); return; }
+                      await api.dayOverrideSelf({ date: manualDate, note: manualNote.trim(), events });
+                      setMsg("Nachtrag gespeichert.");
+                      await loadData();
+                    } catch (e) {
+                      setMsg((e as Error).message);
+                    }
+                  }}
+                >
+                  Nachtrag speichern
+                </button>
+              </div>
+            </div>
+          )}
           <div className="card" style={{ padding: 10 }}>
             <strong>Heute erfasst</strong>
             {todayEntries.length === 0 && <div>Keine Ereignisse heute.</div>}
             {todayEntries.map((e) => (
-              <div key={e.id}>
+              <div key={e.id} style={{ color: e.source === "WEB" ? "var(--web-entry)" : "inherit" }}>
                 {e.type === "CLOCK_IN" ? "Kommen" : "Gehen"} {new Date(e.occurredAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
                 {e.reasonText ? ` - ${e.reasonText}` : ""}
               </div>
@@ -95,7 +171,7 @@ export function SupervisorHome() {
                 <td>{e.name}</td>
                 <td>{e.role}</td>
                 <td>{(overview[e.id]?.istHours ?? 0).toFixed(2)} h</td>
-                <td>{(overview[e.id]?.overtimeHours ?? 0).toFixed(2)} h</td>
+                <td style={{ color: "var(--overtime)" }}>{(overview[e.id]?.overtimeHours ?? 0).toFixed(2)} h</td>
                 <td>{(vacationAvailable[e.id] ?? 0).toFixed(2)} Tage</td>
               </tr>
             ))}
@@ -201,6 +277,29 @@ export function SupervisorHome() {
               </div>
             </div>
           ))}
+          <div className="card" style={{ padding: 12 }}>
+            <h4 style={{ marginTop: 0 }}>Stempelungen heute</h4>
+            <div className="admin-table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Mitarbeiter</th><th>Login</th><th>Typ</th><th>Zeit</th><th>Quelle</th><th>Notiz</th></tr>
+                </thead>
+                <tbody>
+                  {todayOverview.map((e) => (
+                    <tr key={e.id} style={{ background: e.source === "WEB" ? "color-mix(in srgb, var(--web-entry) 25%, transparent)" : "transparent" }}>
+                      <td>{e.userName}</td>
+                      <td>{e.loginName}</td>
+                      <td>{e.type === "CLOCK_IN" ? "Kommen" : "Gehen"}</td>
+                      <td>{new Date(e.occurredAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}</td>
+                      <td>{e.source}</td>
+                      <td>{e.reasonText || "-"}</td>
+                    </tr>
+                  ))}
+                  {todayOverview.length === 0 && <tr><td colSpan={6}>Heute keine Stempelungen.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
           {pending.length === 0 && specialPending.length === 0 && <div>Keine offenen Antraege.</div>}
           {msg && <div className="error">{msg}</div>}
         </div>

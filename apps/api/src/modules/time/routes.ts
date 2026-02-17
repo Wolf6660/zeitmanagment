@@ -781,6 +781,168 @@ timeRouter.get("/today/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Ro
   res.json(entries);
 });
 
+timeRouter.get("/today-overview", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (_req: AuthRequest, res) => {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+
+  const entries = await prisma.timeEntry.findMany({
+    where: { occurredAt: { gte: start, lte: end } },
+    orderBy: { occurredAt: "asc" },
+    include: { user: { select: { id: true, name: true, loginName: true } } }
+  });
+
+  res.json(entries.map((e) => ({
+    id: e.id,
+    userId: e.userId,
+    userName: e.user.name,
+    loginName: e.user.loginName,
+    type: e.type,
+    occurredAt: e.occurredAt,
+    source: e.source,
+    reasonText: e.reasonText || null
+  })));
+});
+
+const bulkEntrySchema = z.object({
+  userId: z.string().min(1),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Startdatum ist ungueltig."),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Enddatum ist ungueltig."),
+  clockIn: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Kommen ist ungueltig."),
+  clockOut: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Gehen ist ungueltig."),
+  note: z.string().trim().min(1, "Notiz ist Pflicht.")
+});
+
+timeRouter.post("/bulk-entry", requireRole([Role.ADMIN]), async (req: AuthRequest, res) => {
+  const parsed = bulkEntrySchema.safeParse(req.body);
+  if (!parsed.success || !req.auth) {
+    res.status(400).json({ message: parsed.success ? "Nicht authentifiziert." : zodFirstMessage(parsed) });
+    return;
+  }
+
+  const startParts = parseIsoDateParts(parsed.data.startDate);
+  const endParts = parseIsoDateParts(parsed.data.endDate);
+  const inParts = parseTimeParts(parsed.data.clockIn);
+  const outParts = parseTimeParts(parsed.data.clockOut);
+  if (!startParts || !endParts || !inParts || !outParts) {
+    res.status(400).json({ message: "Ungueltige Eingaben." });
+    return;
+  }
+  const startDate = new Date(Date.UTC(startParts.year, startParts.month - 1, startParts.day, 0, 0, 0));
+  const endDate = new Date(Date.UTC(endParts.year, endParts.month - 1, endParts.day, 23, 59, 59, 999));
+  if (endDate < startDate) {
+    res.status(400).json({ message: "Enddatum muss >= Startdatum sein." });
+    return;
+  }
+
+  const dailyStartMinutes = inParts.hour * 60 + inParts.minute;
+  const dailyEndMinutes = outParts.hour * 60 + outParts.minute;
+  if (dailyEndMinutes <= dailyStartMinutes) {
+    res.status(400).json({ message: "Gehen muss nach Kommen liegen." });
+    return;
+  }
+
+  const [config, holidays, user] = await Promise.all([
+    prisma.systemConfig.findUnique({ where: { id: 1 } }),
+    prisma.holiday.findMany({ where: { date: { gte: startDate, lte: endDate } }, select: { date: true } }),
+    prisma.user.findUnique({ where: { id: parsed.data.userId }, select: { id: true, timeTrackingEnabled: true } })
+  ]);
+  if (!user) {
+    res.status(404).json({ message: "Mitarbeiter nicht gefunden." });
+    return;
+  }
+  if (!user.timeTrackingEnabled) {
+    res.status(403).json({ message: "Zeiterfassung ist fuer diesen Mitarbeiter deaktiviert." });
+    return;
+  }
+
+  const workingDays = parseWorkingDaySet(config?.defaultWeeklyWorkingDays);
+  const holidaySet = new Set(holidays.map((h) => dayKey(h.date)));
+  const daysInRange = Math.floor((endDate.getTime() - startDate.getTime()) / 86400000) + 1;
+  if (daysInRange > 366) {
+    res.status(400).json({ message: "Zeitraum zu gross (max. 366 Tage)." });
+    return;
+  }
+
+  const existingEntries = await prisma.timeEntry.findMany({
+    where: { userId: parsed.data.userId, occurredAt: { gte: startDate, lte: endDate } },
+    select: { occurredAt: true }
+  });
+  const occupiedDayKeys = new Set(existingEntries.map((e) => dayKey(e.occurredAt)));
+
+  const createRows: Array<{ userId: string; type: TimeEntryType; source: TimeEntrySource; isManualCorrection: boolean; correctionComment: string; reasonText: string; occurredAt: Date; createdById: string }> = [];
+  const insertedDates: string[] = [];
+  const skippedDates: string[] = [];
+
+  for (let d = new Date(startDate); d <= endDate; d = new Date(d.getTime() + 86400000)) {
+    const k = dayKey(d);
+    const isWorkday = workingDays.has(d.getUTCDay()) && !holidaySet.has(k);
+    if (!isWorkday) continue;
+    if (occupiedDayKeys.has(k)) {
+      skippedDates.push(k);
+      continue;
+    }
+
+    const inAt = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), inParts.hour, inParts.minute, 0));
+    const outAt = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), outParts.hour, outParts.minute, 0));
+    const correctionComment = `Stapelerfassung: ${parsed.data.note}`;
+    createRows.push(
+      {
+        userId: parsed.data.userId,
+        type: TimeEntryType.CLOCK_IN,
+        source: TimeEntrySource.MANUAL_CORRECTION,
+        isManualCorrection: true,
+        correctionComment,
+        reasonText: correctionComment,
+        occurredAt: inAt,
+        createdById: req.auth.userId
+      },
+      {
+        userId: parsed.data.userId,
+        type: TimeEntryType.CLOCK_OUT,
+        source: TimeEntrySource.MANUAL_CORRECTION,
+        isManualCorrection: true,
+        correctionComment,
+        reasonText: correctionComment,
+        occurredAt: outAt,
+        createdById: req.auth.userId
+      }
+    );
+    insertedDates.push(k);
+  }
+
+  if (createRows.length > 0) {
+    await prisma.timeEntry.createMany({ data: createRows });
+  }
+
+  await writeAuditLog({
+    actorUserId: req.auth.userId,
+    actorLoginName: await resolveActorLoginName(req.auth.userId),
+    action: "BULK_TIME_ENTRY_CREATED",
+    targetType: "User",
+    targetId: parsed.data.userId,
+    payload: {
+      startDate: parsed.data.startDate,
+      endDate: parsed.data.endDate,
+      clockIn: parsed.data.clockIn,
+      clockOut: parsed.data.clockOut,
+      insertedDays: insertedDates.length,
+      skippedDays: skippedDates.length,
+      note: parsed.data.note
+    }
+  });
+
+  const grossHoursPerDay = Number(((dailyEndMinutes - dailyStartMinutes) / 60).toFixed(2));
+  res.json({
+    insertedDays: insertedDates.length,
+    skippedDays: skippedDates.length,
+    insertedDates,
+    skippedDates,
+    grossHoursPerDay
+  });
+});
+
 const holidaySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Datum ist ungueltig."),
   name: z.string().trim().min(1, "Name ist Pflicht.")

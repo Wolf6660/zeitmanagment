@@ -34,6 +34,8 @@ const configSchema = z.object({
   colorSickLeave: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
   colorHolidayOrWeekendWork: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
   colorVacationWarning: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+  colorWebEntry: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+  colorOvertime: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
   smtpEnabled: z.boolean().optional(),
   smtpHost: z.preprocess((v) => (v === "" ? null : v), z.string().nullable()).optional(),
   smtpPort: z.number().int().min(1).max(65535).optional(),

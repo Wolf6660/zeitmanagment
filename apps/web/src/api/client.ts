@@ -81,6 +81,11 @@ export const api = {
       `/api/time/today/${userId}`
     ),
 
+  todayOverview: () =>
+    request<Array<{ id: string; userId: string; userName: string; loginName: string; type: "CLOCK_IN" | "CLOCK_OUT"; occurredAt: string; source: string; reasonText?: string | null }>>(
+      "/api/time/today-overview"
+    ),
+
   monthView: (userId: string, year: number, month: number) =>
     request<{
       year: number;
@@ -104,6 +109,12 @@ export const api = {
 
   dayOverrideBySupervisor: (payload: { userId: string; date: string; note: string; events: Array<{ type: "CLOCK_IN" | "CLOCK_OUT"; time: string }> }) =>
     request("/api/time/day-override", { method: "POST", body: JSON.stringify(payload) }),
+
+  bulkEntry: (payload: { userId: string; startDate: string; endDate: string; clockIn: string; clockOut: string; note: string }) =>
+    request<{ insertedDays: number; skippedDays: number; insertedDates: string[]; skippedDates: string[]; grossHoursPerDay: number }>("/api/time/bulk-entry", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
 
   myLeaves: () =>
     request<Array<{ id: string; status: string; kind: string; startDate: string; endDate: string; note?: string; requestedAt: string; decisionNote?: string | null; decidedAt?: string | null; decidedBy?: { id: string; name: string; loginName: string } | null }>>(
@@ -243,6 +254,8 @@ export const api = {
       colorSickLeave: string;
       colorHolidayOrWeekendWork: string;
       colorVacationWarning: string;
+      colorWebEntry: string;
+      colorOvertime: string;
     }>("/api/admin/config"),
 
   updateConfig: (payload: Record<string, unknown>) =>

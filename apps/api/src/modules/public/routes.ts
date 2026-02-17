@@ -17,7 +17,9 @@ publicRouter.get("/config", async (_req, res) => {
       colorBreakCredit: true,
       colorSickLeave: true,
       colorHolidayOrWeekendWork: true,
-      colorVacationWarning: true
+      colorVacationWarning: true,
+      colorWebEntry: true,
+      colorOvertime: true
     }
   });
 
@@ -33,7 +35,9 @@ publicRouter.get("/config", async (_req, res) => {
       colorBreakCredit: "#EC4899",
       colorSickLeave: "#3B82F6",
       colorHolidayOrWeekendWork: "#F97316",
-      colorVacationWarning: "#F59E0B"
+      colorVacationWarning: "#F59E0B",
+      colorWebEntry: "#7DD3FC",
+      colorOvertime: "#0EA5E9"
     });
     return;
   }

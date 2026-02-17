@@ -1,3 +1,5 @@
+#include <LiquidCrystal_I2C.h>
+
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
@@ -11,6 +13,9 @@
 
 #if __has_include(<LiquidCrystal_I2C.h>)
 #include <LiquidCrystal_I2C.h>
+#define HAS_LCD_I2C 1
+#elif __has_include(<LiquidCrystal_I2C/LiquidCrystal_I2C.h>)
+#include <LiquidCrystal_I2C/LiquidCrystal_I2C.h>
 #define HAS_LCD_I2C 1
 #else
 #define HAS_LCD_I2C 0

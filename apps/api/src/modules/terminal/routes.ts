@@ -39,7 +39,7 @@ function calculateWorkedMinutes(entries: { type: TimeEntryType; occurredAt: Date
 const punchSchema = z.object({
   terminalKey: z.string().min(16),
   rfidTag: z.string().min(1),
-  type: z.nativeEnum(TimeEntryType),
+  type: z.nativeEnum(TimeEntryType).optional(),
   reasonText: z.string().max(255).optional()
 });
 
@@ -72,7 +72,7 @@ terminalRouter.post("/punch", async (req, res) => {
       targetId: terminal.id,
       payload: {
         rfidTag: parsed.data.rfidTag,
-        type: parsed.data.type,
+        type: parsed.data.type ?? null,
         reasonText: parsed.data.reasonText ?? null,
         terminalId: terminal.id,
         terminalName: terminal.name,
@@ -91,10 +91,17 @@ terminalRouter.post("/punch", async (req, res) => {
     return;
   }
 
+  const lastEntry = await prisma.timeEntry.findFirst({
+    where: { userId: user.id },
+    orderBy: { occurredAt: "desc" },
+    select: { type: true }
+  });
+  const effectiveType: TimeEntryType = lastEntry?.type === TimeEntryType.CLOCK_IN ? TimeEntryType.CLOCK_OUT : TimeEntryType.CLOCK_IN;
+
   const entry = await prisma.timeEntry.create({
     data: {
       userId: user.id,
-      type: parsed.data.type,
+      type: effectiveType,
       source: TimeEntrySource.RFID,
       reasonText: parsed.data.reasonText,
       occurredAt: new Date()
@@ -147,7 +154,7 @@ terminalRouter.post("/punch", async (req, res) => {
     entryId: entry.id,
     occurredAt: entry.occurredAt,
     employeeName: user.name,
-    action: parsed.data.type === TimeEntryType.CLOCK_IN ? "KOMMEN" : "GEHEN",
+    action: effectiveType === TimeEntryType.CLOCK_IN ? "KOMMEN" : "GEHEN",
     workedTodayHours
   });
 });

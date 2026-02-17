@@ -21,6 +21,8 @@ type AdminConfig = {
   colorSickLeave: string;
   colorHolidayOrWeekendWork: string;
   colorVacationWarning: string;
+  colorWebEntry: string;
+  colorOvertime: string;
 };
 
 type Terminal = {
@@ -62,10 +64,12 @@ const COLOR_FIELDS: Array<{ key: keyof AdminConfig; label: string }> = [
   { key: "colorApproved", label: "Genehmigt" },
   { key: "colorRejected", label: "Abgelehnt" },
   { key: "colorManualCorrection", label: "Manuelle Korrektur" },
+  { key: "colorWebEntry", label: "Web-Einstempeln" },
   { key: "colorBreakCredit", label: "Pausengutschrift" },
   { key: "colorSickLeave", label: "Krankheit" },
   { key: "colorHolidayOrWeekendWork", label: "Arbeit Feiertag/Wochenende" },
-  { key: "colorVacationWarning", label: "Urlaub-Warnung" }
+  { key: "colorVacationWarning", label: "Urlaub" },
+  { key: "colorOvertime", label: "Ueberstunden" }
 ];
 
 function toBoolLiteral(v: unknown): string {
@@ -174,6 +178,12 @@ export function AdminHome() {
   const [otCurrentHours, setOtCurrentHours] = useState(0);
   const [otNote, setOtNote] = useState("");
   const [otHistory, setOtHistory] = useState<Array<{ id: string; date: string; hours: number; reason: string; createdAt: string }>>([]);
+  const [bulkUserId, setBulkUserId] = useState("");
+  const [bulkStartDate, setBulkStartDate] = useState("");
+  const [bulkEndDate, setBulkEndDate] = useState("");
+  const [bulkClockIn, setBulkClockIn] = useState("08:00");
+  const [bulkClockOut, setBulkClockOut] = useState("17:00");
+  const [bulkNote, setBulkNote] = useState("");
 
   const [newEmployee, setNewEmployee] = useState({
     name: "",
@@ -196,6 +206,7 @@ export function AdminHome() {
     setEmployees(emps as Employee[]);
     setUnassignedRfid(scans);
     setOtUserId((prev) => prev || (emps[0]?.id ?? ""));
+    setBulkUserId((prev) => prev || (emps[0]?.id ?? ""));
     setAssignRfidUserId((prev) => prev || (emps[0]?.id ?? ""));
     setEspTerminalId((prev) => prev || (trms[0]?.id ?? ""));
     applyTheme(cfg as PublicConfig);
@@ -229,6 +240,7 @@ export function AdminHome() {
     if (section === "colors") return "Farben";
     if (section === "employees") return "Mitarbeiter";
     if (section === "overtime") return "Ueberstunden";
+    if (section === "bulk") return "Stapelerfassung";
     if (section === "terminals") return "RFID-Terminals";
     if (section === "esp") return "ESP32 Provisioning";
     if (section === "logs") return "Log";
@@ -248,6 +260,7 @@ export function AdminHome() {
         <button onClick={() => setSearchParams({ section: "colors" })}>Farben</button>
         <button onClick={() => setSearchParams({ section: "employees" })}>Mitarbeiter</button>
         <button onClick={() => setSearchParams({ section: "overtime" })}>Ueberstunden</button>
+        <button onClick={() => setSearchParams({ section: "bulk" })}>Stapelerfassung</button>
         <button onClick={() => setSearchParams({ section: "terminals" })}>RFID-Terminals</button>
         <button onClick={() => setSearchParams({ section: "esp" })}>ESP32 Provisioning</button>
         <button onClick={() => setSearchParams({ section: "logs" })}>Log</button>
@@ -448,6 +461,75 @@ export function AdminHome() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {section === "bulk" && (
+        <div className="card admin-section-card" style={{ padding: 12 }}>
+          <h4>Stapelerfassung</h4>
+          <div className="grid">
+            <label>
+              Mitarbeiter
+              <select value={bulkUserId} onChange={(e) => setBulkUserId(e.target.value)}>
+                {employees.map((e) => (
+                  <option key={e.id} value={e.id}>{e.name} ({e.loginName})</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Anfangsdatum
+              <input type="date" value={bulkStartDate} onChange={(e) => setBulkStartDate(e.target.value)} />
+            </label>
+            <label>
+              Enddatum
+              <input type="date" value={bulkEndDate} onChange={(e) => setBulkEndDate(e.target.value)} />
+            </label>
+            <label>
+              Kommen
+              <input type="time" step={60} value={bulkClockIn} onChange={(e) => setBulkClockIn(e.target.value.slice(0, 5))} />
+            </label>
+            <label>
+              Gehen
+              <input type="time" step={60} value={bulkClockOut} onChange={(e) => setBulkClockOut(e.target.value.slice(0, 5))} />
+            </label>
+            <label>
+              Notiz (Pflicht)
+              <textarea value={bulkNote} onChange={(e) => setBulkNote(e.target.value)} />
+            </label>
+          </div>
+          <button
+            style={{ marginTop: 8 }}
+            onClick={async () => {
+              try {
+                if (!bulkUserId || !bulkStartDate || !bulkEndDate || !bulkClockIn || !bulkClockOut || !bulkNote.trim()) {
+                  setMsg("Bitte alle Felder ausfuellen.");
+                  return;
+                }
+                const [inH, inM] = bulkClockIn.split(":").map(Number);
+                const [outH, outM] = bulkClockOut.split(":").map(Number);
+                const gross = ((outH * 60 + outM) - (inH * 60 + inM)) / 60;
+                if (!Number.isFinite(gross) || gross <= 0) {
+                  setMsg("Uhrzeiten sind ungueltig.");
+                  return;
+                }
+                const ok = window.confirm(`Bitte bestaetigen:\nZeitraum: ${bulkStartDate} bis ${bulkEndDate}\nUhrzeit: ${bulkClockIn} bis ${bulkClockOut}\nStunden/Tag: ${gross.toFixed(2)} h\n\nEs werden nur Arbeitstage ohne Feiertage/Wochenenden eingetragen.`);
+                if (!ok) return;
+                const result = await api.bulkEntry({
+                  userId: bulkUserId,
+                  startDate: bulkStartDate,
+                  endDate: bulkEndDate,
+                  clockIn: bulkClockIn,
+                  clockOut: bulkClockOut,
+                  note: bulkNote.trim()
+                });
+                setMsg(`Stapelerfassung gespeichert. Eingetragen: ${result.insertedDays} Tage, uebersprungen: ${result.skippedDays} Tage.`);
+              } catch (e) {
+                setMsg((e as Error).message);
+              }
+            }}
+          >
+            Stapelerfassung ausfuehren
+          </button>
         </div>
       )}
 

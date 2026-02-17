@@ -3,7 +3,7 @@
 // Automatisch aus ESP32 Provisioning erzeugt
 #define LOCAL_WIFI_SSID "IoT"
 #define LOCAL_WIFI_PASSWORD "!desischmeiWlanduNudeldunger\""
-#define LOCAL_SERVER_ENDPOINT "http://192.168.0.100:26400/api/terminal/punch"
+#define LOCAL_SERVER_ENDPOINT "http://192.168.10.100:26100/api/terminal/punch"
 #define LOCAL_USE_TLS false
 #define LOCAL_TERMINAL_KEY "1f2c1770fa442a646d417bce5901fab5d685617426dbffee"
 
@@ -15,8 +15,8 @@
 #define LOCAL_PIN_MOSI 23
 #define LOCAL_PIN_MISO 19
 #define LOCAL_PIN_SCK 18
-#define LOCAL_PIN_SS 5
-#define LOCAL_PIN_RST 22
+#define LOCAL_PIN_SS 27
+#define LOCAL_PIN_RST 26
 #define LOCAL_PIN_IRQ 4
 
 #define LOCAL_DISPLAY_ENABLED true

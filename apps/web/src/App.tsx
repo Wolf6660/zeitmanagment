@@ -126,11 +126,11 @@ export default function App() {
       <Route
         path="/app/guides"
         element={
-          <PrivateRoute>
+          <AdminRoute>
             <AppLayout>
               <GuidesPage />
             </AppLayout>
-          </PrivateRoute>
+          </AdminRoute>
         }
       />
       <Route path="*" element={<Navigate to="/app" replace />} />
