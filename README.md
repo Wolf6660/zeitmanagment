@@ -94,6 +94,15 @@ Hinweis Admin-Bootstrap:
 - Aenderst du `ADMIN_LOGIN_NAME` oder `ADMIN_PASSWORD`, dann nach Rebuild/Restart mit den neuen Daten einloggen.
 - Falls `ADMIN_*` leer sind, werden sichere Defaults verwendet (`admin` / `Admin1234!`).
 
+## ESP32 Terminal (Arduino IDE)
+
+- Sketch: `firmware/esp32_terminal/esp32_terminal.ino`
+- Anleitung: `firmware/esp32_terminal/README.md`
+- Konfig aus Webinterface:
+  - `Admin > ESP32 Provisioning`
+  - JSON herunterladen
+  - als `config.json` ins ESP-Dateisystem (SPIFFS) laden
+
 ## Synology Docker
 
 1. Repository auf NAS klonen oder Dateien hochladen

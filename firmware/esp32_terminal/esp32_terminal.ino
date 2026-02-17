@@ -1,0 +1,410 @@
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <HTTPClient.h>
+#include <SPIFFS.h>
+#include <SPI.h>
+#include <Wire.h>
+#include <ArduinoJson.h>
+#include <MFRC522.h>
+#include <Adafruit_PN532.h>
+#include <LiquidCrystal_I2C.h>
+#include <time.h>
+
+struct Config {
+  String wifiSsid;
+  String wifiPassword;
+  String endpoint;
+  bool useTls;
+  String terminalKey;
+
+  String readerType;    // RC522 / PN532
+  String pn532Mode;     // I2C / SPI
+  int sda = 21;
+  int scl = 22;
+  int mosi = 23;
+  int miso = 19;
+  int sck = 18;
+  int ss = 5;
+  int rst = 22;
+  int irq = 4;
+
+  bool displayEnabled = false;
+  int displayRows = 4;
+  int displaySda = 21;
+  int displayScl = 22;
+  String displayAddress = "0x27";
+
+  String idleLine1 = "Firmenname";
+  String timezone = "CET-1CEST,M3.5.0/2,M10.5.0/3";
+  String ntpServer = "pool.ntp.org";
+};
+
+Config cfg;
+
+MFRC522 *mfrc = nullptr;
+Adafruit_PN532 *pn532 = nullptr;
+LiquidCrystal_I2C *lcd = nullptr;
+
+unsigned long lastIdleRefresh = 0;
+unsigned long messageUntil = 0;
+String line1 = "";
+String line2 = "";
+String line3 = "";
+String line4 = "";
+
+struct CardState {
+  String uid;
+  String lastAction; // CLOCK_IN / CLOCK_OUT
+};
+CardState cardStates[64];
+int cardStateCount = 0;
+
+String toHexUid(const uint8_t *uid, uint8_t len) {
+  String out;
+  char buf[3];
+  for (uint8_t i = 0; i < len; i++) {
+    snprintf(buf, sizeof(buf), "%02X", uid[i]);
+    out += buf;
+  }
+  return out;
+}
+
+uint8_t parseHexByte(const String &hex2) {
+  return (uint8_t) strtoul(hex2.c_str(), nullptr, 16);
+}
+
+uint8_t parseAddress(const String &v) {
+  if (v.startsWith("0x") || v.startsWith("0X")) return (uint8_t) strtoul(v.c_str(), nullptr, 16);
+  return (uint8_t) v.toInt();
+}
+
+String nowDateTime() {
+  struct tm t;
+  if (!getLocalTime(&t)) return "Zeit nicht verfuegbar";
+  char buf[24];
+  strftime(buf, sizeof(buf), "%d.%m.%Y %H:%M", &t);
+  return String(buf);
+}
+
+void drawDisplay() {
+  if (!lcd || !cfg.displayEnabled) return;
+  lcd->clear();
+  lcd->setCursor(0, 0);
+  lcd->print(line1.substring(0, 20));
+  if (cfg.displayRows > 1) {
+    lcd->setCursor(0, 1);
+    lcd->print(line2.substring(0, 20));
+  }
+  if (cfg.displayRows > 2) {
+    lcd->setCursor(0, 2);
+    lcd->print(line3.substring(0, 20));
+  }
+  if (cfg.displayRows > 3) {
+    lcd->setCursor(0, 3);
+    lcd->print(line4.substring(0, 20));
+  }
+}
+
+void showIdle() {
+  line1 = cfg.idleLine1;
+  line2 = nowDateTime();
+  line3 = "Karte scannen...";
+  line4 = "";
+  drawDisplay();
+}
+
+void showMessage(const String &a, const String &b, const String &c = "", const String &d = "") {
+  line1 = a;
+  line2 = b;
+  line3 = c;
+  line4 = d;
+  drawDisplay();
+  messageUntil = millis() + 4500;
+}
+
+String getNextType(const String &uid) {
+  for (int i = 0; i < cardStateCount; i++) {
+    if (cardStates[i].uid == uid) {
+      return cardStates[i].lastAction == "CLOCK_IN" ? "CLOCK_OUT" : "CLOCK_IN";
+    }
+  }
+  return "CLOCK_IN";
+}
+
+void rememberAction(const String &uid, const String &action) {
+  for (int i = 0; i < cardStateCount; i++) {
+    if (cardStates[i].uid == uid) {
+      cardStates[i].lastAction = action;
+      return;
+    }
+  }
+  if (cardStateCount < 64) {
+    cardStates[cardStateCount].uid = uid;
+    cardStates[cardStateCount].lastAction = action;
+    cardStateCount++;
+  }
+}
+
+bool loadConfig() {
+  if (!SPIFFS.begin(true)) {
+    Serial.println("SPIFFS konnte nicht gestartet werden");
+    return false;
+  }
+
+  File f = SPIFFS.open("/config.json", "r");
+  if (!f) {
+    Serial.println("/config.json nicht gefunden");
+    return false;
+  }
+
+  StaticJsonDocument<4096> doc;
+  DeserializationError err = deserializeJson(doc, f);
+  f.close();
+  if (err) {
+    Serial.printf("JSON Fehler: %s\n", err.c_str());
+    return false;
+  }
+
+  cfg.wifiSsid = String((const char*) doc["network"]["wifiSsid"]);
+  cfg.wifiPassword = String((const char*) doc["network"]["wifiPassword"]);
+  cfg.endpoint = String((const char*) doc["server"]["endpoint"]);
+  cfg.useTls = doc["server"]["useTls"] | false;
+  cfg.terminalKey = String((const char*) doc["terminal"]["key"]);
+
+  cfg.readerType = String((const char*) doc["hardware"]["readerType"]);
+  cfg.pn532Mode = String((const char*) doc["hardware"]["pn532Mode"]);
+  cfg.sda = doc["hardware"]["pins"]["sda"] | cfg.sda;
+  cfg.scl = doc["hardware"]["pins"]["scl"] | cfg.scl;
+  cfg.mosi = doc["hardware"]["pins"]["mosi"] | cfg.mosi;
+  cfg.miso = doc["hardware"]["pins"]["miso"] | cfg.miso;
+  cfg.sck = doc["hardware"]["pins"]["sck"] | cfg.sck;
+  cfg.ss = doc["hardware"]["pins"]["ss"] | cfg.ss;
+  cfg.rst = doc["hardware"]["pins"]["rst"] | cfg.rst;
+  cfg.irq = doc["hardware"]["pins"]["irq"] | cfg.irq;
+
+  cfg.displayEnabled = doc["hardware"]["display"]["enabled"] | false;
+  cfg.displayRows = doc["hardware"]["display"]["rows"] | 4;
+  cfg.displaySda = doc["hardware"]["display"]["pins"]["sda"] | 21;
+  cfg.displayScl = doc["hardware"]["display"]["pins"]["scl"] | 22;
+  cfg.displayAddress = String((const char*) (doc["hardware"]["display"]["pins"]["address"] | "0x27"));
+
+  cfg.idleLine1 = String((const char*) (doc["displayBehaviour"]["idleLine1"] | "Firmenname"));
+  cfg.timezone = String((const char*) (doc["timezone"] | "CET-1CEST,M3.5.0/2,M10.5.0/3"));
+  cfg.ntpServer = String((const char*) (doc["ntpServer"] | "pool.ntp.org"));
+
+  return cfg.wifiSsid.length() > 0 && cfg.endpoint.length() > 0 && cfg.terminalKey.length() > 0;
+}
+
+void initDisplay() {
+  if (!cfg.displayEnabled) return;
+  Wire.begin(cfg.displaySda, cfg.displayScl);
+  lcd = new LiquidCrystal_I2C(parseAddress(cfg.displayAddress), 20, cfg.displayRows >= 4 ? 4 : 2);
+  lcd->init();
+  lcd->backlight();
+  showMessage("Starte...", "Display aktiv");
+}
+
+void initReader() {
+  if (cfg.readerType == "RC522") {
+    SPI.begin(cfg.sck, cfg.miso, cfg.mosi, cfg.ss);
+    mfrc = new MFRC522(cfg.ss, cfg.rst);
+    mfrc->PCD_Init();
+    Serial.println("RFID Reader RC522 initialisiert");
+    return;
+  }
+
+  // PN532
+  if (cfg.pn532Mode == "SPI") {
+    SPI.begin(cfg.sck, cfg.miso, cfg.mosi, cfg.ss);
+    pn532 = new Adafruit_PN532(cfg.ss);
+  } else {
+    Wire.begin(cfg.sda, cfg.scl);
+    pn532 = new Adafruit_PN532(&Wire);
+  }
+
+  pn532->begin();
+  uint32_t versiondata = pn532->getFirmwareVersion();
+  if (!versiondata) {
+    Serial.println("PN532 nicht gefunden");
+  } else {
+    pn532->SAMConfig();
+    Serial.println("NFC Reader PN532 initialisiert");
+  }
+}
+
+String scanUid() {
+  if (cfg.readerType == "RC522") {
+    if (!mfrc) return "";
+    if (!mfrc->PICC_IsNewCardPresent()) return "";
+    if (!mfrc->PICC_ReadCardSerial()) return "";
+    String uid = toHexUid(mfrc->uid.uidByte, mfrc->uid.size);
+    mfrc->PICC_HaltA();
+    mfrc->PCD_StopCrypto1();
+    return uid;
+  }
+
+  if (!pn532) return "";
+  uint8_t uid[7] = {0};
+  uint8_t uidLength = 0;
+  bool success = pn532->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 50);
+  if (!success || uidLength == 0) return "";
+  return toHexUid(uid, uidLength);
+}
+
+bool sendPunch(const String &uid, const String &type, String &employeeName, String &actionLabel, String &timeLabel, float &workedTodayHours, String &errText) {
+  if (WiFi.status() != WL_CONNECTED) {
+    errText = "Kein WLAN";
+    return false;
+  }
+
+  HTTPClient http;
+  WiFiClient client;
+  WiFiClientSecure secure;
+  if (cfg.useTls) {
+    secure.setInsecure();
+    if (!http.begin(secure, cfg.endpoint)) {
+      errText = "HTTP init fehlgeschlagen";
+      return false;
+    }
+  } else {
+    if (!http.begin(client, cfg.endpoint)) {
+      errText = "HTTP init fehlgeschlagen";
+      return false;
+    }
+  }
+
+  http.addHeader("Content-Type", "application/json");
+
+  StaticJsonDocument<512> out;
+  out["terminalKey"] = cfg.terminalKey;
+  out["rfidTag"] = uid;
+  out["type"] = type;
+  out["reasonText"] = "RFID Terminal";
+
+  String body;
+  serializeJson(out, body);
+  int code = http.POST(body);
+
+  if (code < 200 || code >= 300) {
+    String response = http.getString();
+    http.end();
+    errText = response.length() ? response : ("HTTP " + String(code));
+    return false;
+  }
+
+  String response = http.getString();
+  http.end();
+
+  StaticJsonDocument<1024> in;
+  DeserializationError err = deserializeJson(in, response);
+  if (err) {
+    errText = "Antwort-JSON ungueltig";
+    return false;
+  }
+
+  employeeName = String((const char*) (in["employeeName"] | "Mitarbeiter"));
+  actionLabel = String((const char*) (in["action"] | (type == "CLOCK_IN" ? "KOMMEN" : "GEHEN")));
+  workedTodayHours = in["workedTodayHours"] | 0.0;
+
+  const char* occurredAt = in["occurredAt"] | "";
+  if (strlen(occurredAt) >= 16) {
+    // ISO: 2026-02-17T08:10:00.000Z
+    String hhmm = String(occurredAt).substring(11, 16);
+    timeLabel = hhmm;
+  } else {
+    timeLabel = nowDateTime().substring(11);
+  }
+
+  return true;
+}
+
+void connectWifi() {
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(cfg.wifiSsid.c_str(), cfg.wifiPassword.c_str());
+  Serial.printf("Verbinde WLAN %s", cfg.wifiSsid.c_str());
+  int tries = 0;
+  while (WiFi.status() != WL_CONNECTED && tries < 60) {
+    delay(500);
+    Serial.print(".");
+    tries++;
+  }
+  Serial.println();
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.printf("WLAN verbunden: %s\n", WiFi.localIP().toString().c_str());
+    showMessage("WLAN verbunden", WiFi.localIP().toString());
+  } else {
+    Serial.println("WLAN Verbindung fehlgeschlagen");
+    showMessage("WLAN Fehler", "Bitte Neustart");
+  }
+}
+
+void initClock() {
+  setenv("TZ", cfg.timezone.c_str(), 1);
+  tzset();
+  configTime(0, 0, cfg.ntpServer.c_str(), "time.nist.gov");
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(400);
+
+  if (!loadConfig()) {
+    Serial.println("Konfiguration fehlt/ungueltig.");
+    return;
+  }
+
+  initDisplay();
+  showMessage("ESP32 Terminal", "Starte...");
+
+  connectWifi();
+  initClock();
+  initReader();
+
+  showIdle();
+}
+
+void loop() {
+  if (cfg.wifiSsid.length() == 0) {
+    delay(1000);
+    return;
+  }
+
+  if (WiFi.status() != WL_CONNECTED) {
+    connectWifi();
+  }
+
+  String uid = scanUid();
+  if (uid.length() > 0) {
+    Serial.printf("Karte erkannt: %s\n", uid.c_str());
+
+    String type = getNextType(uid);
+    String employeeName;
+    String actionLabel;
+    String timeLabel;
+    float workedTodayHours = 0.0;
+    String errText;
+
+    bool ok = sendPunch(uid, type, employeeName, actionLabel, timeLabel, workedTodayHours, errText);
+    if (ok) {
+      rememberAction(uid, actionLabel == "KOMMEN" ? "CLOCK_IN" : "CLOCK_OUT");
+      if (actionLabel == "GEHEN") {
+        showMessage(employeeName, "Gehen " + timeLabel, "Heute: " + String(workedTodayHours, 2) + " h");
+      } else {
+        showMessage(employeeName, "Kommen " + timeLabel);
+      }
+      Serial.printf("%s %s %s / Heute %.2f h\n", employeeName.c_str(), actionLabel.c_str(), timeLabel.c_str(), workedTodayHours);
+    } else {
+      showMessage("Buchung fehlgeschl.", errText.substring(0, 20));
+      Serial.printf("Punch Fehler: %s\n", errText.c_str());
+    }
+
+    delay(700);
+  }
+
+  if (cfg.displayEnabled && millis() > messageUntil && millis() - lastIdleRefresh > 1000) {
+    showIdle();
+    lastIdleRefresh = millis();
+  }
+
+  delay(40);
+}

@@ -90,6 +90,9 @@ export function AdminHome() {
   const [espPn532Mode, setEspPn532Mode] = useState<"I2C" | "SPI">("I2C");
   const [espDisplayEnabled, setEspDisplayEnabled] = useState(true);
   const [espDisplayRows, setEspDisplayRows] = useState(4);
+  const [espDisplaySda, setEspDisplaySda] = useState(21);
+  const [espDisplayScl, setEspDisplayScl] = useState(22);
+  const [espDisplayAddress, setEspDisplayAddress] = useState("0x27");
   const [espPins, setEspPins] = useState<{ sda?: number; scl?: number; mosi?: number; miso?: number; sck?: number; ss?: number; rst?: number; irq?: number }>({
     sck: 18,
     miso: 19,
@@ -950,10 +953,24 @@ export function AdminHome() {
                 </select>
               </label>
               {espDisplayEnabled && (
-                <label>
-                  LCD Zeilen
-                  <input type="number" min={1} max={8} value={espDisplayRows} onChange={(e) => setEspDisplayRows(Number(e.target.value))} />
-                </label>
+                <>
+                  <label>
+                    LCD Zeilen
+                    <input type="number" min={1} max={8} value={espDisplayRows} onChange={(e) => setEspDisplayRows(Number(e.target.value))} />
+                  </label>
+                  <label>
+                    LCD SDA (I2C)
+                    <input type="number" min={0} max={39} value={espDisplaySda} onChange={(e) => setEspDisplaySda(Number(e.target.value))} />
+                  </label>
+                  <label>
+                    LCD SCL (I2C)
+                    <input type="number" min={0} max={39} value={espDisplayScl} onChange={(e) => setEspDisplayScl(Number(e.target.value))} />
+                  </label>
+                  <label>
+                    LCD I2C Adresse
+                    <input placeholder="0x27" value={espDisplayAddress} onChange={(e) => setEspDisplayAddress(e.target.value)} />
+                  </label>
+                </>
               )}
             </div>
 
@@ -964,6 +981,13 @@ export function AdminHome() {
                   <tr><th>Signal</th><th>GPIO</th><th>Hinweis</th></tr>
                 </thead>
                 <tbody>
+                  {espDisplayEnabled && (
+                    <>
+                      <tr><td>LCD SDA</td><td><input type="number" value={espDisplaySda} onChange={(e) => setEspDisplaySda(Number(e.target.value))} /></td><td>I2C Datenleitung Display</td></tr>
+                      <tr><td>LCD SCL</td><td><input type="number" value={espDisplayScl} onChange={(e) => setEspDisplayScl(Number(e.target.value))} /></td><td>I2C Taktleitung Display</td></tr>
+                      <tr><td>LCD Adresse</td><td><input value={espDisplayAddress} onChange={(e) => setEspDisplayAddress(e.target.value)} /></td><td>Typisch 0x27 oder 0x3F</td></tr>
+                    </>
+                  )}
                   {espReaderType === "RC522" && (
                     <>
                       <tr><td>SCK</td><td><input type="number" value={espPins.sck ?? 18} onChange={(e) => setEspPins({ ...espPins, sck: Number(e.target.value) })} /></td><td>SPI Clock</td></tr>
@@ -1014,6 +1038,11 @@ export function AdminHome() {
                       useTls: espUseTls,
                       displayEnabled: espDisplayEnabled,
                       displayRows: Number(espDisplayRows),
+                      displayPins: espDisplayEnabled ? {
+                        sda: Number(espDisplaySda),
+                        scl: Number(espDisplayScl),
+                        address: espDisplayAddress.trim() || "0x27"
+                      } : undefined,
                       readerType: espReaderType,
                       pn532Mode: espReaderType === "PN532" ? espPn532Mode : undefined,
                       pins: espPins

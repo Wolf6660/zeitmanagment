@@ -291,6 +291,11 @@ export const api = {
     useTls: boolean;
     displayEnabled: boolean;
     displayRows: number;
+    displayPins?: {
+      sda?: number;
+      scl?: number;
+      address?: string;
+    };
     readerType: "RC522" | "PN532";
     pn532Mode?: "I2C" | "SPI";
     pins: {

@@ -441,6 +441,11 @@ const espProvisionSchema = z.object({
   useTls: z.boolean(),
   displayEnabled: z.boolean(),
   displayRows: z.number().int().min(1).max(8),
+  displayPins: z.object({
+    sda: z.number().int().min(0).max(39).optional(),
+    scl: z.number().int().min(0).max(39).optional(),
+    address: z.string().regex(/^0x[0-9A-Fa-f]{2}$/).optional()
+  }).optional(),
   readerType: z.enum(["RC522", "PN532"]),
   pn532Mode: z.enum(["I2C", "SPI"]).optional(),
   pins: z.object({
@@ -465,6 +470,10 @@ adminRouter.post("/esp/provision-config", async (req: AuthRequest, res) => {
   const terminal = await prisma.rfidTerminal.findUnique({
     where: { id: parsed.data.terminalId },
     select: { id: true, name: true, apiKey: true, isActive: true }
+  });
+  const sys = await prisma.systemConfig.findUnique({
+    where: { id: 1 },
+    select: { companyName: true, systemName: true }
   });
   if (!terminal) {
     res.status(404).json({ message: "Terminal nicht gefunden." });
@@ -497,15 +506,22 @@ adminRouter.post("/esp/provision-config", async (req: AuthRequest, res) => {
       pins: parsed.data.pins,
       display: {
         enabled: parsed.data.displayEnabled,
-        rows: parsed.data.displayRows
+        rows: parsed.data.displayRows,
+        pins: {
+          sda: parsed.data.displayPins?.sda ?? 21,
+          scl: parsed.data.displayPins?.scl ?? 22,
+          address: parsed.data.displayPins?.address ?? "0x27"
+        }
       }
     },
     displayBehaviour: {
-      idleLine1: "Firmenname",
+      idleLine1: sys?.companyName || "Firmenname",
       idleLine2: "Datum + Uhrzeit",
       onScan: "Name + Kommen/Gehen + Uhrzeit",
       onClockOut: "zusaetzlich Tagesarbeitszeit (aufsummiert)"
-    }
+    },
+    timezone: "CET-1CEST,M3.5.0/2,M10.5.0/3",
+    ntpServer: "pool.ntp.org"
   };
 
   await writeAuditLog({
