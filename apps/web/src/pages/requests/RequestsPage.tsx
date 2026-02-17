@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../../api/client";
+import { StatusBadge } from "../../components/StatusBadge";
 
 function kindLabel(kind: string): string {
   return kind === "VACATION" ? "Urlaub" : "Ueberstunden";
@@ -52,9 +53,27 @@ export function RequestsPage() {
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.id}>
+            <tr
+              key={r.id}
+              style={{
+                background:
+                  r.status === "APPROVED"
+                    ? "rgba(34,197,94,0.10)"
+                    : r.status === "REJECTED"
+                      ? "rgba(239,68,68,0.10)"
+                      : "rgba(245,158,11,0.10)"
+              }}
+            >
               <td>{r.user.name} ({r.user.loginName})</td>
-              <td>{statusLabel(r.status)}</td>
+              <td>
+                {r.status === "APPROVED" ? (
+                  <StatusBadge text="Genehmigt" color="var(--approved)" />
+                ) : r.status === "REJECTED" ? (
+                  <StatusBadge text="Abgelehnt" color="var(--rejected)" />
+                ) : (
+                  <StatusBadge text={statusLabel(r.status)} color="var(--warning)" />
+                )}
+              </td>
               <td>{kindLabel(r.kind)}</td>
               <td>{r.startDate.slice(0, 10)}</td>
               <td>{r.endDate.slice(0, 10)}</td>

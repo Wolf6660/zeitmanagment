@@ -103,11 +103,11 @@ export function SupervisorHome() {
         </table>
       </div>
 
-      <div className="card">
-        <h2>Antraege offen</h2>
+      <div className="card" style={{ gridColumn: "1 / -1" }}>
+        <h2>Antraege</h2>
         <div className="grid">
           {pending.map((p) => (
-            <div key={p.id} className="card" style={{ padding: 12 }}>
+            <div key={p.id} className="card" style={{ padding: 12, borderColor: "var(--warning)", background: "rgba(245,158,11,0.08)" }}>
               <div><strong>{p.user.name}</strong></div>
               <div>{kindLabel(p.kind)}: {p.startDate.slice(0, 10)} bis {p.endDate.slice(0, 10)}</div>
               <div>{p.note || "-"}</div>
@@ -166,18 +166,11 @@ export function SupervisorHome() {
               </div>
             </div>
           ))}
-          {pending.length === 0 && <div>Keine offenen Antraege.</div>}
-          {msg && <div className="error">{msg}</div>}
-        </div>
-      </div>
-
-      <div className="card" style={{ gridColumn: "1 / -1" }}>
-        <h2>Arbeit Feiertag/Wochenende - Genehmigung offen</h2>
-        <div className="grid">
           {specialPending.map((p) => (
-            <div key={p.id} className="card" style={{ padding: 10 }}>
+            <div key={p.id} className="card" style={{ padding: 10, borderColor: "var(--holiday)", background: "rgba(249,115,22,0.10)" }}>
               <div><strong>{p.user.name}</strong> ({p.user.loginName})</div>
               <div>Datum: {p.date}</div>
+              <div><strong>Typ:</strong> Arbeit Feiertag/Wochenende</div>
               <div>Notiz Mitarbeiter: {p.note || "-"}</div>
               <textarea
                 style={{ marginTop: 6 }}
@@ -205,7 +198,8 @@ export function SupervisorHome() {
               </div>
             </div>
           ))}
-          {specialPending.length === 0 && <div>Keine offenen Genehmigungen.</div>}
+          {pending.length === 0 && specialPending.length === 0 && <div>Keine offenen Antraege.</div>}
+          {msg && <div className="error">{msg}</div>}
         </div>
       </div>
     </div>
