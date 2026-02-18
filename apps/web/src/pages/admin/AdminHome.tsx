@@ -625,9 +625,9 @@ export function AdminHome() {
       {section === "overtime" && (
         <div className="card admin-section-card admin-uniform" style={{ padding: 12 }}>
           <h4>Ueberstunden bearbeiten</h4>
-          <div className="grid grid-2">
+          <div className="grid admin-uniform">
             <label>
-              Mitarbeiter
+              Mitarbeiter:
               <select value={otUserId} onChange={(e) => setOtUserId(e.target.value)}>
                 {employees.map((e) => (
                   <option key={e.id} value={e.id}>{e.name} ({e.loginName})</option>
@@ -635,15 +635,15 @@ export function AdminHome() {
               </select>
             </label>
             <label>
-              Ueberstundenkonto aktuell
+              Ueberstundenkonto aktuell:
               <input type="number" value={otCurrentHours} readOnly />
             </label>
             <label>
-              Neuer Kontostand (Sollwert)
+              Neuer Kontostand (Sollwert):
               <input type="number" min={-10000} max={10000} step="0.25" value={otTargetHours} onChange={(e) => setOtTargetHours(Number(e.target.value))} />
             </label>
             <label>
-              Notiz (Pflicht)
+              Notiz (Pflicht):
               <textarea value={otNote} onChange={(e) => setOtNote(e.target.value)} />
             </label>
           </div>
