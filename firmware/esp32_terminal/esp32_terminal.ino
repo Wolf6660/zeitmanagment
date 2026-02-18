@@ -380,7 +380,8 @@ String scanUid() {
   return toHexUid(uid, uidLength);
 }
 
-bool sendPunch(const String &uid, const String &type, String &employeeName, String &actionLabel, String &timeLabel, float &workedTodayHours, String &errText) {
+bool sendPunch(const String &uid, const String &type, String &employeeName, String &actionLabel, String &timeLabel, float &workedTodayHours, bool &ignoredDuplicate, String &errText) {
+  ignoredDuplicate = false;
   if (WiFi.status() != WL_CONNECTED) {
     errText = "Kein WLAN";
     return false;
@@ -434,6 +435,10 @@ bool sendPunch(const String &uid, const String &type, String &employeeName, Stri
   employeeName = jsonStringOr(in["employeeName"], "Mitarbeiter");
   actionLabel = jsonStringOr(in["action"], type == "CLOCK_IN" ? "KOMMEN" : "GEHEN");
   workedTodayHours = in["workedTodayHours"] | 0.0;
+  ignoredDuplicate = in["ignoredDuplicate"] | false;
+  if (ignoredDuplicate) {
+    actionLabel = "BLOCKIERT";
+  }
 
   String displayTime = jsonStringOr(in["displayTime"], "");
   if (displayTime.length() >= 4) {
@@ -572,43 +577,26 @@ void loop() {
     Serial.printf("Karte erkannt: %s\n", uid.c_str());
 
     String type = getNextType(uid);
-    String statusErr;
-    String serverType;
-    bool blockedDuplicate = false;
-    bool hasServerStatus = fetchNextType(uid, serverType, statusErr, blockedDuplicate);
-    if (!hasServerStatus) {
-      if (blockedDuplicate) {
-        showMessage("Buchung blockiert", "Doppeltes Scannen");
-        Serial.println("Doppelbuchung blockiert");
-      } else {
-        showMessage("Status Fehler", "Serverstatus fehlt");
-        Serial.printf("Status Fehler: %s\n", statusErr.c_str());
-      }
-      delay(700);
-      return;
-    }
-    Serial.printf("Serverstatus: %s\n", serverType.c_str());
-    if (serverType == "CLOCK_IN" || serverType == "CLOCK_OUT") {
-      type = serverType;
-    } else {
-      showMessage("Buchung blockiert", "Doppeltes Scannen");
-      Serial.println("Unbekannter Serverstatus");
-      delay(700);
-      return;
-    }
     String employeeName;
     String actionLabel;
     String timeLabel;
     float workedTodayHours = 0.0;
+    bool ignoredDuplicate = false;
     String errText;
 
-    bool ok = sendPunch(uid, type, employeeName, actionLabel, timeLabel, workedTodayHours, errText);
+    bool ok = sendPunch(uid, type, employeeName, actionLabel, timeLabel, workedTodayHours, ignoredDuplicate, errText);
     if (ok) {
-      rememberAction(uid, actionLabel == "KOMMEN" ? "CLOCK_IN" : "CLOCK_OUT");
+      if (!ignoredDuplicate) {
+        rememberAction(uid, actionLabel == "KOMMEN" ? "CLOCK_IN" : "CLOCK_OUT");
+      }
       if (actionLabel == "GEHEN") {
         showMessage(employeeName, "Gehen " + timeLabel, "Heute: " + String(workedTodayHours, 2) + " h");
       } else {
-        showMessage(employeeName, "Kommen " + timeLabel);
+        if (ignoredDuplicate || actionLabel == "BLOCKIERT") {
+          showMessage(employeeName, "Doppelbuchung", "blockiert " + timeLabel);
+        } else {
+          showMessage(employeeName, "Kommen " + timeLabel);
+        }
       }
       Serial.printf("%s %s %s / Heute %.2f h\n", employeeName.c_str(), actionLabel.c_str(), timeLabel.c_str(), workedTodayHours);
     } else {

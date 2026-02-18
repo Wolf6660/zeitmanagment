@@ -547,6 +547,49 @@ adminRouter.post("/rfid/assign", async (req: AuthRequest, res) => {
   res.json(updated);
 });
 
+const unassignRfidSchema = z.object({
+  userId: z.string().min(1),
+  mode: z.enum(["DEACTIVATE", "DELETE"]).default("DEACTIVATE")
+});
+
+adminRouter.post("/rfid/unassign", async (req: AuthRequest, res) => {
+  const parsed = unassignRfidSchema.safeParse(req.body);
+  if (!parsed.success || !req.auth) {
+    res.status(400).json({ message: "Ungueltige Eingaben." });
+    return;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: parsed.data.userId },
+    select: { id: true, name: true, loginName: true, rfidTag: true }
+  });
+  if (!user) {
+    res.status(404).json({ message: "Mitarbeiter nicht gefunden." });
+    return;
+  }
+  if (!user.rfidTag) {
+    res.status(400).json({ message: "Mitarbeiter hat keinen RFID Tag." });
+    return;
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: parsed.data.userId },
+    data: { rfidTag: null },
+    select: { id: true, name: true, loginName: true, rfidTag: true }
+  });
+
+  await writeAuditLog({
+    actorUserId: req.auth.userId,
+    actorLoginName: await resolveActorLoginName(req.auth.userId),
+    action: parsed.data.mode === "DELETE" ? "RFID_DELETED" : "RFID_DEACTIVATED",
+    targetType: "User",
+    targetId: updated.id,
+    payload: { oldRfidTag: user.rfidTag, mode: parsed.data.mode }
+  });
+
+  res.json(updated);
+});
+
 const espProvisionSchema = z.object({
   terminalId: z.string().min(1),
   wifiSsid: z.string().min(1),

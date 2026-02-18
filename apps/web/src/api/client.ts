@@ -334,6 +334,12 @@ export const api = {
       body: JSON.stringify(payload)
     }),
 
+  unassignRfidTag: (payload: { userId: string; mode?: "DEACTIVATE" | "DELETE" }) =>
+    request<{ id: string; name: string; loginName: string; rfidTag: string | null }>("/api/admin/rfid/unassign", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+
   generateEspProvisionConfig: (payload: {
     terminalId: string;
     wifiSsid: string;

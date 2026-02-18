@@ -199,6 +199,8 @@ export function AdminHome() {
   const [assignRfidTag, setAssignRfidTag] = useState("");
   const [assignRfidUserId, setAssignRfidUserId] = useState("");
   const [assignRfidNote, setAssignRfidNote] = useState("");
+  const [editingAssignedUserId, setEditingAssignedUserId] = useState<string | null>(null);
+  const [editingAssignedTargetUserId, setEditingAssignedTargetUserId] = useState<string>("");
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [msg, setMsg] = useState("");
   const session = getSession();
@@ -1205,6 +1207,120 @@ export function AdminHome() {
                   {unassignedRfid.length === 0 && (
                     <tr>
                       <td colSpan={5}>Keine unbekannten RFID-Scans vorhanden.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <h4 style={{ marginTop: 14 }}>Zugewiesene RFID Tags</h4>
+            <div className="admin-table-wrap" style={{ marginTop: 8 }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>RFID Tag</th>
+                    <th>Mitarbeiter</th>
+                    <th>Aktion</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {employees.filter((e) => (e.rfidTag || "").trim().length > 0).map((e) => {
+                    const isEditing = editingAssignedUserId === e.id;
+                    return (
+                      <tr key={`assigned-${e.id}`}>
+                        <td><code>{e.rfidTag}</code></td>
+                        <td>{e.name} ({e.loginName})</td>
+                        <td>
+                          {!isEditing && (
+                            <button
+                              className="secondary"
+                              onClick={() => {
+                                setEditingAssignedUserId(e.id);
+                                setEditingAssignedTargetUserId(e.id);
+                              }}
+                            >
+                              Aendern
+                            </button>
+                          )}
+                          {isEditing && (
+                            <div className="row">
+                              <select
+                                value={editingAssignedTargetUserId}
+                                onChange={(ev) => setEditingAssignedTargetUserId(ev.target.value)}
+                              >
+                                {employees.map((u) => (
+                                  <option key={`reassign-${u.id}`} value={u.id}>{u.name} ({u.loginName})</option>
+                                ))}
+                              </select>
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    if (!e.rfidTag) {
+                                      setMsg("RFID Tag fehlt.");
+                                      return;
+                                    }
+                                    await api.assignRfidTag({ userId: editingAssignedTargetUserId, rfidTag: e.rfidTag, note: "RFID Zuordnung geaendert" });
+                                    setEditingAssignedUserId(null);
+                                    setEditingAssignedTargetUserId("");
+                                    setEmployees((await api.employees()) as Employee[]);
+                                    setMsg("RFID Zuordnung geaendert.");
+                                  } catch (err) {
+                                    setMsg((err as Error).message);
+                                  }
+                                }}
+                              >
+                                Speichern
+                              </button>
+                              <button
+                                className="secondary"
+                                onClick={async () => {
+                                  try {
+                                    await api.unassignRfidTag({ userId: e.id, mode: "DEACTIVATE" });
+                                    setEditingAssignedUserId(null);
+                                    setEditingAssignedTargetUserId("");
+                                    setEmployees((await api.employees()) as Employee[]);
+                                    setMsg("RFID deaktiviert.");
+                                  } catch (err) {
+                                    setMsg((err as Error).message);
+                                  }
+                                }}
+                              >
+                                Deaktivieren
+                              </button>
+                              <button
+                                className="warn"
+                                onClick={async () => {
+                                  try {
+                                    await api.unassignRfidTag({ userId: e.id, mode: "DELETE" });
+                                    setEditingAssignedUserId(null);
+                                    setEditingAssignedTargetUserId("");
+                                    setEmployees((await api.employees()) as Employee[]);
+                                    setMsg("RFID geloescht.");
+                                  } catch (err) {
+                                    setMsg((err as Error).message);
+                                  }
+                                }}
+                              >
+                                Loeschen
+                              </button>
+                              <button
+                                className="secondary"
+                                onClick={() => {
+                                  setEditingAssignedUserId(null);
+                                  setEditingAssignedTargetUserId("");
+                                }}
+                              >
+                                Abbrechen
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {employees.filter((e) => (e.rfidTag || "").trim().length > 0).length === 0 && (
+                    <tr>
+                      <td colSpan={3}>Keine RFID Tags zugewiesen.</td>
                     </tr>
                   )}
                 </tbody>
