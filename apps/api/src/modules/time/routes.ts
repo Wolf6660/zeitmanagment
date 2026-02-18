@@ -350,9 +350,9 @@ timeRouter.post("/sick-leave", requireRole([Role.SUPERVISOR, Role.ADMIN]), async
 
   const cfg = await prisma.systemConfig.findUnique({
     where: { id: 1 },
-    select: { accountantMailEnabled: true, accountantEmail: true }
+    select: { accountantMailEnabled: true, accountantMailOnSick: true, accountantEmail: true }
   });
-  if (cfg?.accountantMailEnabled && cfg.accountantEmail) {
+  if (cfg?.accountantMailEnabled && cfg.accountantMailOnSick && cfg.accountantEmail) {
     await sendMailIfEnabled({
       to: cfg.accountantEmail,
       subject: `Krankmeldung: ${sick.user.name}`,

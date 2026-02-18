@@ -292,6 +292,8 @@ model SystemConfig {
   mailOnAdminSystemError            Boolean  @default(true)
 
   accountantMailEnabled             Boolean  @default(false)
+  accountantMailOnSick              Boolean  @default(false)
+  accountantMailOnVacation          Boolean  @default(false)
   accountantEmail                   String?
   webPort                           Int      @default(3000)
   apiPort                           Int      @default(4000)

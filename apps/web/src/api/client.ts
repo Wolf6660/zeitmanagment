@@ -277,6 +277,8 @@ export const api = {
       smtpFrom?: string | null;
       smtpSenderName?: string | null;
       accountantMailEnabled?: boolean;
+      accountantMailOnSick?: boolean;
+      accountantMailOnVacation?: boolean;
       accountantEmail?: string | null;
       mailOnEmployeeLeaveDecision?: boolean;
       mailOnEmployeeOvertimeDecision?: boolean;

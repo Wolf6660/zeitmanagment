@@ -63,6 +63,8 @@ const configSchema = z.object({
   mailOnAdminUnknownRfid: z.boolean().optional(),
   mailOnAdminSystemError: z.boolean().optional(),
   accountantMailEnabled: z.boolean().optional(),
+  accountantMailOnSick: z.boolean().optional(),
+  accountantMailOnVacation: z.boolean().optional(),
   accountantEmail: z.preprocess((v) => (v === "" ? null : v), z.string().email().nullable()).optional(),
   webPort: z.number().int().min(1).max(65535).optional(),
   apiPort: z.number().int().min(1).max(65535).optional(),
@@ -284,7 +286,7 @@ adminRouter.post("/sick-leave", async (req: AuthRequest, res) => {
   });
 
   const config = await prisma.systemConfig.findUnique({ where: { id: 1 } });
-  if (config?.accountantMailEnabled && config.accountantEmail) {
+  if (config?.accountantMailEnabled && config.accountantMailOnSick && config.accountantEmail) {
     await sendMailIfEnabled({
       to: config.accountantEmail,
       subject: `Krankmeldung: ${sick.user.name}`,

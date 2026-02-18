@@ -41,6 +41,8 @@ type AdminConfig = {
   smtpFrom?: string | null;
   smtpSenderName?: string | null;
   accountantMailEnabled?: boolean;
+  accountantMailOnSick?: boolean;
+  accountantMailOnVacation?: boolean;
   accountantEmail?: string | null;
   mailOnEmployeeLeaveDecision?: boolean;
   mailOnEmployeeOvertimeDecision?: boolean;
@@ -537,6 +539,20 @@ export function AdminHome() {
             <select value={String(config.accountantMailEnabled ?? false)} onChange={(e) => setConfig({ ...config, accountantMailEnabled: e.target.value === "true" })}>
               <option value="true">Ja</option>
               <option value="false">Nein</option>
+            </select>
+          </label>
+          <label>
+            Buchhalter-Mail bei Krankheit
+            <select value={String(config.accountantMailOnSick ?? false)} onChange={(e) => setConfig({ ...config, accountantMailOnSick: e.target.value === "true" })}>
+              <option value="true">Aktiv</option>
+              <option value="false">Deaktiviert</option>
+            </select>
+          </label>
+          <label>
+            Buchhalter-Mail bei Urlaub (genehmigt)
+            <select value={String(config.accountantMailOnVacation ?? false)} onChange={(e) => setConfig({ ...config, accountantMailOnVacation: e.target.value === "true" })}>
+              <option value="true">Aktiv</option>
+              <option value="false">Deaktiviert</option>
             </select>
           </label>
           <label>

@@ -5,7 +5,7 @@ import { prisma } from "../../db/prisma.js";
 import { AuthRequest, requireAuth, requireRole } from "../../utils/auth.js";
 import { dayKey, isWeekend, listDays } from "../../utils/date.js";
 import { resolveActorLoginName, writeAuditLog } from "../../utils/audit.js";
-import { getSupervisorEmails, sendEventMail } from "../../utils/mail.js";
+import { getSupervisorEmails, sendEventMail, sendMailIfEnabled } from "../../utils/mail.js";
 
 export const leaveRouter = Router();
 
@@ -339,6 +339,20 @@ leaveRouter.post("/decision", requireRole([Role.SUPERVISOR, Role.ADMIN]), async 
       subject: `Ihr Antrag wurde ${parsed.data.decision === "APPROVED" ? "genehmigt" : "abgelehnt"}`,
       text: `Antrag: ${leave.kind}\nZeitraum: ${leave.startDate.toISOString().slice(0, 10)} bis ${leave.endDate.toISOString().slice(0, 10)}\nStatus: ${parsed.data.decision}\nNotiz: ${parsed.data.decisionNote}`
     }).catch(() => undefined);
+  }
+
+  if (parsed.data.decision === "APPROVED" && leave.kind === LeaveKind.VACATION) {
+    const cfg = await prisma.systemConfig.findUnique({
+      where: { id: 1 },
+      select: { accountantMailEnabled: true, accountantMailOnVacation: true, accountantEmail: true }
+    });
+    if (cfg?.accountantMailEnabled && cfg.accountantMailOnVacation && cfg.accountantEmail) {
+      await sendMailIfEnabled({
+        to: cfg.accountantEmail,
+        subject: `Urlaub genehmigt: ${employee?.name || leave.userId}`,
+        text: `Urlaub genehmigt fuer ${employee?.name || leave.userId}\nVon: ${leave.startDate.toISOString().slice(0, 10)}\nBis: ${leave.endDate.toISOString().slice(0, 10)}\nEntscheidung durch: ${req.auth.userId}`
+      }).catch(() => undefined);
+    }
   }
 
   res.json(updated);
