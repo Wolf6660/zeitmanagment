@@ -92,7 +92,7 @@ employeesRouter.post("/", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req
     return;
   }
 
-  if (req.auth?.role === Role.SUPERVISOR && ![Role.EMPLOYEE, Role.AZUBI].includes(parsed.data.role)) {
+  if (req.auth?.role === Role.SUPERVISOR && parsed.data.role !== Role.EMPLOYEE && parsed.data.role !== Role.AZUBI) {
     res.status(403).json({ message: "Vorgesetzte duerfen nur Mitarbeiter anlegen." });
     return;
   }
