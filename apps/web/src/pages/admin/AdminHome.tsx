@@ -1305,17 +1305,26 @@ export function AdminHome() {
                                 className="secondary"
                                 onClick={async () => {
                                   try {
-                                    await api.unassignRfidTag({ userId: e.id, mode: "DEACTIVATE" });
+                                    if (!e.rfidTag) {
+                                      setMsg("RFID Tag fehlt.");
+                                      return;
+                                    }
+                                    if (isRfidActive) {
+                                      await api.unassignRfidTag({ userId: e.id, mode: "DEACTIVATE" });
+                                      setMsg("RFID deaktiviert.");
+                                    } else {
+                                      await api.assignRfidTag({ userId: e.id, rfidTag: e.rfidTag, note: "RFID aktiviert" });
+                                      setMsg("RFID aktiviert.");
+                                    }
                                     setEditingAssignedUserId(null);
                                     setEditingAssignedTargetUserId("");
                                     setEmployees((await api.employees()) as Employee[]);
-                                    setMsg("RFID deaktiviert.");
                                   } catch (err) {
                                     setMsg((err as Error).message);
                                   }
                                 }}
                               >
-                                Deaktivieren
+                                {isRfidActive ? "Deaktivieren" : "Aktivieren"}
                               </button>
                               <button
                                 className="warn"
