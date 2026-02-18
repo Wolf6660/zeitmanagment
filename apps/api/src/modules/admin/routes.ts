@@ -461,13 +461,17 @@ adminRouter.get("/rfid/unassigned", async (_req, res) => {
     orderBy: { createdAt: "desc" },
     take: 500
   });
-  const dismissedTags = new Set<string>();
+  const dismissedTags = new Map<string, Date>();
   for (const log of dismissedLogs) {
     if (!log.payloadJson) continue;
     try {
       const payload = JSON.parse(log.payloadJson) as Record<string, unknown>;
       const tag = String(payload.rfidTag || "").trim().toUpperCase();
-      if (tag) dismissedTags.add(tag);
+      if (!tag) continue;
+      const existing = dismissedTags.get(tag);
+      if (!existing || log.createdAt > existing) {
+        dismissedTags.set(tag, log.createdAt);
+      }
     } catch {
       // ignore invalid payload
     }
@@ -501,13 +505,16 @@ adminRouter.get("/rfid/unassigned", async (_req, res) => {
     const tag = String(payload.rfidTag || "").trim();
     if (!tag) continue;
     const normalizedTag = tag.toUpperCase();
-    if (assignedTags.has(normalizedTag) || dismissedTags.has(normalizedTag)) continue;
-    const existing = byTag.get(tag);
+    if (assignedTags.has(normalizedTag)) continue;
+    const dismissedAt = dismissedTags.get(normalizedTag);
+    if (dismissedAt && log.createdAt <= dismissedAt) continue;
+
+    const existing = byTag.get(normalizedTag);
     if (existing) {
       existing.seenCount += 1;
       continue;
     }
-    byTag.set(tag, {
+    byTag.set(normalizedTag, {
       rfidTag: tag,
       seenCount: 1,
       lastSeenAt: log.createdAt.toISOString(),

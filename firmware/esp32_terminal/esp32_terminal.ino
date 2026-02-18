@@ -418,7 +418,21 @@ bool sendPunch(const String &uid, const String &type, String &employeeName, Stri
   if (code < 200 || code >= 300) {
     String response = http.getString();
     http.end();
-    errText = response.length() ? response : ("HTTP " + String(code));
+    String message = "";
+    if (response.length() > 0) {
+      StaticJsonDocument<512> errJson;
+      DeserializationError derr = deserializeJson(errJson, response);
+      if (!derr) {
+        message = jsonStringOr(errJson["message"], "");
+      }
+    }
+    if (code == 404 && (message.indexOf("nicht zugeordnet") >= 0 || response.indexOf("nicht zugeordnet") >= 0)) {
+      errText = "Unbekannte Karte";
+    } else if (message.length() > 0) {
+      errText = message;
+    } else {
+      errText = response.length() ? response : ("HTTP " + String(code));
+    }
     return false;
   }
 
@@ -603,6 +617,9 @@ void loop() {
       if (actionLabel == "BLOCKIERT") {
         showMessage(employeeName, "Doppelbuchung", "blockiert " + timeLabel);
         Serial.printf("%s Doppelbuchung blockiert %s\n", employeeName.c_str(), timeLabel.c_str());
+      } else if (errText == "Unbekannte Karte") {
+        showMessage("Unbekannte Karte", uid);
+        Serial.printf("Unbekannte Karte: %s\n", uid.c_str());
       } else {
         showMessage("Buchung fehlgeschl.", errText.substring(0, 20));
         Serial.printf("Punch Fehler: %s\n", errText.c_str());
