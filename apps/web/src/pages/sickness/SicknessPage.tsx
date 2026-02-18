@@ -22,23 +22,23 @@ export function SicknessPage() {
   return (
     <div className="card">
       <h2>Krankheit</h2>
-      <div className="grid grid-2">
+      <div className="grid admin-uniform">
         <label>
-          Mitarbeiter
+          Mitarbeiter:
           <select value={userId} onChange={(e) => setUserId(e.target.value)}>
             {employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
           </select>
         </label>
         <label>
-          Startdatum
+          Startdatum:
           <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
         </label>
         <label>
-          Enddatum
+          Enddatum:
           <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
         </label>
         <label>
-          Notiz
+          Notiz:
           <input value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
       </div>
@@ -63,9 +63,9 @@ export function SicknessPage() {
 
       <hr style={{ margin: "16px 0" }} />
 
-      <div className="grid grid-2">
+      <div className="grid admin-uniform">
         <label>
-          Krankheitstag loeschen
+          Krankheitstag loeschen:
           <input type="date" value={deleteDate} onChange={(e) => setDeleteDate(e.target.value)} />
         </label>
       </div>
@@ -92,4 +92,3 @@ export function SicknessPage() {
     </div>
   );
 }
-

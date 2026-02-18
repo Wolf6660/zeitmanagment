@@ -80,9 +80,10 @@ a {
 }
 
 .admin-uniform label {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
   width: 100%;
 }
 
@@ -225,5 +226,10 @@ td {
 
   .layout-1-2 {
     grid-template-columns: 1fr;
+  }
+
+  .admin-uniform label {
+    grid-template-columns: 1fr;
+    align-items: stretch;
   }
 }
