@@ -181,7 +181,7 @@ export const api = {
 
   createEmployee: (payload: {
     name: string;
-    email: string;
+    email?: string;
     loginName: string;
     password: string;
     role: "EMPLOYEE" | "AZUBI" | "SUPERVISOR" | "ADMIN";

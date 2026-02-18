@@ -830,6 +830,7 @@ export function AdminHome() {
               <input placeholder="E-Mail" value={newEmployee.email} onChange={(e) => setNewEmployee({ ...newEmployee, email: e.target.value })} />
               <input placeholder="Loginname" value={newEmployee.loginName} onChange={(e) => setNewEmployee({ ...newEmployee, loginName: e.target.value })} />
               <input placeholder="Passwort" type="password" value={newEmployee.password} onChange={(e) => setNewEmployee({ ...newEmployee, password: e.target.value })} />
+              <div style={{ color: "var(--muted)", fontSize: 12 }}>Passwort: mindestens 8 Zeichen und mindestens eine Zahl oder ein Sonderzeichen.</div>
               <label>
                 Rolle
                 <select value={newEmployee.role} onChange={(e) => setNewEmployee({ ...newEmployee, role: e.target.value as "EMPLOYEE" | "AZUBI" | "SUPERVISOR" | "ADMIN" })}>
@@ -849,6 +850,7 @@ export function AdminHome() {
                   <option value="no">Nein</option>
                 </select>
               </label>
+              <div style={{ color: "var(--muted)", fontSize: 12 }}>E-Mail ist nur Pflicht, wenn Mailbenachrichtigung = Ja.</div>
               <label>
                 Jahresurlaub (Tage)
                 <input
@@ -885,8 +887,17 @@ export function AdminHome() {
               style={{ marginTop: 8 }}
               onClick={async () => {
                 try {
+                  if (!/^.{8,}$/.test(newEmployee.password) || !/([0-9]|[^A-Za-z0-9])/.test(newEmployee.password)) {
+                    setMsg("Passwort muss mindestens 8 Zeichen und mindestens eine Zahl oder ein Sonderzeichen enthalten.");
+                    return;
+                  }
+                  if (newEmployee.mailNotificationsEnabled && !newEmployee.email.trim()) {
+                    setMsg("E-Mail ist Pflicht, wenn Mailbenachrichtigung aktiv ist.");
+                    return;
+                  }
                   await api.createEmployee({
                     ...newEmployee,
+                    email: newEmployee.email.trim() || undefined,
                     annualVacationDays: Number.isFinite(Number(newEmployee.annualVacationDays)) ? Number(newEmployee.annualVacationDays) : 30,
                     dailyWorkHours: Number.isFinite(Number(newEmployee.dailyWorkHours)) ? Number(newEmployee.dailyWorkHours) : 8,
                     carryOverVacationDays: Number.isFinite(Number(newEmployee.carryOverVacationDays)) ? Number(newEmployee.carryOverVacationDays) : 0,

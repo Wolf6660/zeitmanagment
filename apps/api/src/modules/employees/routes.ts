@@ -72,9 +72,15 @@ employeesRouter.get("/", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (_req
 
 const createEmployeeSchema = z.object({
   name: z.string().min(1),
-  email: z.string().email(),
+  email: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().email().optional()
+  ),
   loginName: z.string().min(3),
-  password: z.string().min(8),
+  password: z
+    .string()
+    .min(8, "Passwort muss mindestens 8 Zeichen lang sein.")
+    .regex(/^(?=.*([0-9]|[^A-Za-z0-9])).+$/, "Passwort braucht mindestens eine Zahl oder ein Sonderzeichen."),
   role: z.nativeEnum(Role).default(Role.EMPLOYEE),
   annualVacationDays: z.coerce.number().int().min(0).max(365).default(30),
   dailyWorkHours: z.preprocess((v) => (v === "" || v === null ? undefined : v), z.coerce.number().min(1).max(24).optional()),
@@ -88,12 +94,20 @@ const createEmployeeSchema = z.object({
 employeesRouter.post("/", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
   const parsed = createEmployeeSchema.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ message: "Ungueltige Eingaben.", errors: parsed.error.flatten() });
+    const issues = parsed.error.issues
+      .slice(0, 3)
+      .map((i) => `${i.path.join(".") || "feld"}: ${i.message}`)
+      .join(" | ");
+    res.status(400).json({ message: `Ungueltige Eingaben. ${issues}`, errors: parsed.error.flatten() });
     return;
   }
 
   if (req.auth?.role === Role.SUPERVISOR && parsed.data.role !== Role.EMPLOYEE && parsed.data.role !== Role.AZUBI) {
     res.status(403).json({ message: "Vorgesetzte duerfen nur Mitarbeiter anlegen." });
+    return;
+  }
+  if (parsed.data.mailNotificationsEnabled && !parsed.data.email) {
+    res.status(400).json({ message: "E-Mail ist Pflicht, wenn Mailbenachrichtigung aktiv ist." });
     return;
   }
   if (req.auth?.role === Role.SUPERVISOR && parsed.data.timeTrackingEnabled === false) {
@@ -111,7 +125,7 @@ employeesRouter.post("/", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req
     const user = await prisma.user.create({
       data: {
         name: parsed.data.name,
-        email: parsed.data.email,
+        email: parsed.data.email ?? `${parsed.data.loginName.toLowerCase()}@no-mail.local`,
         loginName: parsed.data.loginName,
         passwordHash: hash,
         role: parsed.data.role,
