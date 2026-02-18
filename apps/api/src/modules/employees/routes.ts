@@ -92,7 +92,7 @@ employeesRouter.post("/", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req
     return;
   }
 
-  if (req.auth?.role === Role.SUPERVISOR && parsed.data.role !== Role.EMPLOYEE) {
+  if (req.auth?.role === Role.SUPERVISOR && ![Role.EMPLOYEE, Role.AZUBI].includes(parsed.data.role)) {
     res.status(403).json({ message: "Vorgesetzte duerfen nur Mitarbeiter anlegen." });
     return;
   }
@@ -192,6 +192,7 @@ employeesRouter.patch("/:id", requireRole([Role.SUPERVISOR, Role.ADMIN]), async 
     && parsed.data.role
     && parsed.data.role !== current.role
     && parsed.data.role !== Role.EMPLOYEE
+    && parsed.data.role !== Role.AZUBI
   ) {
     res.status(403).json({ message: "Vorgesetzte duerfen keine Admins/Vorgesetzten setzen." });
     return;

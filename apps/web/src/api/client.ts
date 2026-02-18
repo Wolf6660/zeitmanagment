@@ -5,7 +5,7 @@ const API_URL = (import.meta.env.VITE_API_URL as string | undefined) || "";
 export type SessionUser = {
   id: string;
   name: string;
-  role: "EMPLOYEE" | "SUPERVISOR" | "ADMIN";
+  role: "EMPLOYEE" | "AZUBI" | "SUPERVISOR" | "ADMIN";
   loginName: string;
 };
 
@@ -75,6 +75,9 @@ export const api = {
 
   selfCorrection: (payload: { type: "CLOCK_IN" | "CLOCK_OUT"; occurredAt: string; correctionComment: string }) =>
     request("/api/time/self-correction", { method: "POST", body: JSON.stringify(payload) }),
+
+  azubiSchoolDay: (payload: { date: string }) =>
+    request<{ ok: boolean }>("/api/time/azubi/school-day", { method: "POST", body: JSON.stringify(payload) }),
 
   todayEntries: (userId: string) =>
     request<Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; occurredAt: string; source: string; reasonText?: string }>>(
@@ -181,7 +184,7 @@ export const api = {
     email: string;
     loginName: string;
     password: string;
-    role: "EMPLOYEE" | "SUPERVISOR" | "ADMIN";
+    role: "EMPLOYEE" | "AZUBI" | "SUPERVISOR" | "ADMIN";
     annualVacationDays: number;
     dailyWorkHours?: number;
     carryOverVacationDays: number;
@@ -196,7 +199,7 @@ export const api = {
     payload: {
       name?: string;
       email?: string;
-      role?: "EMPLOYEE" | "SUPERVISOR" | "ADMIN";
+      role?: "EMPLOYEE" | "AZUBI" | "SUPERVISOR" | "ADMIN";
       annualVacationDays?: number;
       dailyWorkHours?: number | null;
       carryOverVacationDays?: number;

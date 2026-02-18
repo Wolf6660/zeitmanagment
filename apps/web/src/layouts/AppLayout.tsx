@@ -33,13 +33,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="row" style={{ justifyContent: "space-between", marginTop: 8 }}>
           <div className="nav" style={{ margin: 0 }}>
             <Link to="/app"><button>Startseite</button></Link>
-            {session?.user.role === "EMPLOYEE" && (
+            {(session?.user.role === "EMPLOYEE" || session?.user.role === "AZUBI") && (
               <Link to="/app/month-self"><button>Monatsansicht</button></Link>
             )}
             {(session?.user.role === "ADMIN" || session?.user.role === "SUPERVISOR") && (
               <Link to="/app/month"><button>Monatsansicht</button></Link>
             )}
-            {session?.user.role === "EMPLOYEE" && (
+            {(session?.user.role === "EMPLOYEE" || session?.user.role === "AZUBI") && (
               <Link to="/app/my-requests"><button>Urlaub / AZ</button></Link>
             )}
             {(session?.user.role === "ADMIN" || session?.user.role === "SUPERVISOR") && (

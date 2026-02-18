@@ -7,7 +7,7 @@ export function HomeRouter() {
   const session = getSession();
   if (!session) return null;
 
-  if (session.user.role === "EMPLOYEE") {
+  if (session.user.role === "EMPLOYEE" || session.user.role === "AZUBI") {
     return <EmployeeHome />;
   }
 

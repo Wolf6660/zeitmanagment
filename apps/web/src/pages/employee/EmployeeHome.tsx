@@ -14,6 +14,8 @@ export function EmployeeHome() {
   const [manualOut, setManualOut] = useState("");
   const [manualDate, setManualDate] = useState("");
   const [maxBackDays, setMaxBackDays] = useState(3);
+  const [schoolDate, setSchoolDate] = useState(new Date().toISOString().slice(0, 10));
+  const isAzubi = session?.user.role === "AZUBI";
 
   async function reloadData() {
     if (!session) return;
@@ -92,6 +94,41 @@ export function EmployeeHome() {
           <button className="secondary" onClick={() => setManualMode((m) => !m)}>
             {manualMode ? "Nachtragen schliessen" : "Nachtragen"}
           </button>
+          {isAzubi && (
+            <div className="card" style={{ padding: 10 }}>
+              <strong>Berufsschule</strong>
+              <div style={{ color: "var(--muted)" }}>8 Stunden mit Notiz "Berufsschule", bis 3 Tage rueckwirkend.</div>
+              <div className="row" style={{ marginTop: 8 }}>
+                <input
+                  type="date"
+                  value={schoolDate}
+                  onChange={(e) => setSchoolDate(e.target.value)}
+                  max={new Date().toISOString().slice(0, 10)}
+                  min={new Date(Date.now() - 3 * 86400000).toISOString().slice(0, 10)}
+                />
+                <button
+                  className="secondary"
+                  onClick={async () => {
+                    try {
+                      if (!schoolDate) {
+                        setMessage("Datum ist Pflicht.");
+                        return;
+                      }
+                      const ok = window.confirm(`Berufsschule fuer ${schoolDate} eintragen (8 Stunden)?`);
+                      if (!ok) return;
+                      await api.azubiSchoolDay({ date: schoolDate });
+                      setMessage("Berufsschule eingetragen.");
+                      await reloadData();
+                    } catch (e) {
+                      setMessage((e as Error).message);
+                    }
+                  }}
+                >
+                  Berufsschule
+                </button>
+              </div>
+            </div>
+          )}
           {manualMode && (
             <div className="card" style={{ padding: 10 }}>
               <strong>Zeiten nachtragen</strong>

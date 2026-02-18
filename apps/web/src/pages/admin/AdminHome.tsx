@@ -78,7 +78,7 @@ type Employee = {
   id: string;
   name: string;
   email: string;
-  role: "EMPLOYEE" | "SUPERVISOR" | "ADMIN";
+  role: "EMPLOYEE" | "AZUBI" | "SUPERVISOR" | "ADMIN";
   isActive: boolean;
   annualVacationDays: number;
   carryOverVacationDays: number;
@@ -225,7 +225,7 @@ export function AdminHome() {
     email: "",
     loginName: "",
     password: "",
-    role: "EMPLOYEE" as "EMPLOYEE" | "SUPERVISOR" | "ADMIN",
+    role: "EMPLOYEE" as "EMPLOYEE" | "AZUBI" | "SUPERVISOR" | "ADMIN",
     annualVacationDays: 30,
     dailyWorkHours: 8,
     carryOverVacationDays: 0,
@@ -832,8 +832,9 @@ export function AdminHome() {
               <input placeholder="Passwort" type="password" value={newEmployee.password} onChange={(e) => setNewEmployee({ ...newEmployee, password: e.target.value })} />
               <label>
                 Rolle
-                <select value={newEmployee.role} onChange={(e) => setNewEmployee({ ...newEmployee, role: e.target.value as "EMPLOYEE" | "SUPERVISOR" | "ADMIN" })}>
+                <select value={newEmployee.role} onChange={(e) => setNewEmployee({ ...newEmployee, role: e.target.value as "EMPLOYEE" | "AZUBI" | "SUPERVISOR" | "ADMIN" })}>
                   <option value="EMPLOYEE">Mitarbeiter</option>
+                  <option value="AZUBI">AZUBI</option>
                   {session?.user.role === "ADMIN" && <option value="SUPERVISOR">Vorgesetzter</option>}
                   {session?.user.role === "ADMIN" && <option value="ADMIN">Admin</option>}
                 </select>
@@ -943,6 +944,7 @@ export function AdminHome() {
                       {editing ? (
                         <select value={(editingEmployee.role ?? e.role) as string} onChange={(ev) => setEditingEmployee({ ...editingEmployee, role: ev.target.value as Employee["role"] })}>
                           <option value="EMPLOYEE">Mitarbeiter</option>
+                          <option value="AZUBI">AZUBI</option>
                           {session?.user.role !== "ADMIN" && (editingEmployee.role ?? e.role) === "SUPERVISOR" && <option value="SUPERVISOR">Vorgesetzter</option>}
                           {session?.user.role !== "ADMIN" && (editingEmployee.role ?? e.role) === "ADMIN" && <option value="ADMIN">Admin</option>}
                           {session?.user.role === "ADMIN" && <option value="SUPERVISOR">Vorgesetzter</option>}

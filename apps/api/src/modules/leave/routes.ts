@@ -461,7 +461,7 @@ leaveRouter.get("/availability/:userId", requireRole([Role.EMPLOYEE, Role.SUPERV
     return;
   }
   const userId = String(req.params.userId);
-  if (req.auth.role === Role.EMPLOYEE && req.auth.userId !== userId) {
+  if ((req.auth.role === Role.EMPLOYEE || req.auth.role === Role.AZUBI) && req.auth.userId !== userId) {
     res.status(403).json({ message: "Keine Berechtigung." });
     return;
   }

@@ -580,7 +580,7 @@ const dayOverrideSchema = z.object({
         time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)(:[0-5]\d)?$/, "Zeit ist ungueltig (HH:MM).")
       })
     )
-    .min(1)
+    .min(0)
 });
 
 timeRouter.post("/day-override", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
@@ -635,7 +635,13 @@ timeRouter.post("/day-override", requireRole([Role.SUPERVISOR, Role.ADMIN]), asy
       });
       created.push(row);
     }
-    await upsertSpecialWorkApproval(parsed.data.userId, dayStart, parsed.data.note);
+    if (created.length > 0) {
+      await upsertSpecialWorkApproval(parsed.data.userId, dayStart, parsed.data.note);
+    } else {
+      await prisma.specialWorkApproval.deleteMany({
+        where: { userId: parsed.data.userId, date: dayStart }
+      });
+    }
     try {
       await writeAuditLog({
         actorUserId: req.auth.userId,
@@ -665,6 +671,82 @@ const selfDayOverrideSchema = z.object({
       })
     )
     .min(1)
+});
+
+const azubiSchoolDaySchema = z.object({
+  date: z.string().min(10)
+});
+
+timeRouter.post("/azubi/school-day", requireRole([Role.AZUBI]), async (req: AuthRequest, res) => {
+  const parsed = azubiSchoolDaySchema.safeParse(req.body);
+  if (!parsed.success || !req.auth) {
+    res.status(400).json({ message: "Ungueltige Eingaben." });
+    return;
+  }
+
+  const dateParts = parseIsoDateParts(parsed.data.date);
+  if (!dateParts) {
+    res.status(400).json({ message: "Datum ist ungueltig." });
+    return;
+  }
+  const me = await prisma.user.findUnique({ where: { id: req.auth.userId }, select: { timeTrackingEnabled: true } });
+  if (me && !me.timeTrackingEnabled) {
+    res.status(403).json({ message: "Zeiterfassung ist fuer diesen Mitarbeiter deaktiviert." });
+    return;
+  }
+
+  const now = new Date();
+  const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0));
+  const selected = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, 0, 0, 0));
+  const diffDays = Math.floor((todayUtc.getTime() - selected.getTime()) / 86400000);
+  if (Number.isNaN(diffDays) || diffDays < 0) {
+    res.status(403).json({ message: "Eintrag in die Zukunft ist nicht erlaubt." });
+    return;
+  }
+  if (diffDays > 3) {
+    res.status(403).json({ message: "Berufsschule kann nur bis 3 Tage rueckwirkend eingetragen werden." });
+    return;
+  }
+
+  const dayStart = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, 0, 0, 0));
+  const dayEnd = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, 23, 59, 59, 999));
+  await prisma.timeEntry.deleteMany({ where: { userId: req.auth.userId, occurredAt: { gte: dayStart, lte: dayEnd } } });
+
+  await prisma.timeEntry.createMany({
+    data: [
+      {
+        userId: req.auth.userId,
+        type: TimeEntryType.CLOCK_IN,
+        source: TimeEntrySource.MANUAL_CORRECTION,
+        isManualCorrection: true,
+        correctionComment: "Berufsschule",
+        reasonText: "Berufsschule",
+        occurredAt: new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, 8, 0, 0)),
+        createdById: req.auth.userId
+      },
+      {
+        userId: req.auth.userId,
+        type: TimeEntryType.CLOCK_OUT,
+        source: TimeEntrySource.MANUAL_CORRECTION,
+        isManualCorrection: true,
+        correctionComment: "Berufsschule",
+        reasonText: "Berufsschule",
+        occurredAt: new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, 16, 30, 0)),
+        createdById: req.auth.userId
+      }
+    ]
+  });
+
+  await writeAuditLog({
+    actorUserId: req.auth.userId,
+    actorLoginName: await resolveActorLoginName(req.auth.userId),
+    action: "AZUBI_SCHOOL_DAY_SET",
+    targetType: "TimeEntry",
+    targetId: req.auth.userId,
+    payload: { date: parsed.data.date, note: "Berufsschule", workedHoursTarget: 8 }
+  });
+
+  res.json({ ok: true });
 });
 
 timeRouter.post("/day-override-self", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
@@ -756,7 +838,7 @@ timeRouter.get("/month/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Ro
     return;
   }
   const targetUserId = String(req.params.userId);
-  if (req.auth.role === Role.EMPLOYEE && req.auth.userId !== targetUserId) {
+  if ((req.auth.role === Role.EMPLOYEE || req.auth.role === Role.AZUBI) && req.auth.userId !== targetUserId) {
     res.status(403).json({ message: "Keine Berechtigung." });
     return;
   }
@@ -882,7 +964,7 @@ timeRouter.get("/summary/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, 
   }
 
   const targetUserId = String(req.params.userId);
-  if (req.auth.role === Role.EMPLOYEE && req.auth.userId !== targetUserId) {
+  if ((req.auth.role === Role.EMPLOYEE || req.auth.role === Role.AZUBI) && req.auth.userId !== targetUserId) {
     res.status(403).json({ message: "Keine Berechtigung." });
     return;
   }
@@ -1009,7 +1091,7 @@ timeRouter.get("/today/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Ro
   }
 
   const targetUserId = String(req.params.userId);
-  if (req.auth.role === Role.EMPLOYEE && req.auth.userId !== targetUserId) {
+  if ((req.auth.role === Role.EMPLOYEE || req.auth.role === Role.AZUBI) && req.auth.userId !== targetUserId) {
     res.status(403).json({ message: "Keine Berechtigung." });
     return;
   }

@@ -164,6 +164,13 @@ export function MonthEditorPage() {
                             >
                               Ereignis hinzufuegen
                             </button>
+                            <button
+                              className="warn"
+                              type="button"
+                              onClick={() => setOverrideEvents([])}
+                            >
+                              Tag leeren
+                            </button>
                           </div>
                           <textarea style={{ marginTop: 8 }} placeholder="Notiz (Pflichtfeld)" value={overrideNote} onChange={(e) => setOverrideNote(e.target.value)} />
                           <div className="row" style={{ marginTop: 8 }}>
@@ -174,7 +181,6 @@ export function MonthEditorPage() {
                                 const events = overrideEvents
                                   .map((x) => ({ type: x.type, time: x.time.trim().slice(0, 5) }))
                                   .filter((x) => x.time.length > 0);
-                                if (events.length === 0) { setMsg("Mindestens ein Ereignis erforderlich."); return; }
                                 if (events.some((x) => !/^([01]\d|2[0-3]):([0-5]\d)$/.test(x.time))) {
                                   setMsg("Ungueltige Uhrzeit.");
                                   return;
@@ -192,7 +198,7 @@ export function MonthEditorPage() {
                                     }))
                                   );
                                 }
-                                setMsg(`Tag aktualisiert (${events.length} Ereignisse).`);
+                                setMsg(events.length === 0 ? "Tag geleert." : `Tag aktualisiert (${events.length} Ereignisse).`);
                                 setSelectedDay(d.date);
                               } catch (e) {
                                 setMsg((e as Error).message);

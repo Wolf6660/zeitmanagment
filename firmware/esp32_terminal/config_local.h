@@ -3,8 +3,8 @@
 // Automatisch aus ESP32 Provisioning erzeugt
 #define LOCAL_WIFI_SSID "IoT"
 #define LOCAL_WIFI_PASSWORD "!desischmeiWlanduNudeldunger\""
-#define LOCAL_SERVER_ENDPOINT "http://192.168.10.100:26100/api/terminal/punch"
-#define LOCAL_USE_TLS false
+#define LOCAL_SERVER_ENDPOINT "https://zeiterfassung.dyndns-bellheim.de/api/terminal/punch"
+#define LOCAL_USE_TLS true
 #define LOCAL_TERMINAL_KEY "1f2c1770fa442a646d417bce5901fab5d685617426dbffee"
 
 #define LOCAL_READER_TYPE "RC522"

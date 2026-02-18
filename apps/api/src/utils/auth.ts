@@ -34,7 +34,12 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
 
 export function requireRole(roles: Role[]) {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
-    if (!req.auth || !roles.includes(req.auth.role)) {
+    if (!req.auth) {
+      res.status(403).json({ message: "Keine Berechtigung." });
+      return;
+    }
+    const isAzubiAsEmployee = req.auth.role === Role.AZUBI && roles.includes(Role.EMPLOYEE);
+    if (!roles.includes(req.auth.role) && !isAzubiAsEmployee) {
       res.status(403).json({ message: "Keine Berechtigung." });
       return;
     }

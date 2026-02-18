@@ -5,7 +5,7 @@ type Employee = {
   id: string;
   name: string;
   email: string;
-  role: "EMPLOYEE" | "SUPERVISOR" | "ADMIN";
+  role: "EMPLOYEE" | "AZUBI" | "SUPERVISOR" | "ADMIN";
   isActive: boolean;
   annualVacationDays: number;
   carryOverVacationDays: number;
@@ -28,7 +28,8 @@ export function SupervisorEmployeesPage() {
     annualVacationDays: 30,
     dailyWorkHours: 8,
     carryOverVacationDays: 0,
-    webLoginEnabled: true
+    webLoginEnabled: true,
+    role: "EMPLOYEE" as "EMPLOYEE" | "AZUBI"
   });
 
   async function load() {
@@ -70,6 +71,13 @@ export function SupervisorEmployeesPage() {
               <option value="no">Nein</option>
             </select>
           </label>
+          <label>
+            Rolle
+            <select value={newEmployee.role} onChange={(e) => setNewEmployee({ ...newEmployee, role: e.target.value as "EMPLOYEE" | "AZUBI" })}>
+              <option value="EMPLOYEE">Mitarbeiter</option>
+              <option value="AZUBI">AZUBI</option>
+            </select>
+          </label>
         </div>
         <button
           style={{ marginTop: 8 }}
@@ -77,7 +85,6 @@ export function SupervisorEmployeesPage() {
             try {
               await api.createEmployee({
                 ...newEmployee,
-                role: "EMPLOYEE",
                 mailNotificationsEnabled: true
               });
               setMsg("Mitarbeiter angelegt.");
@@ -89,7 +96,8 @@ export function SupervisorEmployeesPage() {
                 annualVacationDays: 30,
                 dailyWorkHours: 8,
                 carryOverVacationDays: 0,
-                webLoginEnabled: true
+                webLoginEnabled: true,
+                role: "EMPLOYEE"
               });
               await load();
             } catch (e) {
@@ -119,7 +127,7 @@ export function SupervisorEmployeesPage() {
         <tbody>
           {employees.map((e) => {
             const isEdit = editingId === e.id;
-            const canEdit = e.role === "EMPLOYEE";
+            const canEdit = e.role === "EMPLOYEE" || e.role === "AZUBI";
             return (
               <tr key={e.id}>
                 <td>{isEdit ? <input value={editing.name ?? e.name} onChange={(ev) => setEditing({ ...editing, name: ev.target.value })} /> : e.name}</td>
