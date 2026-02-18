@@ -42,7 +42,12 @@ export async function sendMailIfEnabled(opts: { to: string; subject: string; tex
     return;
   }
 
-  const transport = buildTransport(cfg);
+  const transport = buildTransport({
+    ...cfg,
+    smtpHost: cfg.smtpHost as string,
+    smtpUser: cfg.smtpUser as string,
+    smtpPassword: cfg.smtpPassword as string
+  });
 
   await transport.sendMail({
     from: cfg.smtpSenderName ? `"${cfg.smtpSenderName}" <${cfg.smtpFrom}>` : cfg.smtpFrom,

@@ -383,6 +383,7 @@ timeRouter.post("/sick-leave/delete-day", requireRole([Role.SUPERVISOR, Role.ADM
     res.status(400).json({ message: "Ungueltige Eingaben." });
     return;
   }
+  const actorUserId = req.auth.userId;
   const p = parseIsoDateParts(parsed.data.date);
   if (!p) {
     res.status(400).json({ message: "Datum ist ungueltig." });
@@ -426,15 +427,15 @@ timeRouter.post("/sick-leave/delete-day", requireRole([Role.SUPERVISOR, Role.ADM
           endDate: row.endDate,
           partialDayHours: row.partialDayHours ?? undefined,
           note: row.note ?? undefined,
-          createdById: req.auth.userId
+          createdById: actorUserId
         }
       });
     }
   });
 
   await writeAuditLog({
-    actorUserId: req.auth.userId,
-    actorLoginName: await resolveActorLoginName(req.auth.userId),
+    actorUserId,
+    actorLoginName: await resolveActorLoginName(actorUserId),
     action: "SICK_LEAVE_DAY_REMOVED",
     targetType: "SickLeave",
     targetId: parsed.data.userId,
