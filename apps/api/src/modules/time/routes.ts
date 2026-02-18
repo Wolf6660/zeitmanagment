@@ -5,7 +5,7 @@ import { prisma } from "../../db/prisma.js";
 import { AuthRequest, requireAuth, requireRole } from "../../utils/auth.js";
 import { dayKey, isWeekend } from "../../utils/date.js";
 import { resolveActorLoginName, writeAuditLog } from "../../utils/audit.js";
-import { getSupervisorEmails, sendEventMail } from "../../utils/mail.js";
+import { getSupervisorEmails, sendEventMail, sendMailIfEnabled } from "../../utils/mail.js";
 
 export const timeRouter = Router();
 
@@ -43,6 +43,17 @@ function parseWorkingDaySet(value?: string | null): Set<number> {
     if (v in map) out.add(map[v]);
   }
   return out;
+}
+
+function dateOnlyUtc(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0));
+}
+
+function isDateWithinRange(date: Date, start: Date, end: Date): boolean {
+  const d = dateOnlyUtc(date).getTime();
+  const s = dateOnlyUtc(start).getTime();
+  const e = dateOnlyUtc(end).getTime();
+  return d >= s && d <= e;
 }
 
 async function isHolidayDate(date: Date): Promise<boolean> {
@@ -304,6 +315,61 @@ timeRouter.post("/break-credit", requireRole([Role.SUPERVISOR, Role.ADMIN]), asy
   });
 
   res.status(201).json(result);
+});
+
+const sickSchema = z.object({
+  userId: z.string().min(1),
+  startDate: z.coerce.date(),
+  endDate: z.coerce.date(),
+  partialDayHours: z.number().min(0).max(24).optional(),
+  note: z.string().max(1000).optional()
+});
+
+timeRouter.post("/sick-leave", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+  const parsed = sickSchema.safeParse(req.body);
+  if (!parsed.success || !req.auth) {
+    res.status(400).json({ message: "Ungueltige Eingaben." });
+    return;
+  }
+  if (parsed.data.endDate < parsed.data.startDate) {
+    res.status(400).json({ message: "Enddatum darf nicht vor Startdatum liegen." });
+    return;
+  }
+
+  const sick = await prisma.sickLeave.create({
+    data: {
+      userId: parsed.data.userId,
+      startDate: parsed.data.startDate,
+      endDate: parsed.data.endDate,
+      partialDayHours: parsed.data.partialDayHours,
+      note: parsed.data.note,
+      createdById: req.auth.userId
+    },
+    include: { user: { select: { name: true, loginName: true } } }
+  });
+
+  const cfg = await prisma.systemConfig.findUnique({
+    where: { id: 1 },
+    select: { accountantMailEnabled: true, accountantEmail: true }
+  });
+  if (cfg?.accountantMailEnabled && cfg.accountantEmail) {
+    await sendMailIfEnabled({
+      to: cfg.accountantEmail,
+      subject: `Krankmeldung: ${sick.user.name}`,
+      text: `Krankheit eingetragen fuer ${sick.user.name} (${sick.user.loginName}) von ${sick.startDate.toISOString().slice(0, 10)} bis ${sick.endDate.toISOString().slice(0, 10)}.`
+    }).catch(() => undefined);
+  }
+
+  await writeAuditLog({
+    actorUserId: req.auth.userId,
+    actorLoginName: await resolveActorLoginName(req.auth.userId),
+    action: "SICK_LEAVE_CREATED",
+    targetType: "SickLeave",
+    targetId: sick.id,
+    payload: parsed.data
+  });
+
+  res.status(201).json(sick);
 });
 
 const overtimeAdjustmentSchema = z.object({
@@ -629,12 +695,13 @@ timeRouter.get("/month/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Ro
   }
   const monthStart = new Date(Date.UTC(year, month - 1, 1));
   const monthEnd = new Date(Date.UTC(year, month, 0, 23, 59, 59));
-  const [config, user, holidays, entries, approvals] = await Promise.all([
+  const [config, user, holidays, entries, approvals, sickLeaves] = await Promise.all([
     prisma.systemConfig.findUnique({ where: { id: 1 } }),
     prisma.user.findUnique({ where: { id: targetUserId }, select: { dailyWorkHours: true, timeTrackingEnabled: true } }),
     prisma.holiday.findMany({ where: { date: { gte: monthStart, lte: monthEnd } } }),
     prisma.timeEntry.findMany({ where: { userId: targetUserId, occurredAt: { gte: monthStart, lte: monthEnd } }, orderBy: { occurredAt: "asc" } }),
-    prisma.specialWorkApproval.findMany({ where: { userId: targetUserId, date: { gte: monthStart, lte: monthEnd } } })
+    prisma.specialWorkApproval.findMany({ where: { userId: targetUserId, date: { gte: monthStart, lte: monthEnd } } }),
+    prisma.sickLeave.findMany({ where: { userId: targetUserId, startDate: { lte: monthEnd }, endDate: { gte: monthStart } } })
   ]);
   const dailyHours = user?.dailyWorkHours ?? config?.defaultDailyHours ?? 8;
   const workingDays = parseWorkingDaySet(config?.defaultWeeklyWorkingDays);
@@ -658,18 +725,24 @@ timeRouter.get("/month/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Ro
     const isHoliday = holidaySet.has(key);
     const weekend = isWeekend(date);
     const planned = workingDays.has(date.getUTCDay()) && !isHoliday ? dailyHours : 0;
+    const isSick = planned > 0 && sickLeaves.some((s) => isDateWithinRange(date, s.startDate, s.endDate));
+    const sickHours = isSick ? planned : 0;
     const grossMin = grossByDay.minutesByDay.get(key) ?? 0;
     const approvalStatus = approvalByDay.get(key) ?? null;
     const requiresApproval = isHoliday || weekend || ((config?.requireApprovalForCrossMidnight ?? true) && grossByDay.crossMidnightStartDays.has(key));
     const workedRaw = Number((grossMin / 60).toFixed(2));
     const workedEffective = requiresApproval && approvalStatus !== ApprovalStatus.APPROVED ? 0 : workedRaw;
-    const worked = user?.timeTrackingEnabled === false ? Number(planned.toFixed(2)) : workedEffective;
+    const worked = user?.timeTrackingEnabled === false
+      ? Number(planned.toFixed(2))
+      : Number((sickHours > 0 ? sickHours : workedEffective).toFixed(2));
     monthPlanned += planned;
     monthWorked += worked;
     days.push({
       date: key,
       plannedHours: Number(planned.toFixed(2)),
       workedHours: worked,
+      sickHours: Number(sickHours.toFixed(2)),
+      isSick,
       isHoliday,
       isWeekend: weekend,
       specialWorkApprovalStatus: approvalStatus,
@@ -786,9 +859,12 @@ timeRouter.get("/summary/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, 
 
     const isHoliday = holidaySet.has(key);
     const weekend = isWeekend(date);
+    const isSick = !weekend && !isHoliday && sickLeaves.some((s) => isDateWithinRange(date, s.startDate, s.endDate));
     const approvalStatus = approvalByDay.get(key) ?? null;
     const requiresApproval = isHoliday || weekend || ((config?.requireApprovalForCrossMidnight ?? true) && grossByDay.crossMidnightStartDays.has(key));
-    if (!requiresApproval || approvalStatus === ApprovalStatus.APPROVED) {
+    if (isSick) {
+      workedTotal += dailyHours;
+    } else if (!requiresApproval || approvalStatus === ApprovalStatus.APPROVED) {
       workedTotal += netMinutes / 60;
     }
 
@@ -804,15 +880,20 @@ timeRouter.get("/summary/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, 
     return sum + days;
   }, 0);
 
-  const sickDays = sickLeaves.reduce((sum, s) => {
+  const sickHours = sickLeaves.reduce((sum, s) => {
     const start = new Date(Math.max(s.startDate.getTime(), monthStart.getTime()));
     const end = new Date(Math.min(s.endDate.getTime(), monthEnd.getTime()));
-    const days = Math.max(Math.ceil((end.getTime() - start.getTime()) / 86400000) + 1, 0);
-    return sum + days;
+    let hours = 0;
+    for (let d = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate())); d <= end; d = new Date(d.getTime() + 86400000)) {
+      const key = dayKey(d);
+      const isWorkday = workingDays.has(d.getUTCDay()) && !holidaySet.has(key);
+      if (isWorkday) hours += dailyHours;
+    }
+    return sum + hours;
   }, 0);
 
   const manualAdjustmentHours = overtimeAdjustments.reduce((sum, a) => sum + a.hours, 0);
-  const totalIncludingAbsence = workedTotal + approvalDays * dailyHours + sickDays * dailyHours;
+  const totalIncludingAbsence = workedTotal + approvalDays * dailyHours + sickHours;
   if (user?.timeTrackingEnabled === false) {
     res.json({
       month: `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`,
@@ -1195,7 +1276,7 @@ timeRouter.get("/supervisor-overview", requireRole([Role.SUPERVISOR, Role.ADMIN]
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59));
 
-  const [users, config, holidaysAll, entries, credits, approvals] = await Promise.all([
+  const [users, config, holidaysAll, entries, credits, approvals, sickLeaves] = await Promise.all([
     prisma.user.findMany({
       where: { isActive: true },
       select: { id: true, dailyWorkHours: true, overtimeBalanceHours: true, timeTrackingEnabled: true }
@@ -1204,7 +1285,8 @@ timeRouter.get("/supervisor-overview", requireRole([Role.SUPERVISOR, Role.ADMIN]
     prisma.holiday.findMany({ where: { date: { gte: monthStart, lte: monthEnd } } }),
     prisma.timeEntry.findMany({ where: { occurredAt: { gte: monthStart, lte: monthEnd } } }),
     prisma.breakCredit.findMany({ where: { date: { gte: monthStart, lte: monthEnd } } }),
-    prisma.specialWorkApproval.findMany({ where: { date: { gte: monthStart, lte: monthEnd } } })
+    prisma.specialWorkApproval.findMany({ where: { date: { gte: monthStart, lte: monthEnd } } }),
+    prisma.sickLeave.findMany({ where: { startDate: { lte: monthEnd }, endDate: { gte: monthStart } }, select: { userId: true, startDate: true, endDate: true } })
   ]);
 
   const workingDays = parseWorkingDaySet(config?.defaultWeeklyWorkingDays);
@@ -1229,6 +1311,12 @@ timeRouter.get("/supervisor-overview", requireRole([Role.SUPERVISOR, Role.ADMIN]
   for (const approval of approvals) {
     const key = `${approval.userId}:${dayKey(approval.date)}`;
     approvalByUserDay.set(key, approval.status);
+  }
+  const sickByUser = new Map<string, Array<{ startDate: Date; endDate: Date }>>();
+  for (const s of sickLeaves) {
+    const list = sickByUser.get(s.userId) ?? [];
+    list.push({ startDate: s.startDate, endDate: s.endDate });
+    sickByUser.set(s.userId, list);
   }
 
   let monthPlannedHours = 0;
@@ -1264,8 +1352,14 @@ timeRouter.get("/supervisor-overview", requireRole([Role.SUPERVISOR, Role.ADMIN]
       const weekend = isWeekend(d);
       const requiresApproval = isHoliday || weekend || ((config?.requireApprovalForCrossMidnight ?? true) && grossByDay.crossMidnightStartDays.has(k));
       const approvalStatus = approvalByUserDay.get(`${u.id}:${k}`) ?? null;
-      if (!requiresApproval || approvalStatus === ApprovalStatus.APPROVED) {
+      const sickForDay = (sickByUser.get(u.id) ?? []).some((s) => isDateWithinRange(d, s.startDate, s.endDate));
+      const sickHoursForDay = planned > 0 && sickForDay ? planned : 0;
+      if (sickHoursForDay > 0) {
+        workedCurrentMonthHours += sickHoursForDay;
+      } else if (!requiresApproval || approvalStatus === ApprovalStatus.APPROVED) {
         workedCurrentMonthHours += netMinutes / 60;
+      } else {
+        workedCurrentMonthHours += 0;
       }
     }
 

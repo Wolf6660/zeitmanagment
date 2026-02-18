@@ -9,7 +9,7 @@ export function EmployeeMonthPage() {
   const [monthView, setMonthView] = useState<{
     monthPlanned: number;
     monthWorked: number;
-    days: Array<{ date: string; plannedHours: number; workedHours: number; isHoliday: boolean; isWeekend: boolean; entries: Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; time: string; source?: string; reasonText?: string }> }>;
+    days: Array<{ date: string; plannedHours: number; workedHours: number; sickHours?: number; isSick?: boolean; isHoliday: boolean; isWeekend: boolean; specialWorkApprovalStatus?: "SUBMITTED" | "APPROVED" | "REJECTED" | null; entries: Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; time: string; source?: string; reasonText?: string }> }>;
   } | null>(null);
   const [msg, setMsg] = useState("");
 
@@ -43,17 +43,22 @@ export function EmployeeMonthPage() {
         <table>
           <thead><tr><th>Datum</th><th>Soll</th><th>Ist</th><th>Buchungen</th></tr></thead>
           <tbody>
-            {monthView.days.map((d) => (
-              <tr
-                key={d.date}
-                style={{
-                  background:
-                    d.isHoliday || d.isWeekend
+            {monthView.days.map((d) => {
+              const bg = d.specialWorkApprovalStatus === "REJECTED"
+                ? "color-mix(in srgb, var(--rejected) 22%, white)"
+                : d.specialWorkApprovalStatus === "SUBMITTED"
+                  ? "color-mix(in srgb, var(--warning) 18%, white)"
+                  : d.isSick
+                    ? "color-mix(in srgb, var(--sick) 18%, white)"
+                    : (d.isHoliday || d.isWeekend)
                       ? d.workedHours > 0
                         ? "color-mix(in srgb, var(--holiday) 22%, white)"
                         : "color-mix(in srgb, var(--holiday-day) 28%, white)"
-                      : "transparent"
-                }}
+                      : "transparent";
+              return (
+              <tr
+                key={d.date}
+                style={{ background: bg }}
               >
                 <td>{d.date}</td>
                 <td>{d.plannedHours.toFixed(2)}</td>
@@ -64,7 +69,14 @@ export function EmployeeMonthPage() {
                       key={e.id}
                       style={{
                         marginRight: 8,
-                        color: e.source === "MANUAL_CORRECTION" ? "var(--manual)" : e.source === "WEB" ? "var(--web-entry)" : "inherit"
+                        color: e.source === "MANUAL_CORRECTION" ? "var(--manual)" : e.source === "WEB" ? "var(--web-entry)" : "inherit",
+                        background: e.source === "MANUAL_CORRECTION"
+                          ? "color-mix(in srgb, var(--manual) 18%, white)"
+                          : e.source === "WEB"
+                            ? "color-mix(in srgb, var(--web-entry) 22%, white)"
+                            : "transparent",
+                        borderRadius: 8,
+                        padding: "2px 6px"
                       }}
                     >
                       {e.type === "CLOCK_IN" ? "K" : "G"} {e.time}
@@ -73,7 +85,7 @@ export function EmployeeMonthPage() {
                   ))}
                 </td>
               </tr>
-            ))}
+            );})}
           </tbody>
         </table>
       )}

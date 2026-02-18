@@ -54,17 +54,21 @@ export function MonthEditorPage() {
           <tbody>
             {monthView.days.map((d: any) => {
               const expanded = selectedDay === d.date;
+              const bg = d.specialWorkApprovalStatus === "REJECTED"
+                ? "color-mix(in srgb, var(--rejected) 22%, white)"
+                : d.specialWorkApprovalStatus === "SUBMITTED"
+                  ? "color-mix(in srgb, var(--warning) 18%, white)"
+                  : d.isSick
+                    ? "color-mix(in srgb, var(--sick) 18%, white)"
+                    : (d.isHoliday || d.isWeekend)
+                      ? d.workedHours > 0
+                        ? "color-mix(in srgb, var(--holiday) 22%, white)"
+                        : "color-mix(in srgb, var(--holiday-day) 28%, white)"
+                      : "transparent";
               return (
                 <React.Fragment key={d.date}>
                   <tr
-                    style={{
-                      background:
-                        d.isHoliday || d.isWeekend
-                          ? d.workedHours > 0
-                            ? "color-mix(in srgb, var(--holiday) 22%, white)"
-                            : "color-mix(in srgb, var(--holiday-day) 28%, white)"
-                          : "transparent"
-                    }}
+                    style={{ background: bg }}
                   >
                     <td>{d.date}</td>
                     <td>{d.plannedHours.toFixed(2)}</td>
@@ -72,7 +76,20 @@ export function MonthEditorPage() {
                     <td>
                       <div>
                         {d.entries.map((e: any) => (
-                          <span key={`entry-${d.date}-${e.id || e.time}`} style={{ marginRight: 8, color: e.source === "WEB" ? "var(--web-entry)" : "inherit" }}>
+                          <span
+                            key={`entry-${d.date}-${e.id || e.time}`}
+                            style={{
+                              marginRight: 8,
+                              color: e.source === "MANUAL_CORRECTION" ? "var(--manual)" : e.source === "WEB" ? "var(--web-entry)" : "inherit",
+                              background: e.source === "MANUAL_CORRECTION"
+                                ? "color-mix(in srgb, var(--manual) 18%, white)"
+                                : e.source === "WEB"
+                                  ? "color-mix(in srgb, var(--web-entry) 22%, white)"
+                                  : "transparent",
+                              borderRadius: 8,
+                              padding: "2px 6px"
+                            }}
+                          >
                             {e.type === "CLOCK_IN" ? "K" : "G"} {e.time}
                           </span>
                         ))}

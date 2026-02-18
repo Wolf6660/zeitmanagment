@@ -40,6 +40,8 @@ type AdminConfig = {
   smtpPassword?: string | null;
   smtpFrom?: string | null;
   smtpSenderName?: string | null;
+  accountantMailEnabled?: boolean;
+  accountantEmail?: string | null;
   mailOnEmployeeLeaveDecision?: boolean;
   mailOnEmployeeOvertimeDecision?: boolean;
   mailOnEmployeeLongShift?: boolean;
@@ -510,6 +512,17 @@ export function AdminHome() {
           <label>
             Absendername
             <input value={config.smtpSenderName ?? ""} onChange={(e) => setConfig({ ...config, smtpSenderName: e.target.value })} />
+          </label>
+          <label>
+            Buchhalter-Mail aktiv
+            <select value={String(config.accountantMailEnabled ?? false)} onChange={(e) => setConfig({ ...config, accountantMailEnabled: e.target.value === "true" })}>
+              <option value="true">Ja</option>
+              <option value="false">Nein</option>
+            </select>
+          </label>
+          <label>
+            Buchhalter E-Mail
+            <input value={config.accountantEmail ?? ""} onChange={(e) => setConfig({ ...config, accountantEmail: e.target.value })} />
           </label>
           <label>
             Mail Mitarbeiter: Antrag Urlaub genehmigt/abgelehnt

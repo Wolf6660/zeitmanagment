@@ -82,11 +82,12 @@ async function getCurrentMonthOvertimeHours(userId: string): Promise<number> {
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59));
 
-  const [config, user, holidays, entries] = await Promise.all([
+  const [config, user, holidays, entries, sickLeaves] = await Promise.all([
     prisma.systemConfig.findUnique({ where: { id: 1 } }),
     prisma.user.findUnique({ where: { id: userId }, select: { overtimeBalanceHours: true, timeTrackingEnabled: true } }),
     prisma.holiday.findMany({ where: { date: { gte: monthStart, lte: monthEnd } } }),
-    prisma.timeEntry.findMany({ where: { userId, occurredAt: { gte: monthStart, lte: monthEnd } }, orderBy: { occurredAt: "asc" } })
+    prisma.timeEntry.findMany({ where: { userId, occurredAt: { gte: monthStart, lte: monthEnd } }, orderBy: { occurredAt: "asc" } }),
+    prisma.sickLeave.findMany({ where: { userId, startDate: { lte: monthEnd }, endDate: { gte: monthStart } }, select: { startDate: true, endDate: true } })
   ]);
   if (user?.timeTrackingEnabled === false) {
     return Number((user.overtimeBalanceHours ?? 0).toFixed(2));
@@ -108,7 +109,8 @@ async function getCurrentMonthOvertimeHours(userId: string): Promise<number> {
     const grossMinutes = grossByDay.get(key) ?? 0;
 
     const netMinutes = Math.max(grossMinutes - (grossMinutes >= breakAfterHours * 60 ? breakMinutes : 0), 0);
-    workedTotal += netMinutes / 60;
+    const isSick = !isWeekend(date) && !holidaySet.has(key) && sickLeaves.some((s) => date >= new Date(Date.UTC(s.startDate.getUTCFullYear(), s.startDate.getUTCMonth(), s.startDate.getUTCDate())) && date <= new Date(Date.UTC(s.endDate.getUTCFullYear(), s.endDate.getUTCMonth(), s.endDate.getUTCDate())));
+    workedTotal += isSick ? dailyHours : (netMinutes / 60);
 
     if (!isWeekend(date) && !holidaySet.has(key)) {
       expectedTotal += dailyHours;

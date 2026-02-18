@@ -29,6 +29,10 @@ export function SupervisorHome() {
   const [manualOut, setManualOut] = useState("");
   const [manualDate, setManualDate] = useState("");
   const [maxBackDays, setMaxBackDays] = useState(3);
+  const [sickUserId, setSickUserId] = useState("");
+  const [sickStart, setSickStart] = useState("");
+  const [sickEnd, setSickEnd] = useState("");
+  const [sickNote, setSickNote] = useState("");
 
   async function loadData() {
     if (!session) return;
@@ -47,6 +51,7 @@ export function SupervisorHome() {
     setSpecialPending(sp);
     setTodayEntries(t);
     setTodayOverview(to);
+    if (!sickUserId && e.length > 0) setSickUserId(e[0].id);
     const vacRows = await Promise.all(
       e.map(async (emp) => {
         const v = await api.leaveAvailability(emp.id);
@@ -188,6 +193,49 @@ export function SupervisorHome() {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="card" style={{ gridColumn: "1 / -1" }}>
+        <h2>Krank eintragen</h2>
+        <div className="grid grid-2">
+          <label>
+            Mitarbeiter
+            <select value={sickUserId} onChange={(e) => setSickUserId(e.target.value)}>
+              {employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+            </select>
+          </label>
+          <label>
+            Startdatum
+            <input type="date" value={sickStart} onChange={(e) => setSickStart(e.target.value)} />
+          </label>
+          <label>
+            Enddatum
+            <input type="date" value={sickEnd} onChange={(e) => setSickEnd(e.target.value)} />
+          </label>
+          <label>
+            Notiz
+            <input value={sickNote} onChange={(e) => setSickNote(e.target.value)} />
+          </label>
+        </div>
+        <button
+          style={{ marginTop: 8 }}
+          onClick={async () => {
+            try {
+              if (!sickUserId || !sickStart || !sickEnd) {
+                setMsg("Bitte Mitarbeiter, Start- und Enddatum ausfuellen.");
+                return;
+              }
+              await api.createSickLeave({ userId: sickUserId, startDate: sickStart, endDate: sickEnd, note: sickNote.trim() || undefined });
+              setMsg("Krankheit eingetragen.");
+              setSickNote("");
+              await loadData();
+            } catch (e) {
+              setMsg((e as Error).message);
+            }
+          }}
+        >
+          Krank speichern
+        </button>
       </div>
 
       <div className="card" style={{ gridColumn: "1 / -1" }}>

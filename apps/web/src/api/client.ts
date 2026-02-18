@@ -97,6 +97,8 @@ export const api = {
         date: string;
         plannedHours: number;
         workedHours: number;
+        sickHours?: number;
+        isSick?: boolean;
         isHoliday: boolean;
         isWeekend: boolean;
         hasManualCorrection: boolean;
@@ -273,6 +275,8 @@ export const api = {
       smtpPassword?: string | null;
       smtpFrom?: string | null;
       smtpSenderName?: string | null;
+      accountantMailEnabled?: boolean;
+      accountantEmail?: string | null;
       mailOnEmployeeLeaveDecision?: boolean;
       mailOnEmployeeOvertimeDecision?: boolean;
       mailOnEmployeeLongShift?: boolean;
@@ -380,6 +384,9 @@ export const api = {
 
   deleteHoliday: (id: string) =>
     request<{ ok: boolean }>(`/api/time/holidays/${id}`, { method: "DELETE" }),
+
+  createSickLeave: (payload: { userId: string; startDate: string; endDate: string; partialDayHours?: number; note?: string }) =>
+    request("/api/time/sick-leave", { method: "POST", body: JSON.stringify(payload) }),
 
   pendingSpecialWork: () =>
     request<Array<{ id: string; userId: string; date: string; status: "SUBMITTED" | "APPROVED" | "REJECTED"; note?: string; user: { id: string; name: string; loginName: string } }>>(
