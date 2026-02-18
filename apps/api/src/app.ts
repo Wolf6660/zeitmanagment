@@ -12,6 +12,7 @@ import { adminRouter } from "./modules/admin/routes.js";
 import { terminalRouter } from "./modules/terminal/routes.js";
 import { publicRouter } from "./modules/public/routes.js";
 import { env } from "./config/env.js";
+import { getAdminEmails, sendEventMail } from "./utils/mail.js";
 
 export function createApp() {
   const app = express();
@@ -34,6 +35,24 @@ export function createApp() {
   app.use("/api/employees", employeesRouter);
   app.use("/api/admin", adminRouter);
   app.use("/api/terminal", terminalRouter);
+
+  app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    const message = err instanceof Error ? err.message : String(err);
+    getAdminEmails()
+      .then((admins) =>
+        Promise.all(
+          admins.map((to) =>
+            sendEventMail("mailOnAdminSystemError", {
+              to,
+              subject: "Systemfehler in Zeitmanagment",
+              text: `Fehlermeldung: ${message}\nZeit: ${new Date().toISOString()}`
+            }).catch(() => undefined)
+          )
+        )
+      )
+      .catch(() => undefined);
+    res.status(500).json({ message: "Interner Serverfehler." });
+  });
 
   return app;
 }

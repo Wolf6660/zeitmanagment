@@ -5,6 +5,7 @@ import { prisma } from "../../db/prisma.js";
 import { AuthRequest, requireAuth, requireRole } from "../../utils/auth.js";
 import { dayKey, isWeekend } from "../../utils/date.js";
 import { resolveActorLoginName, writeAuditLog } from "../../utils/audit.js";
+import { getSupervisorEmails, sendEventMail } from "../../utils/mail.js";
 
 export const timeRouter = Router();
 
@@ -63,16 +64,72 @@ async function upsertSpecialWorkApproval(userId: string, date: Date, note?: stri
   });
 }
 
+async function upsertCrossMidnightApprovalIfNeeded(userId: string, clockOutAt: Date, note?: string): Promise<void> {
+  const cfg = await prisma.systemConfig.findUnique({
+    where: { id: 1 },
+    select: { requireApprovalForCrossMidnight: true }
+  });
+  if (!(cfg?.requireApprovalForCrossMidnight ?? true)) return;
+
+  const [lastIn, lastOut] = await Promise.all([
+    prisma.timeEntry.findFirst({
+      where: { userId, type: TimeEntryType.CLOCK_IN, occurredAt: { lt: clockOutAt } },
+      orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
+      select: { occurredAt: true }
+    }),
+    prisma.timeEntry.findFirst({
+      where: { userId, type: TimeEntryType.CLOCK_OUT, occurredAt: { lt: clockOutAt } },
+      orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
+      select: { occurredAt: true }
+    })
+  ]);
+
+  if (!lastIn) return;
+  const diffMs = clockOutAt.getTime() - lastIn.occurredAt.getTime();
+  if (diffMs > 12 * 60 * 60 * 1000) {
+    const employee = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, mailNotificationsEnabled: true, name: true, loginName: true }
+    });
+    if (employee?.email && employee.mailNotificationsEnabled) {
+      await sendEventMail("mailOnEmployeeLongShift", {
+        to: employee.email,
+        subject: "Hinweis: Sehr lange Schicht erkannt",
+        text: `${employee.name || employee.loginName}: Bitte Schicht pruefen. Dauer > 12 Stunden am ${clockOutAt.toISOString().slice(0, 10)}.`
+      }).catch(() => undefined);
+    }
+  }
+  if (lastOut && lastOut.occurredAt >= lastIn.occurredAt) return;
+  if (dayKey(lastIn.occurredAt) === dayKey(clockOutAt)) return;
+  await upsertSpecialWorkApproval(userId, lastIn.occurredAt, note || "Arbeit ueber 0:00");
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, loginName: true } });
+  const recipients = await getSupervisorEmails();
+  await Promise.all(
+    recipients.map((to) =>
+      sendEventMail("mailOnSupervisorCrossMidnight", {
+        to,
+        subject: "Genehmigung noetig: Arbeit ueber 0:00",
+        text: `${user?.name || user?.loginName || "Mitarbeiter"} hat eine Schicht ueber 0:00 beendet (${lastIn.occurredAt.toISOString().slice(0, 10)} -> ${clockOutAt.toISOString().slice(0, 10)}).`
+      }).catch(() => undefined)
+    )
+  );
+}
+
 const clockSchema = z.object({
   type: z.nativeEnum(TimeEntryType),
   reasonCode: z.string().optional(),
-  reasonText: z.string().min(3)
+  reasonText: z.string().max(255).optional()
 });
 
 timeRouter.post("/clock", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
   const parsed = clockSchema.safeParse(req.body);
   if (!parsed.success || !req.auth) {
     res.status(400).json({ message: "Ungueltige Eingaben. Grund ist Pflicht." });
+    return;
+  }
+  const cfg = await prisma.systemConfig.findUnique({ where: { id: 1 }, select: { requireReasonWebClock: true } });
+  if ((cfg?.requireReasonWebClock ?? true) && !String(parsed.data.reasonText || "").trim()) {
+    res.status(400).json({ message: "Grund ist Pflicht." });
     return;
   }
   const me = await prisma.user.findUnique({ where: { id: req.auth.userId }, select: { timeTrackingEnabled: true } });
@@ -102,6 +159,9 @@ timeRouter.post("/clock", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMI
   });
 
   await upsertSpecialWorkApproval(req.auth.userId, entry.occurredAt, parsed.data.reasonText);
+  if (entry.type === TimeEntryType.CLOCK_OUT) {
+    await upsertCrossMidnightApprovalIfNeeded(req.auth.userId, entry.occurredAt, parsed.data.reasonText);
+  }
 
   res.status(201).json(entry);
 });
@@ -109,13 +169,18 @@ timeRouter.post("/clock", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMI
 const selfCorrectionSchema = z.object({
   type: z.nativeEnum(TimeEntryType),
   occurredAt: z.coerce.date(),
-  correctionComment: z.string().min(1)
+  correctionComment: z.string().max(1000)
 });
 
 timeRouter.post("/self-correction", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
   const parsed = selfCorrectionSchema.safeParse(req.body);
   if (!parsed.success || !req.auth) {
     res.status(400).json({ message: "Ungueltige Eingaben. Notiz ist Pflicht." });
+    return;
+  }
+  const cfg = await prisma.systemConfig.findUnique({ where: { id: 1 }, select: { requireNoteSelfCorrection: true } });
+  if ((cfg?.requireNoteSelfCorrection ?? true) && !parsed.data.correctionComment.trim()) {
+    res.status(400).json({ message: "Notiz ist Pflicht." });
     return;
   }
   const me = await prisma.user.findUnique({ where: { id: req.auth.userId }, select: { timeTrackingEnabled: true } });
@@ -155,7 +220,7 @@ const correctionSchema = z.object({
   userId: z.string().min(1),
   type: z.nativeEnum(TimeEntryType),
   occurredAt: z.coerce.date(),
-  correctionComment: z.string().min(10),
+  correctionComment: z.string().max(1000),
   reasonCode: z.string().optional(),
   reasonText: z.string().optional()
 });
@@ -164,6 +229,11 @@ timeRouter.post("/correction", requireRole([Role.SUPERVISOR, Role.ADMIN]), async
   const parsed = correctionSchema.safeParse(req.body);
   if (!parsed.success || !req.auth) {
     res.status(400).json({ message: "Ungueltige Eingaben oder Kommentar zu kurz." });
+    return;
+  }
+  const cfg = await prisma.systemConfig.findUnique({ where: { id: 1 }, select: { requireNoteSupervisorCorrection: true } });
+  if ((cfg?.requireNoteSupervisorCorrection ?? true) && !parsed.data.correctionComment.trim()) {
+    res.status(400).json({ message: "Notiz ist Pflicht." });
     return;
   }
   const target = await prisma.user.findUnique({ where: { id: parsed.data.userId }, select: { timeTrackingEnabled: true } });
@@ -250,13 +320,18 @@ const overtimeAdjustmentSchema = z.object({
       if (typeof v === "string") return Number(v.replace(",", "."));
       return v;
     }, z.number().finite("Stunden sind ungueltig.").min(-500, "Stunden muessen >= -500 sein.").max(500, "Stunden muessen <= 500 sein.")),
-  note: z.string().trim().min(3, "Notiz ist Pflicht.")
+  note: z.string().trim().max(1000)
 });
 
 timeRouter.post("/overtime-adjustment", requireRole([Role.ADMIN]), async (req: AuthRequest, res) => {
   const parsed = overtimeAdjustmentSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ message: zodFirstMessage(parsed) });
+    return;
+  }
+  const cfg = await prisma.systemConfig.findUnique({ where: { id: 1 }, select: { requireNoteOvertimeAdjustment: true } });
+  if ((cfg?.requireNoteOvertimeAdjustment ?? true) && !parsed.data.note.trim()) {
+    res.status(400).json({ message: "Notiz ist Pflicht." });
     return;
   }
   if (!req.auth) {
@@ -299,7 +374,7 @@ const overtimeAccountSchema = z.object({
       if (typeof v === "string") return Number(v.replace(",", "."));
       return v;
     }, z.number().finite("Stunden sind ungueltig.").min(-10000).max(10000)),
-  note: z.string().trim().min(3, "Notiz ist Pflicht.")
+  note: z.string().trim().max(1000)
 });
 
 timeRouter.get("/overtime-account/:userId", requireRole([Role.ADMIN]), async (req, res) => {
@@ -316,6 +391,11 @@ timeRouter.patch("/overtime-account/:userId", requireRole([Role.ADMIN]), async (
   const parsed = overtimeAccountSchema.safeParse(req.body);
   if (!parsed.success || !req.auth) {
     res.status(400).json({ message: parsed.success ? "Nicht authentifiziert." : zodFirstMessage(parsed) });
+    return;
+  }
+  const cfg = await prisma.systemConfig.findUnique({ where: { id: 1 }, select: { requireNoteOvertimeAccountSet: true } });
+  if ((cfg?.requireNoteOvertimeAccountSet ?? true) && !parsed.data.note.trim()) {
+    res.status(400).json({ message: "Notiz ist Pflicht." });
     return;
   }
   const userId = String(req.params.userId);
@@ -353,7 +433,7 @@ timeRouter.patch("/overtime-account/:userId", requireRole([Role.ADMIN]), async (
 const dayOverrideSchema = z.object({
   userId: z.string().min(1),
   date: z.string().min(10),
-  note: z.string().min(1),
+  note: z.string().max(1000),
   events: z
     .array(
       z.object({
@@ -372,6 +452,11 @@ timeRouter.post("/day-override", requireRole([Role.SUPERVISOR, Role.ADMIN]), asy
   }
   if (!req.auth) {
     res.status(401).json({ message: "Nicht authentifiziert." });
+    return;
+  }
+  const cfg = await prisma.systemConfig.findUnique({ where: { id: 1 }, select: { requireNoteSupervisorCorrection: true } });
+  if ((cfg?.requireNoteSupervisorCorrection ?? true) && !parsed.data.note.trim()) {
+    res.status(400).json({ message: "Notiz ist Pflicht." });
     return;
   }
   const dateParts = parseIsoDateParts(parsed.data.date);
@@ -432,7 +517,7 @@ timeRouter.post("/day-override", requireRole([Role.SUPERVISOR, Role.ADMIN]), asy
 
 const selfDayOverrideSchema = z.object({
   date: z.string().min(10),
-  note: z.string().min(1),
+  note: z.string().max(1000),
   events: z
     .array(
       z.object({
@@ -451,6 +536,11 @@ timeRouter.post("/day-override-self", requireRole([Role.EMPLOYEE, Role.SUPERVISO
   }
   if (!req.auth) {
     res.status(401).json({ message: "Nicht authentifiziert." });
+    return;
+  }
+  const cfgNotes = await prisma.systemConfig.findUnique({ where: { id: 1 }, select: { requireNoteSelfCorrection: true } });
+  if ((cfgNotes?.requireNoteSelfCorrection ?? true) && !parsed.data.note.trim()) {
+    res.status(400).json({ message: "Notiz ist Pflicht." });
     return;
   }
   const me = await prisma.user.findUnique({ where: { id: req.auth.userId }, select: { timeTrackingEnabled: true } });
@@ -550,6 +640,7 @@ timeRouter.get("/month/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Ro
   const workingDays = parseWorkingDaySet(config?.defaultWeeklyWorkingDays);
   const holidaySet = new Set(holidays.map((h) => dayKey(h.date)));
   const approvalByDay = new Map(approvals.map((a) => [dayKey(a.date), a.status]));
+  const grossByDay = buildGrossMinutesByStartDay(entries.map((e) => ({ type: e.type, occurredAt: e.occurredAt })));
   const byDay = new Map<string, typeof entries>();
   for (const e of entries) {
     const key = dayKey(e.occurredAt);
@@ -567,18 +658,9 @@ timeRouter.get("/month/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Ro
     const isHoliday = holidaySet.has(key);
     const weekend = isWeekend(date);
     const planned = workingDays.has(date.getUTCDay()) && !isHoliday ? dailyHours : 0;
-    let openIn: Date | null = null;
-    let grossMin = 0;
-    for (const e of dayEntries) {
-      if (e.type === TimeEntryType.CLOCK_IN) openIn = e.occurredAt;
-      if (e.type === TimeEntryType.CLOCK_OUT && openIn) {
-        const diff = e.occurredAt.getTime() - openIn.getTime();
-        if (diff > 0) grossMin += Math.floor(diff / 60000);
-        openIn = null;
-      }
-    }
+    const grossMin = grossByDay.minutesByDay.get(key) ?? 0;
     const approvalStatus = approvalByDay.get(key) ?? null;
-    const requiresApproval = isHoliday || weekend;
+    const requiresApproval = isHoliday || weekend || ((config?.requireApprovalForCrossMidnight ?? true) && grossByDay.crossMidnightStartDays.has(key));
     const workedRaw = Number((grossMin / 60).toFixed(2));
     const workedEffective = requiresApproval && approvalStatus !== ApprovalStatus.APPROVED ? 0 : workedRaw;
     const worked = user?.timeTrackingEnabled === false ? Number(planned.toFixed(2)) : workedEffective;
@@ -619,6 +701,34 @@ function calculateWorkedMinutes(entries: { type: TimeEntryType; occurredAt: Date
   return minutes;
 }
 
+function buildGrossMinutesByStartDay(entries: { type: TimeEntryType; occurredAt: Date }[]): {
+  minutesByDay: Map<string, number>;
+  crossMidnightStartDays: Set<string>;
+} {
+  const sorted = [...entries].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
+  const minutesByDay = new Map<string, number>();
+  const crossMidnightStartDays = new Set<string>();
+  let openClockIn: Date | null = null;
+  for (const e of sorted) {
+    if (e.type === TimeEntryType.CLOCK_IN) {
+      openClockIn = e.occurredAt;
+      continue;
+    }
+    if (e.type === TimeEntryType.CLOCK_OUT && openClockIn) {
+      const diffMs = e.occurredAt.getTime() - openClockIn.getTime();
+      if (diffMs > 0) {
+        const startKey = dayKey(openClockIn);
+        minutesByDay.set(startKey, (minutesByDay.get(startKey) ?? 0) + Math.floor(diffMs / 60000));
+        if (dayKey(e.occurredAt) !== startKey) {
+          crossMidnightStartDays.add(startKey);
+        }
+      }
+      openClockIn = null;
+    }
+  }
+  return { minutesByDay, crossMidnightStartDays };
+}
+
 timeRouter.get("/summary/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
   if (!req.auth) {
     res.status(401).json({ message: "Nicht authentifiziert." });
@@ -652,13 +762,7 @@ timeRouter.get("/summary/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, 
   const breakMinutes = config?.autoBreakMinutes ?? 30;
   const breakAfterHours = config?.autoBreakAfterHours ?? 6;
 
-  const grouped = new Map<string, { type: TimeEntryType; occurredAt: Date }[]>();
-  for (const entry of entries) {
-    const key = dayKey(entry.occurredAt);
-    const list = grouped.get(key) ?? [];
-    list.push({ type: entry.type, occurredAt: entry.occurredAt });
-    grouped.set(key, list);
-  }
+  const grossByDay = buildGrossMinutesByStartDay(entries.map((entry) => ({ type: entry.type, occurredAt: entry.occurredAt })));
 
   const creditByDay = new Map<string, number>();
   for (const c of credits) {
@@ -675,9 +779,7 @@ timeRouter.get("/summary/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, 
   for (let day = 1; day <= monthEnd.getUTCDate(); day += 1) {
     const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), day));
     const key = dayKey(date);
-    const dayEntries = grouped.get(key) ?? [];
-
-    const grossMinutes = calculateWorkedMinutes(dayEntries);
+    const grossMinutes = grossByDay.minutesByDay.get(key) ?? 0;
     const autoBreakApplies = grossMinutes >= breakAfterHours * 60;
     const dayCredit = creditByDay.get(key) ?? 0;
     const netMinutes = Math.max(grossMinutes - (autoBreakApplies ? breakMinutes : 0) + dayCredit, 0);
@@ -685,7 +787,7 @@ timeRouter.get("/summary/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, 
     const isHoliday = holidaySet.has(key);
     const weekend = isWeekend(date);
     const approvalStatus = approvalByDay.get(key) ?? null;
-    const requiresApproval = isHoliday || weekend;
+    const requiresApproval = isHoliday || weekend || ((config?.requireApprovalForCrossMidnight ?? true) && grossByDay.crossMidnightStartDays.has(key));
     if (!requiresApproval || approvalStatus === ApprovalStatus.APPROVED) {
       workedTotal += netMinutes / 60;
     }
@@ -1054,13 +1156,18 @@ timeRouter.get("/special-work/pending", requireRole([Role.SUPERVISOR, Role.ADMIN
 const specialDecisionSchema = z.object({
   approvalId: z.string().min(1),
   decision: z.enum(["APPROVED", "REJECTED"]),
-  note: z.string().trim().min(1, "Notiz ist Pflicht.")
+  note: z.string().trim().max(1000)
 });
 
 timeRouter.post("/special-work/decision", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
   const parsed = specialDecisionSchema.safeParse(req.body);
   if (!parsed.success || !req.auth) {
     res.status(400).json({ message: parsed.success ? "Nicht authentifiziert." : zodFirstMessage(parsed) });
+    return;
+  }
+  const cfg = await prisma.systemConfig.findUnique({ where: { id: 1 }, select: { requireNoteSupervisorCorrection: true } });
+  if ((cfg?.requireNoteSupervisorCorrection ?? true) && !parsed.data.note.trim()) {
+    res.status(400).json({ message: "Notiz ist Pflicht." });
     return;
   }
   const updated = await prisma.specialWorkApproval.update({
@@ -1105,12 +1212,11 @@ timeRouter.get("/supervisor-overview", requireRole([Role.SUPERVISOR, Role.ADMIN]
   const autoBreakMinutes = config?.autoBreakMinutes ?? 30;
   const autoBreakAfterHours = config?.autoBreakAfterHours ?? 6;
 
-  const entriesByUserDay = new Map<string, { type: TimeEntryType; occurredAt: Date }[]>();
+  const entriesByUser = new Map<string, { type: TimeEntryType; occurredAt: Date }[]>();
   for (const entry of entries) {
-    const key = `${entry.userId}:${dayKey(entry.occurredAt)}`;
-    const list = entriesByUserDay.get(key) ?? [];
+    const list = entriesByUser.get(entry.userId) ?? [];
     list.push({ type: entry.type, occurredAt: entry.occurredAt });
-    entriesByUserDay.set(key, list);
+    entriesByUser.set(entry.userId, list);
   }
 
   const creditsByUserDay = new Map<string, number>();
@@ -1139,6 +1245,7 @@ timeRouter.get("/supervisor-overview", requireRole([Role.SUPERVISOR, Role.ADMIN]
 
   const rows = users.map((u) => {
     const dailyHours = u.dailyWorkHours ?? config?.defaultDailyHours ?? 8;
+    const grossByDay = buildGrossMinutesByStartDay(entriesByUser.get(u.id) ?? []);
     let requiredCurrentMonthHours = 0;
     let workedCurrentMonthHours = 0;
 
@@ -1148,15 +1255,14 @@ timeRouter.get("/supervisor-overview", requireRole([Role.SUPERVISOR, Role.ADMIN]
       const planned = isWorkday ? dailyHours : 0;
       requiredCurrentMonthHours += planned;
 
-      const dayEntries = entriesByUserDay.get(`${u.id}:${k}`) ?? [];
-      const grossMinutes = calculateWorkedMinutes(dayEntries);
+      const grossMinutes = grossByDay.minutesByDay.get(k) ?? 0;
       const autoBreakApplies = grossMinutes >= autoBreakAfterHours * 60;
       const creditMinutes = creditsByUserDay.get(`${u.id}:${k}`) ?? 0;
       const netMinutes = Math.max(grossMinutes - (autoBreakApplies ? autoBreakMinutes : 0) + creditMinutes, 0);
 
       const isHoliday = holidaySet.has(k);
       const weekend = isWeekend(d);
-      const requiresApproval = isHoliday || weekend;
+      const requiresApproval = isHoliday || weekend || ((config?.requireApprovalForCrossMidnight ?? true) && grossByDay.crossMidnightStartDays.has(k));
       const approvalStatus = approvalByUserDay.get(`${u.id}:${k}`) ?? null;
       if (!requiresApproval || approvalStatus === ApprovalStatus.APPROVED) {
         workedCurrentMonthHours += netMinutes / 60;

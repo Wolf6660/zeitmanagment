@@ -5,6 +5,7 @@ import { prisma } from "../../db/prisma.js";
 import { AuthRequest, requireAuth, requireRole } from "../../utils/auth.js";
 import { dayKey, isWeekend, listDays } from "../../utils/date.js";
 import { resolveActorLoginName, writeAuditLog } from "../../utils/audit.js";
+import { getSupervisorEmails, sendEventMail } from "../../utils/mail.js";
 
 export const leaveRouter = Router();
 
@@ -12,6 +13,27 @@ leaveRouter.use(requireAuth);
 
 function overlaps(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): boolean {
   return aStart <= bEnd && aEnd >= bStart;
+}
+
+function buildGrossMinutesByStartDay(entries: { type: TimeEntryType; occurredAt: Date }[]): Map<string, number> {
+  const sorted = [...entries].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
+  const minutesByDay = new Map<string, number>();
+  let openClockIn: Date | null = null;
+  for (const e of sorted) {
+    if (e.type === TimeEntryType.CLOCK_IN) {
+      openClockIn = e.occurredAt;
+      continue;
+    }
+    if (e.type === TimeEntryType.CLOCK_OUT && openClockIn) {
+      const diff = e.occurredAt.getTime() - openClockIn.getTime();
+      if (diff > 0) {
+        const key = dayKey(openClockIn);
+        minutesByDay.set(key, (minutesByDay.get(key) ?? 0) + Math.floor(diff / 60000));
+      }
+      openClockIn = null;
+    }
+  }
+  return minutesByDay;
 }
 
 async function getVacationAvailabilityDays(userId: string, targetStart: Date, targetEnd: Date): Promise<number> {
@@ -75,13 +97,7 @@ async function getCurrentMonthOvertimeHours(userId: string): Promise<number> {
   const breakAfterHours = config?.autoBreakAfterHours ?? 6;
   const holidaySet = new Set(holidays.map((h) => dayKey(h.date)));
 
-  const grouped = new Map<string, { type: TimeEntryType; occurredAt: Date }[]>();
-  for (const entry of entries) {
-    const key = dayKey(entry.occurredAt);
-    const list = grouped.get(key) ?? [];
-    list.push({ type: entry.type, occurredAt: entry.occurredAt });
-    grouped.set(key, list);
-  }
+  const grossByDay = buildGrossMinutesByStartDay(entries.map((entry) => ({ type: entry.type, occurredAt: entry.occurredAt })));
 
   let workedTotal = 0;
   let expectedTotal = 0;
@@ -89,18 +105,7 @@ async function getCurrentMonthOvertimeHours(userId: string): Promise<number> {
   for (let day = 1; day <= monthEnd.getUTCDate(); day += 1) {
     const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), day));
     const key = dayKey(date);
-    const dayEntries = grouped.get(key) ?? [];
-
-    let openClockIn: Date | null = null;
-    let grossMinutes = 0;
-    for (const e of dayEntries.sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime())) {
-      if (e.type === TimeEntryType.CLOCK_IN) openClockIn = e.occurredAt;
-      if (e.type === TimeEntryType.CLOCK_OUT && openClockIn) {
-        const diff = e.occurredAt.getTime() - openClockIn.getTime();
-        if (diff > 0) grossMinutes += Math.floor(diff / 60000);
-        openClockIn = null;
-      }
-    }
+    const grossMinutes = grossByDay.get(key) ?? 0;
 
     const netMinutes = Math.max(grossMinutes - (grossMinutes >= breakAfterHours * 60 ? breakMinutes : 0), 0);
     workedTotal += netMinutes / 60;
@@ -129,13 +134,18 @@ const createSchema = z.object({
   kind: z.nativeEnum(LeaveKind),
   startDate: z.coerce.date(),
   endDate: z.coerce.date(),
-  note: z.string().min(3).max(1000)
+  note: z.string().max(1000).optional().default("")
 });
 
 leaveRouter.post("/", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success || !req.auth) {
     res.status(400).json({ message: "Ungueltige Eingaben. Notiz ist Pflicht." });
+    return;
+  }
+  const cfg = await prisma.systemConfig.findUnique({ where: { id: 1 }, select: { requireNoteLeaveRequest: true } });
+  if ((cfg?.requireNoteLeaveRequest ?? true) && !parsed.data.note.trim()) {
+    res.status(400).json({ message: "Notiz ist Pflicht." });
     return;
   }
 
@@ -179,6 +189,22 @@ leaveRouter.post("/", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMIN]),
     targetId: leave.id,
     payload: parsed.data
   });
+
+  const requester = await prisma.user.findUnique({
+    where: { id: req.auth.userId },
+    select: { name: true, loginName: true }
+  });
+  const supervisors = await getSupervisorEmails();
+  const eventKey = parsed.data.kind === LeaveKind.VACATION ? "mailOnSupervisorLeaveRequest" : "mailOnSupervisorOvertimeRequest";
+  await Promise.all(
+    supervisors.map((to) =>
+      sendEventMail(eventKey, {
+        to,
+        subject: `Neuer Antrag (${parsed.data.kind === LeaveKind.VACATION ? "Urlaub" : "Ueberstunden"})`,
+        text: `${requester?.name || requester?.loginName || "Mitarbeiter"} hat einen Antrag gestellt (${parsed.data.kind}). Zeitraum: ${parsed.data.startDate.toISOString().slice(0, 10)} bis ${parsed.data.endDate.toISOString().slice(0, 10)}.`
+      }).catch(() => undefined)
+    )
+  );
 
   res.status(201).json({
     ...leave,
@@ -256,13 +282,18 @@ leaveRouter.post("/cancel", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.AD
 const decisionSchema = z.object({
   leaveId: z.string().min(1),
   decision: z.enum(["APPROVED", "REJECTED"]),
-  decisionNote: z.string().min(3).max(1000)
+  decisionNote: z.string().max(1000).optional().default("")
 });
 
 leaveRouter.post("/decision", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
   const parsed = decisionSchema.safeParse(req.body);
   if (!parsed.success || !req.auth) {
     res.status(400).json({ message: "Ungueltige Eingaben. Notiz ist Pflicht." });
+    return;
+  }
+  const cfg = await prisma.systemConfig.findUnique({ where: { id: 1 }, select: { requireNoteLeaveDecision: true } });
+  if ((cfg?.requireNoteLeaveDecision ?? true) && !parsed.data.decisionNote.trim()) {
+    res.status(400).json({ message: "Notiz ist Pflicht." });
     return;
   }
 
@@ -295,6 +326,19 @@ leaveRouter.post("/decision", requireRole([Role.SUPERVISOR, Role.ADMIN]), async 
     payload: { decisionNote: parsed.data.decisionNote }
   });
 
+  const employee = await prisma.user.findUnique({
+    where: { id: leave.userId },
+    select: { email: true, mailNotificationsEnabled: true, name: true }
+  });
+  if (employee?.email && employee.mailNotificationsEnabled) {
+    const eventKey = leave.kind === LeaveKind.VACATION ? "mailOnEmployeeLeaveDecision" : "mailOnEmployeeOvertimeDecision";
+    await sendEventMail(eventKey, {
+      to: employee.email,
+      subject: `Ihr Antrag wurde ${parsed.data.decision === "APPROVED" ? "genehmigt" : "abgelehnt"}`,
+      text: `Antrag: ${leave.kind}\nZeitraum: ${leave.startDate.toISOString().slice(0, 10)} bis ${leave.endDate.toISOString().slice(0, 10)}\nStatus: ${parsed.data.decision}\nNotiz: ${parsed.data.decisionNote}`
+    }).catch(() => undefined);
+  }
+
   res.json(updated);
 });
 
@@ -303,14 +347,19 @@ const supervisorUpdateSchema = z.object({
   kind: z.nativeEnum(LeaveKind),
   startDate: z.coerce.date(),
   endDate: z.coerce.date(),
-  note: z.string().min(3).max(1000),
-  changeNote: z.string().min(3).max(1000)
+  note: z.string().max(1000).optional().default(""),
+  changeNote: z.string().max(1000).optional().default("")
 });
 
 leaveRouter.post("/supervisor-update", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
   const parsed = supervisorUpdateSchema.safeParse(req.body);
   if (!parsed.success || !req.auth) {
     res.status(400).json({ message: "Ungueltige Eingaben. Notiz ist Pflicht." });
+    return;
+  }
+  const cfg = await prisma.systemConfig.findUnique({ where: { id: 1 }, select: { requireNoteLeaveSupervisorUpdate: true } });
+  if ((cfg?.requireNoteLeaveSupervisorUpdate ?? true) && !parsed.data.changeNote.trim()) {
+    res.status(400).json({ message: "Aenderungsnotiz ist Pflicht." });
     return;
   }
 

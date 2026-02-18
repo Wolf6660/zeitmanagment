@@ -1,3 +1,4 @@
+#include <LiquidCrystal_I2C.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
@@ -9,15 +10,7 @@
 #include <Adafruit_PN532.h>
 #include <time.h>
 
-#if __has_include(<LiquidCrystal_I2C.h>)
-#include <LiquidCrystal_I2C.h>
 #define HAS_LCD_I2C 1
-#elif __has_include(<LiquidCrystal_I2C/LiquidCrystal_I2C.h>)
-#include <LiquidCrystal_I2C/LiquidCrystal_I2C.h>
-#define HAS_LCD_I2C 1
-#else
-#define HAS_LCD_I2C 0
-#endif
 
 #if __has_include("config_local.h")
 #include "config_local.h"
@@ -96,6 +89,16 @@ String toHexUid(const uint8_t *uid, uint8_t len) {
   return out;
 }
 
+String jsonStringOr(JsonVariantConst value, const char *fallback) {
+  if (value.is<const char*>()) {
+    const char *s = value.as<const char*>();
+    if (s) return String(s);
+    return String(fallback);
+  }
+  if (value.is<String>()) return value.as<String>();
+  return String(fallback);
+}
+
 uint8_t parseHexByte(const String &hex2) {
   return (uint8_t) strtoul(hex2.c_str(), nullptr, 16);
 }
@@ -109,36 +112,45 @@ bool isBerlinDstAtUtcEpoch(time_t utcEpoch) {
   struct tm utc = {};
   gmtime_r(&utcEpoch, &utc);
   int y = utc.tm_year + 1900;
+  int m = utc.tm_mon + 1;  // 1..12
+  int d = utc.tm_mday;     // 1..31
+  int h = utc.tm_hour;     // 0..23
 
-  auto lastSundayDay = [](int year, int monthIndex) -> int {
-    struct tm firstNext = {};
-    firstNext.tm_year = year - 1900;
-    firstNext.tm_mon = monthIndex + 1;
-    firstNext.tm_mday = 1;
-    time_t t = timegm(&firstNext) - 86400;
-    struct tm lastDay = {};
-    gmtime_r(&t, &lastDay);
-    return lastDay.tm_mday - lastDay.tm_wday;
+  auto isLeap = [](int year) -> bool {
+    return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+  };
+  auto daysInMonth = [&](int year, int month) -> int {
+    static const int mdays[12] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+    if (month == 2) return isLeap(year) ? 29 : 28;
+    return mdays[month - 1];
+  };
+  auto weekday = [](int year, int month, int day) -> int {
+    // Sakamoto, Rueckgabe: 0=Sonntag ... 6=Samstag
+    static int t[12] = { 0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4 };
+    if (month < 3) year -= 1;
+    return (year + year / 4 - year / 100 + year / 400 + t[month - 1] + day) % 7;
+  };
+  auto lastSunday = [&](int year, int month) -> int {
+    int dim = daysInMonth(year, month);
+    int dowLastDay = weekday(year, month, dim); // 0..6
+    return dim - dowLastDay;
   };
 
-  int marchSunday = lastSundayDay(y, 2);
-  int octSunday = lastSundayDay(y, 9);
+  if (m < 3 || m > 10) return false;
+  if (m > 3 && m < 10) return true;
 
-  struct tm startTm = {};
-  startTm.tm_year = y - 1900;
-  startTm.tm_mon = 2;
-  startTm.tm_mday = marchSunday;
-  startTm.tm_hour = 1;
-  time_t dstStartUtc = timegm(&startTm);
+  if (m == 3) {
+    int ls = lastSunday(y, 3);
+    if (d > ls) return true;
+    if (d < ls) return false;
+    return h >= 1; // Umstellung auf Sommerzeit um 01:00 UTC
+  }
 
-  struct tm endTm = {};
-  endTm.tm_year = y - 1900;
-  endTm.tm_mon = 9;
-  endTm.tm_mday = octSunday;
-  endTm.tm_hour = 1;
-  time_t dstEndUtc = timegm(&endTm);
-
-  return utcEpoch >= dstStartUtc && utcEpoch < dstEndUtc;
+  // m == 10
+  int ls = lastSunday(y, 10);
+  if (d < ls) return true;
+  if (d > ls) return false;
+  return h < 1; // Rueckstellung auf Winterzeit um 01:00 UTC
 }
 
 String nowDateTime() {
@@ -419,14 +431,14 @@ bool sendPunch(const String &uid, const String &type, String &employeeName, Stri
     return false;
   }
 
-  employeeName = String((const char*) (in["employeeName"] | "Mitarbeiter"));
-  actionLabel = String((const char*) (in["action"] | (type == "CLOCK_IN" ? "KOMMEN" : "GEHEN")));
+  employeeName = jsonStringOr(in["employeeName"], "Mitarbeiter");
+  actionLabel = jsonStringOr(in["action"], type == "CLOCK_IN" ? "KOMMEN" : "GEHEN");
   workedTodayHours = in["workedTodayHours"] | 0.0;
 
-  const char* displayTime = in["displayTime"] | "";
-  if (strlen(displayTime) >= 4) {
+  String displayTime = jsonStringOr(in["displayTime"], "");
+  if (displayTime.length() >= 4) {
     // Server liefert bereits Berlin-Zeit.
-    timeLabel = String(displayTime);
+    timeLabel = displayTime;
   } else {
     String local = nowDateTime();
     timeLabel = local.length() >= 16 ? local.substring(11, 16) : local;
@@ -485,7 +497,11 @@ bool fetchNextType(const String &uid, String &nextType, String &errText, bool &b
     errText = "Doppelbuchung blockiert";
     return false;
   }
-  nextType = String((const char*) (in["nextType"] | "CLOCK_IN"));
+  nextType = jsonStringOr(in["nextType"], "");
+  if (nextType != "CLOCK_IN" && nextType != "CLOCK_OUT") {
+    errText = "Ungueltiger Serverstatus";
+    return false;
+  }
   return true;
 }
 
@@ -571,6 +587,7 @@ void loop() {
       delay(700);
       return;
     }
+    Serial.printf("Serverstatus: %s\n", serverType.c_str());
     if (serverType == "CLOCK_IN" || serverType == "CLOCK_OUT") {
       type = serverType;
     } else {

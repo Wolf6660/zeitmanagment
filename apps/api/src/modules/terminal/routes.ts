@@ -3,6 +3,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../../db/prisma.js";
 import { writeAuditLog } from "../../utils/audit.js";
+import { getAdminEmails, getSupervisorEmails, sendEventMail } from "../../utils/mail.js";
 
 export const terminalRouter = Router();
 
@@ -41,6 +42,61 @@ function formatBerlinTime(date: Date): string {
   const hh = String(local.getUTCHours()).padStart(2, "0");
   const mm = String(local.getUTCMinutes()).padStart(2, "0");
   return `${hh}:${mm}`;
+}
+
+async function upsertCrossMidnightApprovalFromTerminal(userId: string, clockOutAt: Date): Promise<void> {
+  const cfg = await prisma.systemConfig.findUnique({
+    where: { id: 1 },
+    select: { requireApprovalForCrossMidnight: true }
+  });
+  if (!(cfg?.requireApprovalForCrossMidnight ?? true)) return;
+  const [lastIn, lastOut] = await Promise.all([
+    prisma.timeEntry.findFirst({
+      where: { userId, type: TimeEntryType.CLOCK_IN, occurredAt: { lt: clockOutAt } },
+      orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
+      select: { occurredAt: true }
+    }),
+    prisma.timeEntry.findFirst({
+      where: { userId, type: TimeEntryType.CLOCK_OUT, occurredAt: { lt: clockOutAt } },
+      orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
+      select: { occurredAt: true }
+    })
+  ]);
+  if (!lastIn) return;
+  const shiftMs = clockOutAt.getTime() - lastIn.occurredAt.getTime();
+  if (shiftMs > 12 * 60 * 60 * 1000) {
+    const employee = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, mailNotificationsEnabled: true, name: true, loginName: true }
+    });
+    if (employee?.email && employee.mailNotificationsEnabled) {
+      await sendEventMail("mailOnEmployeeLongShift", {
+        to: employee.email,
+        subject: "Hinweis: Sehr lange Schicht erkannt",
+        text: `${employee.name || employee.loginName}: Bitte Schicht pruefen. Dauer > 12 Stunden am ${clockOutAt.toISOString().slice(0, 10)}.`
+      }).catch(() => undefined);
+    }
+  }
+  if (lastOut && lastOut.occurredAt >= lastIn.occurredAt) return;
+  const startKey = dayStartUtc(lastIn.occurredAt);
+  const endKey = dayStartUtc(clockOutAt);
+  if (startKey.getTime() === endKey.getTime()) return;
+  await prisma.specialWorkApproval.upsert({
+    where: { userId_date: { userId, date: startKey } },
+    create: { userId, date: startKey, status: ApprovalStatus.SUBMITTED, note: "Arbeit ueber 0:00 (RFID)" },
+    update: { status: ApprovalStatus.SUBMITTED, note: "Arbeit ueber 0:00 (RFID)", decidedAt: null, decidedById: null }
+  });
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, loginName: true } });
+  const recipients = await getSupervisorEmails();
+  await Promise.all(
+    recipients.map((to) =>
+      sendEventMail("mailOnSupervisorCrossMidnight", {
+        to,
+        subject: "Genehmigung noetig: Arbeit ueber 0:00",
+        text: `${user?.name || user?.loginName || "Mitarbeiter"} hat eine Schicht ueber 0:00 per RFID beendet.`
+      }).catch(() => undefined)
+    )
+  );
 }
 
 function calculateWorkedMinutes(entries: { type: TimeEntryType; occurredAt: Date }[]): number {
@@ -169,6 +225,21 @@ terminalRouter.post("/punch", async (req, res) => {
       where: { id: terminal.id },
       data: { lastSeenAt: new Date() }
     });
+    const [supervisors, admins] = await Promise.all([getSupervisorEmails(), getAdminEmails()]);
+    await Promise.all(supervisors.map((to) =>
+      sendEventMail("mailOnSupervisorUnknownRfid", {
+        to,
+        subject: "Unbekannte RFID Karte erkannt",
+        text: `Terminal: ${terminal.name}\nRFID: ${parsed.data.rfidTag}\nZeit: ${new Date().toISOString()}`
+      }).catch(() => undefined)
+    ));
+    await Promise.all(admins.map((to) =>
+      sendEventMail("mailOnAdminUnknownRfid", {
+        to,
+        subject: "Unbekannte RFID Karte erkannt",
+        text: `Terminal: ${terminal.name}\nRFID: ${parsed.data.rfidTag}\nZeit: ${new Date().toISOString()}`
+      }).catch(() => undefined)
+    ));
     res.status(404).json({ message: "RFID nicht zugeordnet." });
     return;
   }
@@ -226,6 +297,9 @@ terminalRouter.post("/punch", async (req, res) => {
   }
   const entry = txResult.entry;
   const effectiveType = txResult.effectiveType;
+  if (effectiveType === TimeEntryType.CLOCK_OUT) {
+    await upsertCrossMidnightApprovalFromTerminal(user.id, entry.occurredAt);
+  }
 
   const dayStart = dayStartUtc(entry.occurredAt);
   const dayEnd = dayEndUtc(entry.occurredAt);

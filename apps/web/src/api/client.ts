@@ -247,6 +247,15 @@ export const api = {
       selfCorrectionMaxDays?: number;
       autoBreakMinutes: number;
       autoBreakAfterHours: number;
+      requireApprovalForCrossMidnight?: boolean;
+      requireReasonWebClock?: boolean;
+      requireNoteSelfCorrection?: boolean;
+      requireNoteSupervisorCorrection?: boolean;
+      requireNoteLeaveRequest?: boolean;
+      requireNoteLeaveDecision?: boolean;
+      requireNoteLeaveSupervisorUpdate?: boolean;
+      requireNoteOvertimeAdjustment?: boolean;
+      requireNoteOvertimeAccountSet?: boolean;
       colorApproved: string;
       colorRejected: string;
       colorManualCorrection: string;
@@ -257,6 +266,22 @@ export const api = {
       colorVacationWarning: string;
       colorWebEntry: string;
       colorOvertime: string;
+      smtpEnabled?: boolean;
+      smtpHost?: string | null;
+      smtpPort?: number;
+      smtpUser?: string | null;
+      smtpPassword?: string | null;
+      smtpFrom?: string | null;
+      smtpSenderName?: string | null;
+      mailOnEmployeeLeaveDecision?: boolean;
+      mailOnEmployeeOvertimeDecision?: boolean;
+      mailOnEmployeeLongShift?: boolean;
+      mailOnSupervisorLeaveRequest?: boolean;
+      mailOnSupervisorOvertimeRequest?: boolean;
+      mailOnSupervisorCrossMidnight?: boolean;
+      mailOnSupervisorUnknownRfid?: boolean;
+      mailOnAdminUnknownRfid?: boolean;
+      mailOnAdminSystemError?: boolean;
     }>("/api/admin/config"),
 
   updateConfig: (payload: Record<string, unknown>) =>

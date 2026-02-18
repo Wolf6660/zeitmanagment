@@ -14,6 +14,15 @@ type AdminConfig = {
   selfCorrectionMaxDays?: number;
   autoBreakMinutes: number;
   autoBreakAfterHours: number;
+  requireApprovalForCrossMidnight?: boolean;
+  requireReasonWebClock?: boolean;
+  requireNoteSelfCorrection?: boolean;
+  requireNoteSupervisorCorrection?: boolean;
+  requireNoteLeaveRequest?: boolean;
+  requireNoteLeaveDecision?: boolean;
+  requireNoteLeaveSupervisorUpdate?: boolean;
+  requireNoteOvertimeAdjustment?: boolean;
+  requireNoteOvertimeAccountSet?: boolean;
   colorApproved: string;
   colorRejected: string;
   colorManualCorrection: string;
@@ -24,6 +33,22 @@ type AdminConfig = {
   colorVacationWarning: string;
   colorWebEntry: string;
   colorOvertime: string;
+  smtpEnabled?: boolean;
+  smtpHost?: string | null;
+  smtpPort?: number;
+  smtpUser?: string | null;
+  smtpPassword?: string | null;
+  smtpFrom?: string | null;
+  smtpSenderName?: string | null;
+  mailOnEmployeeLeaveDecision?: boolean;
+  mailOnEmployeeOvertimeDecision?: boolean;
+  mailOnEmployeeLongShift?: boolean;
+  mailOnSupervisorLeaveRequest?: boolean;
+  mailOnSupervisorOvertimeRequest?: boolean;
+  mailOnSupervisorCrossMidnight?: boolean;
+  mailOnSupervisorUnknownRfid?: boolean;
+  mailOnAdminUnknownRfid?: boolean;
+  mailOnAdminSystemError?: boolean;
 };
 
 type Terminal = {
@@ -241,6 +266,7 @@ export function AdminHome() {
     if (section === "company") return "Firmenstammdaten";
     if (section === "rules") return "Regeln";
     if (section === "colors") return "Farben";
+    if (section === "mail") return "E-Mail";
     if (section === "employees") return "Mitarbeiter";
     if (section === "overtime") return "Ueberstunden";
     if (section === "bulk") return "Stapelerfassung";
@@ -261,6 +287,7 @@ export function AdminHome() {
         <button onClick={() => setSearchParams({ section: "company" })}>Firmenstammdaten</button>
         <button onClick={() => setSearchParams({ section: "rules" })}>Regeln</button>
         <button onClick={() => setSearchParams({ section: "colors" })}>Farben</button>
+        <button onClick={() => setSearchParams({ section: "mail" })}>E-Mail</button>
         <button onClick={() => setSearchParams({ section: "employees" })}>Mitarbeiter</button>
         <button onClick={() => setSearchParams({ section: "overtime" })}>Ueberstunden</button>
         <button onClick={() => setSearchParams({ section: "bulk" })}>Stapelerfassung</button>
@@ -330,6 +357,69 @@ export function AdminHome() {
               onChange={(e) => setConfig({ ...config, selfCorrectionMaxDays: Number(e.target.value) })}
             />
           </label>
+          <label>
+            Genehmigung bei Arbeit ueber 0:00 erforderlich
+            <select value={String(config.requireApprovalForCrossMidnight ?? true)} onChange={(e) => setConfig({ ...config, requireApprovalForCrossMidnight: e.target.value === "true" })}>
+              <option value="true">Aktiv</option>
+              <option value="false">Deaktiviert</option>
+            </select>
+          </label>
+          <label>
+            Mussfeld: Grund beim Web-Kommen/Gehen
+            <select value={String(config.requireReasonWebClock ?? true)} onChange={(e) => setConfig({ ...config, requireReasonWebClock: e.target.value === "true" })}>
+              <option value="true">Aktiv</option>
+              <option value="false">Deaktiviert</option>
+            </select>
+          </label>
+          <label>
+            Mussfeld: Notiz beim eigenen Nachtrag
+            <select value={String(config.requireNoteSelfCorrection ?? true)} onChange={(e) => setConfig({ ...config, requireNoteSelfCorrection: e.target.value === "true" })}>
+              <option value="true">Aktiv</option>
+              <option value="false">Deaktiviert</option>
+            </select>
+          </label>
+          <label>
+            Mussfeld: Notiz bei Korrektur durch Vorgesetzten/Admin
+            <select value={String(config.requireNoteSupervisorCorrection ?? true)} onChange={(e) => setConfig({ ...config, requireNoteSupervisorCorrection: e.target.value === "true" })}>
+              <option value="true">Aktiv</option>
+              <option value="false">Deaktiviert</option>
+            </select>
+          </label>
+          <label>
+            Mussfeld: Notiz beim Antrag Urlaub/Ueberstunden
+            <select value={String(config.requireNoteLeaveRequest ?? true)} onChange={(e) => setConfig({ ...config, requireNoteLeaveRequest: e.target.value === "true" })}>
+              <option value="true">Aktiv</option>
+              <option value="false">Deaktiviert</option>
+            </select>
+          </label>
+          <label>
+            Mussfeld: Entscheidungsnotiz bei Antrag
+            <select value={String(config.requireNoteLeaveDecision ?? true)} onChange={(e) => setConfig({ ...config, requireNoteLeaveDecision: e.target.value === "true" })}>
+              <option value="true">Aktiv</option>
+              <option value="false">Deaktiviert</option>
+            </select>
+          </label>
+          <label>
+            Mussfeld: Aenderungsnotiz bei Antrag-Korrektur
+            <select value={String(config.requireNoteLeaveSupervisorUpdate ?? true)} onChange={(e) => setConfig({ ...config, requireNoteLeaveSupervisorUpdate: e.target.value === "true" })}>
+              <option value="true">Aktiv</option>
+              <option value="false">Deaktiviert</option>
+            </select>
+          </label>
+          <label>
+            Mussfeld: Notiz bei Ueberstunden-Aenderung
+            <select value={String(config.requireNoteOvertimeAdjustment ?? true)} onChange={(e) => setConfig({ ...config, requireNoteOvertimeAdjustment: e.target.value === "true" })}>
+              <option value="true">Aktiv</option>
+              <option value="false">Deaktiviert</option>
+            </select>
+          </label>
+          <label>
+            Mussfeld: Notiz bei Ueberstundenkonto setzen
+            <select value={String(config.requireNoteOvertimeAccountSet ?? true)} onChange={(e) => setConfig({ ...config, requireNoteOvertimeAccountSet: e.target.value === "true" })}>
+              <option value="true">Aktiv</option>
+              <option value="false">Deaktiviert</option>
+            </select>
+          </label>
           <div style={{ gridColumn: "1 / -1" }}>
             <label>
               Arbeitstage
@@ -385,6 +475,105 @@ export function AdminHome() {
               />
             </div>
           ))}
+        </div>
+      )}
+
+      {section === "mail" && (
+        <div className="grid admin-section">
+          <label>
+            SMTP aktiviert
+            <select value={String(config.smtpEnabled ?? false)} onChange={(e) => setConfig({ ...config, smtpEnabled: e.target.value === "true" })}>
+              <option value="true">Ja</option>
+              <option value="false">Nein</option>
+            </select>
+          </label>
+          <label>
+            SMTP Host
+            <input value={config.smtpHost ?? ""} onChange={(e) => setConfig({ ...config, smtpHost: e.target.value })} />
+          </label>
+          <label>
+            SMTP Port
+            <input type="number" value={config.smtpPort ?? 587} onChange={(e) => setConfig({ ...config, smtpPort: Number(e.target.value) })} />
+          </label>
+          <label>
+            Benutzername
+            <input value={config.smtpUser ?? ""} onChange={(e) => setConfig({ ...config, smtpUser: e.target.value })} />
+          </label>
+          <label>
+            Passwort
+            <input type="password" value={config.smtpPassword ?? ""} onChange={(e) => setConfig({ ...config, smtpPassword: e.target.value })} />
+          </label>
+          <label>
+            Absenderadresse
+            <input value={config.smtpFrom ?? ""} onChange={(e) => setConfig({ ...config, smtpFrom: e.target.value })} />
+          </label>
+          <label>
+            Absendername
+            <input value={config.smtpSenderName ?? ""} onChange={(e) => setConfig({ ...config, smtpSenderName: e.target.value })} />
+          </label>
+          <label>
+            Mail Mitarbeiter: Antrag Urlaub genehmigt/abgelehnt
+            <select value={String(config.mailOnEmployeeLeaveDecision ?? true)} onChange={(e) => setConfig({ ...config, mailOnEmployeeLeaveDecision: e.target.value === "true" })}>
+              <option value="true">Aktiv</option>
+              <option value="false">Deaktiviert</option>
+            </select>
+          </label>
+          <label>
+            Mail Mitarbeiter: Antrag Ueberstunden genehmigt/abgelehnt
+            <select value={String(config.mailOnEmployeeOvertimeDecision ?? true)} onChange={(e) => setConfig({ ...config, mailOnEmployeeOvertimeDecision: e.target.value === "true" })}>
+              <option value="true">Aktiv</option>
+              <option value="false">Deaktiviert</option>
+            </select>
+          </label>
+          <label>
+            Mail Mitarbeiter: Schicht ueber X Stunden
+            <select value={String(config.mailOnEmployeeLongShift ?? false)} onChange={(e) => setConfig({ ...config, mailOnEmployeeLongShift: e.target.value === "true" })}>
+              <option value="true">Aktiv</option>
+              <option value="false">Deaktiviert</option>
+            </select>
+          </label>
+          <label>
+            Mail Vorgesetzte: neuer Urlaubsantrag
+            <select value={String(config.mailOnSupervisorLeaveRequest ?? true)} onChange={(e) => setConfig({ ...config, mailOnSupervisorLeaveRequest: e.target.value === "true" })}>
+              <option value="true">Aktiv</option>
+              <option value="false">Deaktiviert</option>
+            </select>
+          </label>
+          <label>
+            Mail Vorgesetzte: neuer Ueberstundenantrag
+            <select value={String(config.mailOnSupervisorOvertimeRequest ?? true)} onChange={(e) => setConfig({ ...config, mailOnSupervisorOvertimeRequest: e.target.value === "true" })}>
+              <option value="true">Aktiv</option>
+              <option value="false">Deaktiviert</option>
+            </select>
+          </label>
+          <label>
+            Mail Vorgesetzte: Genehmigung Arbeit ueber 0:00
+            <select value={String(config.mailOnSupervisorCrossMidnight ?? true)} onChange={(e) => setConfig({ ...config, mailOnSupervisorCrossMidnight: e.target.value === "true" })}>
+              <option value="true">Aktiv</option>
+              <option value="false">Deaktiviert</option>
+            </select>
+          </label>
+          <label>
+            Mail Vorgesetzte: unbekannte RFID
+            <select value={String(config.mailOnSupervisorUnknownRfid ?? true)} onChange={(e) => setConfig({ ...config, mailOnSupervisorUnknownRfid: e.target.value === "true" })}>
+              <option value="true">Aktiv</option>
+              <option value="false">Deaktiviert</option>
+            </select>
+          </label>
+          <label>
+            Mail Admin: unbekannte RFID
+            <select value={String(config.mailOnAdminUnknownRfid ?? true)} onChange={(e) => setConfig({ ...config, mailOnAdminUnknownRfid: e.target.value === "true" })}>
+              <option value="true">Aktiv</option>
+              <option value="false">Deaktiviert</option>
+            </select>
+          </label>
+          <label>
+            Mail Admin: Systemfehler
+            <select value={String(config.mailOnAdminSystemError ?? true)} onChange={(e) => setConfig({ ...config, mailOnAdminSystemError: e.target.value === "true" })}>
+              <option value="true">Aktiv</option>
+              <option value="false">Deaktiviert</option>
+            </select>
+          </label>
         </div>
       )}
 

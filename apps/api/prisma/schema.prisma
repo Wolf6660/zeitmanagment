@@ -251,6 +251,15 @@ model SystemConfig {
   selfCorrectionMaxDays             Int      @default(3)
   autoBreakMinutes                  Int      @default(30)
   autoBreakAfterHours               Float    @default(6)
+  requireApprovalForCrossMidnight   Boolean  @default(true)
+  requireReasonWebClock             Boolean  @default(true)
+  requireNoteSelfCorrection         Boolean  @default(true)
+  requireNoteSupervisorCorrection   Boolean  @default(true)
+  requireNoteLeaveRequest           Boolean  @default(true)
+  requireNoteLeaveDecision          Boolean  @default(true)
+  requireNoteLeaveSupervisorUpdate  Boolean  @default(true)
+  requireNoteOvertimeAdjustment     Boolean  @default(true)
+  requireNoteOvertimeAccountSet     Boolean  @default(true)
 
   colorApproved                     String   @default("#22C55E")
   colorRejected                     String   @default("#EF4444")
@@ -269,6 +278,17 @@ model SystemConfig {
   smtpUser                          String?
   smtpPassword                      String?
   smtpFrom                          String?
+  smtpSenderName                    String?
+
+  mailOnEmployeeLeaveDecision       Boolean  @default(true)
+  mailOnEmployeeOvertimeDecision    Boolean  @default(true)
+  mailOnEmployeeLongShift           Boolean  @default(false)
+  mailOnSupervisorLeaveRequest      Boolean  @default(true)
+  mailOnSupervisorOvertimeRequest   Boolean  @default(true)
+  mailOnSupervisorCrossMidnight     Boolean  @default(true)
+  mailOnSupervisorUnknownRfid       Boolean  @default(true)
+  mailOnAdminUnknownRfid            Boolean  @default(true)
+  mailOnAdminSystemError            Boolean  @default(true)
 
   accountantMailEnabled             Boolean  @default(false)
   accountantEmail                   String?
