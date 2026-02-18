@@ -448,6 +448,31 @@ adminRouter.post("/terminals/:id/regenerate-key", async (req, res) => {
 });
 
 adminRouter.get("/rfid/unassigned", async (_req, res) => {
+  const assignedUsers = await prisma.user.findMany({
+    where: { rfidTag: { not: null } },
+    select: { rfidTag: true }
+  });
+  const assignedTags = new Set(
+    assignedUsers.map((u) => (u.rfidTag || "").trim().toUpperCase()).filter((t) => t.length > 0)
+  );
+
+  const dismissedLogs = await prisma.auditLog.findMany({
+    where: { action: "RFID_UNASSIGNED_DELETED" },
+    orderBy: { createdAt: "desc" },
+    take: 500
+  });
+  const dismissedTags = new Set<string>();
+  for (const log of dismissedLogs) {
+    if (!log.payloadJson) continue;
+    try {
+      const payload = JSON.parse(log.payloadJson) as Record<string, unknown>;
+      const tag = String(payload.rfidTag || "").trim().toUpperCase();
+      if (tag) dismissedTags.add(tag);
+    } catch {
+      // ignore invalid payload
+    }
+  }
+
   const logs = await prisma.auditLog.findMany({
     where: { action: "RFID_UNASSIGNED_SCAN" },
     orderBy: { createdAt: "desc" },
@@ -475,6 +500,8 @@ adminRouter.get("/rfid/unassigned", async (_req, res) => {
     }
     const tag = String(payload.rfidTag || "").trim();
     if (!tag) continue;
+    const normalizedTag = tag.toUpperCase();
+    if (assignedTags.has(normalizedTag) || dismissedTags.has(normalizedTag)) continue;
     const existing = byTag.get(tag);
     if (existing) {
       existing.seenCount += 1;
@@ -492,6 +519,30 @@ adminRouter.get("/rfid/unassigned", async (_req, res) => {
   }
 
   res.json(Array.from(byTag.values()));
+});
+
+const deleteUnassignedRfidSchema = z.object({
+  rfidTag: z.string().trim().min(1)
+});
+
+adminRouter.post("/rfid/unassigned/delete", async (req: AuthRequest, res) => {
+  const parsed = deleteUnassignedRfidSchema.safeParse(req.body);
+  if (!parsed.success || !req.auth) {
+    res.status(400).json({ message: "Ungueltige Eingaben." });
+    return;
+  }
+
+  const cleanedTag = parsed.data.rfidTag.trim().toUpperCase();
+  await writeAuditLog({
+    actorUserId: req.auth.userId,
+    actorLoginName: await resolveActorLoginName(req.auth.userId),
+    action: "RFID_UNASSIGNED_DELETED",
+    targetType: "RfidTag",
+    targetId: cleanedTag,
+    payload: { rfidTag: cleanedTag }
+  });
+
+  res.json({ ok: true });
 });
 
 const assignRfidSchema = z.object({

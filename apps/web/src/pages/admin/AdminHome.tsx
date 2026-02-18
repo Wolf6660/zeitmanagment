@@ -1195,12 +1195,28 @@ export function AdminHome() {
                       <td>{s.terminalName || "-"}</td>
                       <td>{s.seenCount}</td>
                       <td>
-                        <button
-                          className="secondary"
-                          onClick={() => setAssignRfidTag(s.rfidTag)}
-                        >
-                          Uebernehmen
-                        </button>
+                        <div className="row">
+                          <button
+                            className="secondary"
+                            onClick={() => setAssignRfidTag(s.rfidTag)}
+                          >
+                            Zuweisen
+                          </button>
+                          <button
+                            className="warn"
+                            onClick={async () => {
+                              try {
+                                await api.deleteUnassignedRfidTag(s.rfidTag);
+                                setUnassignedRfid(await api.listUnassignedRfidScans());
+                                setMsg("Unbekannter RFID geloescht.");
+                              } catch (e) {
+                                setMsg((e as Error).message);
+                              }
+                            }}
+                          >
+                            Loeschen
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

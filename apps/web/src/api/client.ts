@@ -328,6 +328,12 @@ export const api = {
       lastReasonText?: string | null;
     }>>("/api/admin/rfid/unassigned"),
 
+  deleteUnassignedRfidTag: (rfidTag: string) =>
+    request<{ ok: boolean }>("/api/admin/rfid/unassigned/delete", {
+      method: "POST",
+      body: JSON.stringify({ rfidTag })
+    }),
+
   assignRfidTag: (payload: { userId: string; rfidTag: string; note?: string }) =>
     request<{ id: string; name: string; loginName: string; rfidTag: string | null }>("/api/admin/rfid/assign", {
       method: "POST",
