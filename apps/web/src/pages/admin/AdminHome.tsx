@@ -301,7 +301,7 @@ export function AdminHome() {
       <h3>{sectionTitle}</h3>
 
       {section === "company" && (
-        <div className="grid admin-section">
+        <div className="grid admin-section admin-uniform">
           <label>
             Firmenname
             <input value={config.companyName || ""} onChange={(e) => setConfig({ ...config, companyName: e.target.value })} />
@@ -336,7 +336,7 @@ export function AdminHome() {
       )}
 
       {section === "rules" && (
-        <div className="grid admin-section">
+        <div className="grid admin-section admin-uniform">
           <label>
             Standard Sollarbeitszeit/Tag
             <input type="number" step="0.25" value={config.defaultDailyHours} onChange={(e) => setConfig({ ...config, defaultDailyHours: Number(e.target.value) })} />
@@ -481,7 +481,7 @@ export function AdminHome() {
       )}
 
       {section === "mail" && (
-        <div className="grid admin-section">
+        <div className="grid admin-section admin-uniform">
           <label>
             SMTP aktiviert
             <select value={String(config.smtpEnabled ?? false)} onChange={(e) => setConfig({ ...config, smtpEnabled: e.target.value === "true" })}>
@@ -513,17 +513,6 @@ export function AdminHome() {
             Absendername
             <input value={config.smtpSenderName ?? ""} onChange={(e) => setConfig({ ...config, smtpSenderName: e.target.value })} />
           </label>
-          <label>
-            Buchhalter-Mail aktiv
-            <select value={String(config.accountantMailEnabled ?? false)} onChange={(e) => setConfig({ ...config, accountantMailEnabled: e.target.value === "true" })}>
-              <option value="true">Ja</option>
-              <option value="false">Nein</option>
-            </select>
-          </label>
-          <label>
-            Buchhalter E-Mail
-            <input value={config.accountantEmail ?? ""} onChange={(e) => setConfig({ ...config, accountantEmail: e.target.value })} />
-          </label>
           <div className="row" style={{ gridColumn: "1 / -1" }}>
             <button
               className="secondary"
@@ -539,6 +528,19 @@ export function AdminHome() {
             >
               SMTP testen (Absender)
             </button>
+          </div>
+          <label>
+            Buchhalter-Mail aktiv
+            <select value={String(config.accountantMailEnabled ?? false)} onChange={(e) => setConfig({ ...config, accountantMailEnabled: e.target.value === "true" })}>
+              <option value="true">Ja</option>
+              <option value="false">Nein</option>
+            </select>
+          </label>
+          <label>
+            Buchhalter E-Mail
+            <input value={config.accountantEmail ?? ""} onChange={(e) => setConfig({ ...config, accountantEmail: e.target.value })} />
+          </label>
+          <div className="row" style={{ gridColumn: "1 / -1" }}>
             <button
               className="secondary"
               type="button"
@@ -621,7 +623,7 @@ export function AdminHome() {
       )}
 
       {section === "overtime" && (
-        <div className="card admin-section-card" style={{ padding: 12 }}>
+        <div className="card admin-section-card admin-uniform" style={{ padding: 12 }}>
           <h4>Ueberstunden bearbeiten</h4>
           <div className="grid grid-2">
             <label>
@@ -700,7 +702,7 @@ export function AdminHome() {
       )}
 
       {section === "bulk" && (
-        <div className="card admin-section-card" style={{ padding: 12 }}>
+        <div className="card admin-section-card admin-uniform" style={{ padding: 12 }}>
           <h4>Stapelerfassung</h4>
           <div className="grid">
             <label>
@@ -802,7 +804,7 @@ export function AdminHome() {
 
       {section === "employees" && (
         <div className="grid admin-section">
-          <div className="card admin-section-card" style={{ padding: 12 }}>
+          <div className="card admin-section-card admin-uniform" style={{ padding: 12 }}>
             <h4>Neuen Mitarbeiter anlegen</h4>
             <div className="grid">
               <input placeholder="Name" value={newEmployee.name} onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })} />
@@ -1101,7 +1103,7 @@ export function AdminHome() {
 
       {section === "terminals" && (
         <div className="admin-section">
-          <div className="card admin-section-card" style={{ padding: 12, marginBottom: 12 }}>
+          <div className="card admin-section-card admin-uniform" style={{ padding: 12, marginBottom: 12 }}>
             <h4>RFID Chip auslesen und zuweisen</h4>
             <div className="grid">
               <label>
@@ -1279,7 +1281,7 @@ export function AdminHome() {
 
       {section === "esp" && (
         <div className="admin-section">
-          <div className="card admin-section-card" style={{ padding: 12 }}>
+          <div className="card admin-section-card admin-uniform" style={{ padding: 12 }}>
             <h4>ESP32 Konfiguration erstellen</h4>
             <div className="grid">
               <label>

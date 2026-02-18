@@ -75,6 +75,23 @@ a {
   border-radius: 12px;
 }
 
+.admin-uniform {
+  grid-template-columns: 1fr !important;
+}
+
+.admin-uniform label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.admin-uniform input,
+.admin-uniform select,
+.admin-uniform textarea {
+  width: 100%;
+}
+
 .admin-table-wrap {
   overflow-x: auto;
 }

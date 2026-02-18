@@ -73,7 +73,7 @@ export function EmployeeMonthPage() {
                     </span>
                   ))}
                 </td>
-                <td>{d.entries.map((e) => e.reasonText).filter(Boolean).join(" | ") || "-"}</td>
+                <td>{Array.from(new Set(d.entries.map((e) => e.reasonText).filter((x): x is string => Boolean(x && x.trim())))).join(" | ") || "-"}</td>
               </tr>
             );})}
           </tbody>

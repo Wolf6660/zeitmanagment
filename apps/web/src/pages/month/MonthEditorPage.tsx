@@ -84,7 +84,7 @@ export function MonthEditorPage() {
                         ))}
                       </div>
                     </td>
-                    <td>{d.entries.map((e: any) => e.reasonText).filter(Boolean).join(" | ") || "-"}</td>
+                    <td>{Array.from(new Set(d.entries.map((e: any) => e.reasonText).filter((x: string | undefined) => Boolean(x && x.trim())))).join(" | ") || "-"}</td>
                     <td>
                       <div className="row">
                         <button className="secondary" type="button" onClick={() => {
