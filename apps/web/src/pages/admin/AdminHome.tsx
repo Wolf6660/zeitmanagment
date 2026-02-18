@@ -524,6 +524,36 @@ export function AdminHome() {
             Buchhalter E-Mail
             <input value={config.accountantEmail ?? ""} onChange={(e) => setConfig({ ...config, accountantEmail: e.target.value })} />
           </label>
+          <div className="row" style={{ gridColumn: "1 / -1" }}>
+            <button
+              className="secondary"
+              type="button"
+              onClick={async () => {
+                try {
+                  await api.testMailSender();
+                  setMsg("SMTP Testmail an Absender wurde versendet.");
+                } catch (e) {
+                  setMsg((e as Error).message);
+                }
+              }}
+            >
+              SMTP testen (Absender)
+            </button>
+            <button
+              className="secondary"
+              type="button"
+              onClick={async () => {
+                try {
+                  await api.testMailAccountant();
+                  setMsg("Testmail an Buchhalter wurde versendet.");
+                } catch (e) {
+                  setMsg((e as Error).message);
+                }
+              }}
+            >
+              Buchhalter Testmail
+            </button>
+          </div>
           <label>
             Mail Mitarbeiter: Antrag Urlaub genehmigt/abgelehnt
             <select value={String(config.mailOnEmployeeLeaveDecision ?? true)} onChange={(e) => setConfig({ ...config, mailOnEmployeeLeaveDecision: e.target.value === "true" })}>
@@ -991,27 +1021,42 @@ export function AdminHome() {
                     </td>
                     <td>
                       {!editing && (
-                        <button
-                          className="secondary"
-                          onClick={() => {
-                            setEditingEmployeeId(e.id);
-                            setEditingEmployee({
-                              name: e.name,
-                              email: e.email,
-                              role: e.role,
-                              annualVacationDays: e.annualVacationDays,
-                              dailyWorkHours: e.dailyWorkHours,
-                              carryOverVacationDays: e.carryOverVacationDays,
-                              isActive: e.isActive,
-                              mailNotificationsEnabled: e.mailNotificationsEnabled,
-                              webLoginEnabled: e.webLoginEnabled,
-                              timeTrackingEnabled: e.timeTrackingEnabled,
-                              rfidTag: e.rfidTag
-                            });
-                          }}
-                        >
-                          Bearbeiten
-                        </button>
+                        <div className="row">
+                          <button
+                            className="secondary"
+                            onClick={() => {
+                              setEditingEmployeeId(e.id);
+                              setEditingEmployee({
+                                name: e.name,
+                                email: e.email,
+                                role: e.role,
+                                annualVacationDays: e.annualVacationDays,
+                                dailyWorkHours: e.dailyWorkHours,
+                                carryOverVacationDays: e.carryOverVacationDays,
+                                isActive: e.isActive,
+                                mailNotificationsEnabled: e.mailNotificationsEnabled,
+                                webLoginEnabled: e.webLoginEnabled,
+                                timeTrackingEnabled: e.timeTrackingEnabled,
+                                rfidTag: e.rfidTag
+                              });
+                            }}
+                          >
+                            Bearbeiten
+                          </button>
+                          <button
+                            className="secondary"
+                            onClick={async () => {
+                              try {
+                                await api.testMailEmployee(e.id);
+                                setMsg(`Testmail an ${e.name} wurde versendet.`);
+                              } catch (err) {
+                                setMsg((err as Error).message);
+                              }
+                            }}
+                          >
+                            TestMail
+                          </button>
+                        </div>
                       )}
                       {editing && (
                         <div className="row">

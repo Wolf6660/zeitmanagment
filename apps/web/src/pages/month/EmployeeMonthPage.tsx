@@ -41,7 +41,7 @@ export function EmployeeMonthPage() {
       </div>
       {monthView && (
         <table>
-          <thead><tr><th>Datum</th><th>Soll</th><th>Ist</th><th>Buchungen</th></tr></thead>
+          <thead><tr><th>Datum</th><th>Soll</th><th>Ist</th><th>Buchungen</th><th>Notizen</th></tr></thead>
           <tbody>
             {monthView.days.map((d) => {
               const bg = d.specialWorkApprovalStatus === "REJECTED"
@@ -67,23 +67,13 @@ export function EmployeeMonthPage() {
                   {d.entries.map((e) => (
                     <span
                       key={e.id}
-                      style={{
-                        marginRight: 8,
-                        color: e.source === "MANUAL_CORRECTION" ? "var(--manual)" : e.source === "WEB" ? "var(--web-entry)" : "inherit",
-                        background: e.source === "MANUAL_CORRECTION"
-                          ? "color-mix(in srgb, var(--manual) 18%, white)"
-                          : e.source === "WEB"
-                            ? "color-mix(in srgb, var(--web-entry) 22%, white)"
-                            : "transparent",
-                        borderRadius: 8,
-                        padding: "2px 6px"
-                      }}
+                      style={{ marginRight: 8 }}
                     >
                       {e.type === "CLOCK_IN" ? "K" : "G"} {e.time}
-                      {e.reasonText ? ` (${e.reasonText})` : ""}
                     </span>
                   ))}
                 </td>
+                <td>{d.entries.map((e) => e.reasonText).filter(Boolean).join(" | ") || "-"}</td>
               </tr>
             );})}
           </tbody>

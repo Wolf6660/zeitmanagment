@@ -13,7 +13,6 @@ export function MonthEditorPage() {
   const [overrideEvents, setOverrideEvents] = useState<Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; time: string }>>([]);
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
-  const [showNotesForDay, setShowNotesForDay] = useState<string | null>(null);
 
   async function loadEmployees() {
     const e = await api.employees();
@@ -50,7 +49,7 @@ export function MonthEditorPage() {
 
       {monthView && (
         <table>
-          <thead><tr><th>Datum</th><th>Soll</th><th>Ist</th><th>Buchungen</th><th>Aktion</th></tr></thead>
+          <thead><tr><th>Datum</th><th>Soll</th><th>Ist</th><th>Buchungen</th><th>Notizen</th><th>Aktion</th></tr></thead>
           <tbody>
             {monthView.days.map((d: any) => {
               const expanded = selectedDay === d.date;
@@ -78,61 +77,51 @@ export function MonthEditorPage() {
                         {d.entries.map((e: any) => (
                           <span
                             key={`entry-${d.date}-${e.id || e.time}`}
-                            style={{
-                              marginRight: 8,
-                              color: e.source === "MANUAL_CORRECTION" ? "var(--manual)" : e.source === "WEB" ? "var(--web-entry)" : "inherit",
-                              background: e.source === "MANUAL_CORRECTION"
-                                ? "color-mix(in srgb, var(--manual) 18%, white)"
-                                : e.source === "WEB"
-                                  ? "color-mix(in srgb, var(--web-entry) 22%, white)"
-                                  : "transparent",
-                              borderRadius: 8,
-                              padding: "2px 6px"
-                            }}
+                            style={{ marginRight: 8 }}
                           >
                             {e.type === "CLOCK_IN" ? "K" : "G"} {e.time}
                           </span>
                         ))}
                       </div>
-                      {d.entries.some((e: any) => (e.reasonText || "").trim().length > 0) && (
-                        <div style={{ marginTop: 6 }}>
+                    </td>
+                    <td>{d.entries.map((e: any) => e.reasonText).filter(Boolean).join(" | ") || "-"}</td>
+                    <td>
+                      <div className="row">
+                        <button className="secondary" type="button" onClick={() => {
+                          setSelectedDay(expanded ? null : d.date);
+                          setOverrideEvents(
+                            (d.entries || []).map((e: any, idx: number) => ({
+                              id: e.id || `${d.date}-${idx}`,
+                              type: e.type,
+                              time: e.time
+                            }))
+                          );
+                          setOverrideNote("");
+                          setMsg("");
+                        }}>Bearbeiten</button>
+                        {d.isSick && (
                           <button
                             className="secondary"
                             type="button"
-                            onClick={() => setShowNotesForDay((prev) => (prev === d.date ? null : d.date))}
+                            onClick={async () => {
+                              try {
+                                await api.deleteSickLeaveDay({ userId: monthUserId, date: d.date });
+                                setMsg("Krankheitstag entfernt.");
+                                await loadMonth();
+                              } catch (e) {
+                                setMsg((e as Error).message);
+                              }
+                            }}
                           >
-                            {showNotesForDay === d.date ? "Notizen ausblenden" : "Notizen anzeigen"}
+                            Krank-Tag loeschen
                           </button>
-                          {showNotesForDay === d.date && (
-                            <div className="card" style={{ marginTop: 6, padding: 8 }}>
-                              {d.entries.filter((e: any) => (e.reasonText || "").trim().length > 0).map((e: any) => (
-                                <div key={`${d.date}-note-${e.id}`} style={{ marginBottom: 4 }}>
-                                  <strong>{e.type === "CLOCK_IN" ? "Kommen" : "Gehen"} {e.time}:</strong> {e.reasonText}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </td>
-                    <td>
-                      <button className="secondary" type="button" onClick={() => {
-                        setSelectedDay(expanded ? null : d.date);
-                        setOverrideEvents(
-                          (d.entries || []).map((e: any, idx: number) => ({
-                            id: e.id || `${d.date}-${idx}`,
-                            type: e.type,
-                            time: e.time
-                          }))
-                        );
-                        setOverrideNote("");
-                        setMsg("");
-                      }}>Bearbeiten</button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                   {expanded && (
                     <tr>
-                      <td colSpan={5}>
+                      <td colSpan={6}>
                         <div className="card" style={{ padding: 10 }}>
                           <strong>Tag bearbeiten: {d.date}</strong>
                           <div className="grid" style={{ marginTop: 8 }}>

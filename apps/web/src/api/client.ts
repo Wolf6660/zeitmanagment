@@ -291,6 +291,15 @@ export const api = {
   updateConfig: (payload: Record<string, unknown>) =>
     request("/api/admin/config", { method: "PATCH", body: JSON.stringify(payload) }),
 
+  testMailSender: () =>
+    request<{ ok: boolean }>("/api/admin/mail/test-sender", { method: "POST", body: "{}" }),
+
+  testMailAccountant: () =>
+    request<{ ok: boolean }>("/api/admin/mail/test-accountant", { method: "POST", body: "{}" }),
+
+  testMailEmployee: (userId: string) =>
+    request<{ ok: boolean }>("/api/admin/mail/test-employee", { method: "POST", body: JSON.stringify({ userId }) }),
+
   listTerminals: () =>
     request<Array<{ id: string; name: string; location?: string; isActive: boolean; apiKey: string; lastSeenAt?: string }>>(
       "/api/admin/terminals"
@@ -387,6 +396,9 @@ export const api = {
 
   createSickLeave: (payload: { userId: string; startDate: string; endDate: string; partialDayHours?: number; note?: string }) =>
     request("/api/time/sick-leave", { method: "POST", body: JSON.stringify(payload) }),
+
+  deleteSickLeaveDay: (payload: { userId: string; date: string }) =>
+    request<{ ok: boolean }>("/api/time/sick-leave/delete-day", { method: "POST", body: JSON.stringify(payload) }),
 
   pendingSpecialWork: () =>
     request<Array<{ id: string; userId: string; date: string; status: "SUBMITTED" | "APPROVED" | "REJECTED"; note?: string; user: { id: string; name: string; loginName: string } }>>(

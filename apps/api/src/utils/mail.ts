@@ -2,13 +2,30 @@ import nodemailer from "nodemailer";
 import { Role } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 
-export async function sendMailIfEnabled(opts: { to: string; subject: string; text: string }): Promise<void> {
-  const cfg = await prisma.systemConfig.findUnique({ where: { id: 1 } });
-  if (!cfg?.smtpEnabled || !cfg.smtpHost || !cfg.smtpUser || !cfg.smtpPassword || !cfg.smtpFrom) {
-    return;
-  }
+type MailConfig = {
+  smtpEnabled: boolean;
+  smtpHost: string | null;
+  smtpPort: number;
+  smtpUser: string | null;
+  smtpPassword: string | null;
+  smtpFrom: string | null;
+  smtpSenderName: string | null;
+};
 
-  const transport = nodemailer.createTransport({
+function assertMailConfig(cfg: MailConfig): asserts cfg is MailConfig & {
+  smtpHost: string;
+  smtpUser: string;
+  smtpPassword: string;
+  smtpFrom: string;
+} {
+  if (!cfg.smtpEnabled) throw new Error("SMTP ist deaktiviert.");
+  if (!cfg.smtpHost || !cfg.smtpUser || !cfg.smtpPassword || !cfg.smtpFrom) {
+    throw new Error("SMTP Konfiguration ist unvollstaendig.");
+  }
+}
+
+function buildTransport(cfg: MailConfig & { smtpHost: string; smtpUser: string; smtpPassword: string }) {
+  return nodemailer.createTransport({
     host: cfg.smtpHost,
     port: cfg.smtpPort,
     secure: cfg.smtpPort === 465,
@@ -17,7 +34,40 @@ export async function sendMailIfEnabled(opts: { to: string; subject: string; tex
       pass: cfg.smtpPassword
     }
   });
+}
 
+export async function sendMailIfEnabled(opts: { to: string; subject: string; text: string }): Promise<void> {
+  const cfg = await prisma.systemConfig.findUnique({ where: { id: 1 } });
+  if (!cfg?.smtpEnabled || !cfg.smtpHost || !cfg.smtpUser || !cfg.smtpPassword || !cfg.smtpFrom) {
+    return;
+  }
+
+  const transport = buildTransport(cfg);
+
+  await transport.sendMail({
+    from: cfg.smtpSenderName ? `"${cfg.smtpSenderName}" <${cfg.smtpFrom}>` : cfg.smtpFrom,
+    to: opts.to,
+    subject: opts.subject,
+    text: opts.text
+  });
+}
+
+export async function sendMailStrict(opts: { to: string; subject: string; text: string }): Promise<void> {
+  const cfg = await prisma.systemConfig.findUnique({
+    where: { id: 1 },
+    select: {
+      smtpEnabled: true,
+      smtpHost: true,
+      smtpPort: true,
+      smtpUser: true,
+      smtpPassword: true,
+      smtpFrom: true,
+      smtpSenderName: true
+    }
+  });
+  if (!cfg) throw new Error("Systemkonfiguration nicht gefunden.");
+  assertMailConfig(cfg);
+  const transport = buildTransport(cfg);
   await transport.sendMail({
     from: cfg.smtpSenderName ? `"${cfg.smtpSenderName}" <${cfg.smtpFrom}>` : cfg.smtpFrom,
     to: opts.to,

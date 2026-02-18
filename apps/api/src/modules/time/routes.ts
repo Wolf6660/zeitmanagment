@@ -372,6 +372,78 @@ timeRouter.post("/sick-leave", requireRole([Role.SUPERVISOR, Role.ADMIN]), async
   res.status(201).json(sick);
 });
 
+const sickDeleteDaySchema = z.object({
+  userId: z.string().min(1),
+  date: z.string().min(10)
+});
+
+timeRouter.post("/sick-leave/delete-day", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+  const parsed = sickDeleteDaySchema.safeParse(req.body);
+  if (!parsed.success || !req.auth) {
+    res.status(400).json({ message: "Ungueltige Eingaben." });
+    return;
+  }
+  const p = parseIsoDateParts(parsed.data.date);
+  if (!p) {
+    res.status(400).json({ message: "Datum ist ungueltig." });
+    return;
+  }
+  const dayStart = new Date(Date.UTC(p.year, p.month - 1, p.day, 0, 0, 0));
+  const dayEnd = new Date(Date.UTC(p.year, p.month - 1, p.day, 23, 59, 59, 999));
+  const prevDayEnd = new Date(dayStart.getTime() - 1);
+  const nextDayStart = new Date(dayStart.getTime() + 86400000);
+
+  const rows = await prisma.sickLeave.findMany({
+    where: { userId: parsed.data.userId, startDate: { lte: dayEnd }, endDate: { gte: dayStart } },
+    orderBy: { startDate: "asc" }
+  });
+  if (rows.length === 0) {
+    res.status(404).json({ message: "Kein Krankheitseintrag fuer diesen Tag gefunden." });
+    return;
+  }
+
+  await prisma.$transaction(async (tx) => {
+    for (const row of rows) {
+      const startsToday = dayKey(row.startDate) === dayKey(dayStart);
+      const endsToday = dayKey(row.endDate) === dayKey(dayStart);
+      if (startsToday && endsToday) {
+        await tx.sickLeave.delete({ where: { id: row.id } });
+        continue;
+      }
+      if (startsToday && !endsToday) {
+        await tx.sickLeave.update({ where: { id: row.id }, data: { startDate: nextDayStart } });
+        continue;
+      }
+      if (!startsToday && endsToday) {
+        await tx.sickLeave.update({ where: { id: row.id }, data: { endDate: prevDayEnd } });
+        continue;
+      }
+      await tx.sickLeave.update({ where: { id: row.id }, data: { endDate: prevDayEnd } });
+      await tx.sickLeave.create({
+        data: {
+          userId: row.userId,
+          startDate: nextDayStart,
+          endDate: row.endDate,
+          partialDayHours: row.partialDayHours ?? undefined,
+          note: row.note ?? undefined,
+          createdById: req.auth.userId
+        }
+      });
+    }
+  });
+
+  await writeAuditLog({
+    actorUserId: req.auth.userId,
+    actorLoginName: await resolveActorLoginName(req.auth.userId),
+    action: "SICK_LEAVE_DAY_REMOVED",
+    targetType: "SickLeave",
+    targetId: parsed.data.userId,
+    payload: parsed.data
+  });
+
+  res.json({ ok: true });
+});
+
 const overtimeAdjustmentSchema = z.object({
   userId: z.string().trim().min(1, "Mitarbeiter ist Pflicht."),
   date: z

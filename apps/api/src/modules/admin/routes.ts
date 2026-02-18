@@ -7,7 +7,7 @@ import { z } from "zod";
 import { prisma } from "../../db/prisma.js";
 import { AuthRequest, requireAuth, requireRole } from "../../utils/auth.js";
 import { resolveActorLoginName, writeAuditLog } from "../../utils/audit.js";
-import { sendMailIfEnabled } from "../../utils/mail.js";
+import { sendMailIfEnabled, sendMailStrict } from "../../utils/mail.js";
 
 export const adminRouter = Router();
 
@@ -93,6 +93,99 @@ adminRouter.patch("/config", async (req, res) => {
     res.json(updated);
   } catch {
     res.status(400).json({ message: "Konfiguration konnte nicht gespeichert werden." });
+  }
+});
+
+adminRouter.post("/mail/test-sender", async (req: AuthRequest, res) => {
+  try {
+    const cfg = await prisma.systemConfig.findUnique({
+      where: { id: 1 },
+      select: { smtpFrom: true }
+    });
+    if (!cfg?.smtpFrom) {
+      res.status(400).json({ message: "Absenderadresse ist nicht gesetzt." });
+      return;
+    }
+    await sendMailStrict({
+      to: cfg.smtpFrom,
+      subject: "SMTP Testmail (Absender)",
+      text: `Dies ist eine Testmail vom System Zeitmanagment.\nZeit: ${new Date().toISOString()}`
+    });
+    await writeAuditLog({
+      actorUserId: req.auth?.userId,
+      actorLoginName: await resolveActorLoginName(req.auth?.userId),
+      action: "MAIL_TEST_SENDER_SENT",
+      targetType: "SystemConfig",
+      targetId: "1"
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ message: (e as Error).message || "SMTP Test fehlgeschlagen." });
+  }
+});
+
+adminRouter.post("/mail/test-accountant", async (req: AuthRequest, res) => {
+  try {
+    const cfg = await prisma.systemConfig.findUnique({
+      where: { id: 1 },
+      select: { accountantEmail: true }
+    });
+    if (!cfg?.accountantEmail) {
+      res.status(400).json({ message: "Buchhalter E-Mail ist nicht gesetzt." });
+      return;
+    }
+    await sendMailStrict({
+      to: cfg.accountantEmail,
+      subject: "Testmail Buchhaltung",
+      text: `Dies ist eine Testmail an die Buchhaltung.\nZeit: ${new Date().toISOString()}`
+    });
+    await writeAuditLog({
+      actorUserId: req.auth?.userId,
+      actorLoginName: await resolveActorLoginName(req.auth?.userId),
+      action: "MAIL_TEST_ACCOUNTANT_SENT",
+      targetType: "SystemConfig",
+      targetId: "1"
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ message: (e as Error).message || "Buchhalter-Testmail fehlgeschlagen." });
+  }
+});
+
+const testEmployeeMailSchema = z.object({
+  userId: z.string().min(1)
+});
+
+adminRouter.post("/mail/test-employee", async (req: AuthRequest, res) => {
+  const parsed = testEmployeeMailSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: "Ungueltige Eingaben." });
+    return;
+  }
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: parsed.data.userId },
+      select: { id: true, name: true, email: true, loginName: true }
+    });
+    if (!user) {
+      res.status(404).json({ message: "Mitarbeiter nicht gefunden." });
+      return;
+    }
+    await sendMailStrict({
+      to: user.email,
+      subject: "Testmail Mitarbeiter",
+      text: `Hallo ${user.name},\ndies ist eine Testmail fuer ${user.loginName}.\nZeit: ${new Date().toISOString()}`
+    });
+    await writeAuditLog({
+      actorUserId: req.auth?.userId,
+      actorLoginName: await resolveActorLoginName(req.auth?.userId),
+      action: "MAIL_TEST_EMPLOYEE_SENT",
+      targetType: "User",
+      targetId: user.id
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ message: (e as Error).message || "Mitarbeiter-Testmail fehlgeschlagen." });
   }
 });
 
