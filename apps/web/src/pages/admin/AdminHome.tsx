@@ -887,6 +887,9 @@ export function AdminHome() {
                 try {
                   await api.createEmployee({
                     ...newEmployee,
+                    annualVacationDays: Number.isFinite(Number(newEmployee.annualVacationDays)) ? Number(newEmployee.annualVacationDays) : 30,
+                    dailyWorkHours: Number.isFinite(Number(newEmployee.dailyWorkHours)) ? Number(newEmployee.dailyWorkHours) : 8,
+                    carryOverVacationDays: Number.isFinite(Number(newEmployee.carryOverVacationDays)) ? Number(newEmployee.carryOverVacationDays) : 0,
                     rfidTag: newEmployee.rfidTag.trim() ? newEmployee.rfidTag.trim() : undefined
                   });
                   setMsg("Mitarbeiter angelegt.");
