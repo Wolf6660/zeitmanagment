@@ -86,6 +86,7 @@ type Employee = {
   timeTrackingEnabled: boolean;
   dailyWorkHours?: number | null;
   rfidTag?: string | null;
+  rfidTagActive?: boolean;
 };
 
 const COLOR_FIELDS: Array<{ key: keyof AdminConfig; label: string }> = [
@@ -1236,16 +1237,29 @@ export function AdminHome() {
                   <tr>
                     <th>RFID Tag</th>
                     <th>Mitarbeiter</th>
+                    <th>Status</th>
                     <th>Aktion</th>
                   </tr>
                 </thead>
                 <tbody>
                   {employees.filter((e) => (e.rfidTag || "").trim().length > 0).map((e) => {
                     const isEditing = editingAssignedUserId === e.id;
+                    const isRfidActive = e.rfidTagActive !== false;
                     return (
-                      <tr key={`assigned-${e.id}`}>
+                      <tr
+                        key={`assigned-${e.id}`}
+                        style={!isRfidActive ? { background: "rgba(239, 68, 68, 0.10)" } : undefined}
+                      >
                         <td><code>{e.rfidTag}</code></td>
                         <td>{e.name} ({e.loginName})</td>
+                        <td>
+                          <span
+                            className="badge"
+                            style={{ background: isRfidActive ? "var(--approved)" : "var(--rejected)" }}
+                          >
+                            {isRfidActive ? "Aktiv" : "Deaktiviert"}
+                          </span>
+                        </td>
                         <td>
                           {!isEditing && (
                             <button
@@ -1336,7 +1350,7 @@ export function AdminHome() {
                   })}
                   {employees.filter((e) => (e.rfidTag || "").trim().length > 0).length === 0 && (
                     <tr>
-                      <td colSpan={3}>Keine RFID Tags zugewiesen.</td>
+                      <td colSpan={4}>Keine RFID Tags zugewiesen.</td>
                     </tr>
                   )}
                 </tbody>

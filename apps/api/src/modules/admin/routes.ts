@@ -567,7 +567,7 @@ adminRouter.post("/rfid/assign", async (req: AuthRequest, res) => {
 
   const user = await prisma.user.findUnique({
     where: { id: parsed.data.userId },
-    select: { id: true, name: true, loginName: true, rfidTag: true }
+    select: { id: true, name: true, loginName: true, rfidTag: true, rfidTagActive: true }
   });
   if (!user) {
     res.status(404).json({ message: "Mitarbeiter nicht gefunden." });
@@ -585,8 +585,8 @@ adminRouter.post("/rfid/assign", async (req: AuthRequest, res) => {
 
   const updated = await prisma.user.update({
     where: { id: parsed.data.userId },
-    data: { rfidTag: parsed.data.rfidTag },
-    select: { id: true, name: true, loginName: true, rfidTag: true }
+    data: { rfidTag: parsed.data.rfidTag, rfidTagActive: true },
+    select: { id: true, name: true, loginName: true, rfidTag: true, rfidTagActive: true }
   });
 
   await writeAuditLog({
@@ -619,7 +619,7 @@ adminRouter.post("/rfid/unassign", async (req: AuthRequest, res) => {
 
   const user = await prisma.user.findUnique({
     where: { id: parsed.data.userId },
-    select: { id: true, name: true, loginName: true, rfidTag: true }
+    select: { id: true, name: true, loginName: true, rfidTag: true, rfidTagActive: true }
   });
   if (!user) {
     res.status(404).json({ message: "Mitarbeiter nicht gefunden." });
@@ -632,8 +632,8 @@ adminRouter.post("/rfid/unassign", async (req: AuthRequest, res) => {
 
   const updated = await prisma.user.update({
     where: { id: parsed.data.userId },
-    data: { rfidTag: null },
-    select: { id: true, name: true, loginName: true, rfidTag: true }
+    data: parsed.data.mode === "DELETE" ? { rfidTag: null, rfidTagActive: true } : { rfidTagActive: false },
+    select: { id: true, name: true, loginName: true, rfidTag: true, rfidTagActive: true }
   });
 
   await writeAuditLog({

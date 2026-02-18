@@ -390,6 +390,9 @@ bool sendPunch(const String &uid, const String &type, String &employeeName, Stri
   HTTPClient http;
   WiFiClient client;
   WiFiClientSecure secure;
+  http.setReuse(false);
+  http.useHTTP10(true);
+  http.setTimeout(8000);
   if (cfg.useTls) {
     secure.setInsecure();
     if (!http.begin(secure, cfg.endpoint)) {
@@ -404,6 +407,7 @@ bool sendPunch(const String &uid, const String &type, String &employeeName, Stri
   }
 
   http.addHeader("Content-Type", "application/json");
+  http.addHeader("Connection", "close");
 
   StaticJsonDocument<512> out;
   out["terminalKey"] = cfg.terminalKey;
@@ -478,6 +482,9 @@ bool fetchNextType(const String &uid, String &nextType, String &errText, bool &b
   HTTPClient http;
   WiFiClient client;
   WiFiClientSecure secure;
+  http.setReuse(false);
+  http.useHTTP10(true);
+  http.setTimeout(8000);
   if (cfg.useTls) {
     secure.setInsecure();
     if (!http.begin(secure, endpoint)) {
@@ -491,6 +498,7 @@ bool fetchNextType(const String &uid, String &nextType, String &errText, bool &b
     }
   }
   http.addHeader("Content-Type", "application/json");
+  http.addHeader("Connection", "close");
   StaticJsonDocument<256> out;
   out["terminalKey"] = cfg.terminalKey;
   out["rfidTag"] = uid;
@@ -590,7 +598,9 @@ void loop() {
 
     Serial.printf("Karte erkannt: %s\n", uid.c_str());
 
-    String type = getNextType(uid);
+    // Der Server bestimmt den naechsten Status robust (Kommen/Gehen),
+    // daher senden wir immer denselben Typ und vermeiden einen zweiten HTTP-Call.
+    String type = "CLOCK_IN";
     String employeeName;
     String actionLabel;
     String timeLabel;

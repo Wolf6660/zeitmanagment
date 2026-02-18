@@ -162,11 +162,15 @@ terminalRouter.post("/next-type", async (req, res) => {
     return;
   }
   const user = await prisma.user.findFirst({
-    where: { rfidTag: parsed.data.rfidTag, isActive: true },
-    select: { id: true, name: true, timeTrackingEnabled: true }
+    where: { rfidTag: parsed.data.rfidTag },
+    select: { id: true, name: true, timeTrackingEnabled: true, isActive: true, rfidTagActive: true }
   });
   if (!user) {
     res.status(404).json({ message: "RFID nicht zugeordnet." });
+    return;
+  }
+  if (!user.isActive || !user.rfidTagActive) {
+    res.status(403).json({ message: "RFID ist deaktiviert." });
     return;
   }
   if (!user.timeTrackingEnabled) {
@@ -202,8 +206,8 @@ terminalRouter.post("/punch", async (req, res) => {
   }
 
   const user = await prisma.user.findFirst({
-    where: { rfidTag: parsed.data.rfidTag, isActive: true },
-    select: { id: true, name: true, timeTrackingEnabled: true }
+    where: { rfidTag: parsed.data.rfidTag },
+    select: { id: true, name: true, timeTrackingEnabled: true, isActive: true, rfidTagActive: true }
   });
 
   if (!user) {
@@ -241,6 +245,10 @@ terminalRouter.post("/punch", async (req, res) => {
       }).catch(() => undefined)
     ));
     res.status(404).json({ message: "RFID nicht zugeordnet." });
+    return;
+  }
+  if (!user.isActive || !user.rfidTagActive) {
+    res.status(403).json({ message: "RFID ist deaktiviert." });
     return;
   }
   if (!user.timeTrackingEnabled) {

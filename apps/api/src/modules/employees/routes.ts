@@ -32,6 +32,7 @@ employeesRouter.get("/me", async (req: AuthRequest, res) => {
       webLoginEnabled: true,
       timeTrackingEnabled: true,
       rfidTag: true,
+      rfidTagActive: true,
       isActive: true
     }
   });
@@ -61,7 +62,8 @@ employeesRouter.get("/", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (_req
       webLoginEnabled: true,
       timeTrackingEnabled: true,
       loginName: true,
-      rfidTag: true
+      rfidTag: true,
+      rfidTagActive: true
     }
   });
 
@@ -119,7 +121,8 @@ employeesRouter.post("/", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req
         mailNotificationsEnabled: parsed.data.mailNotificationsEnabled,
         webLoginEnabled: parsed.data.webLoginEnabled,
         timeTrackingEnabled: parsed.data.timeTrackingEnabled,
-        rfidTag: parsed.data.rfidTag
+        rfidTag: parsed.data.rfidTag,
+        rfidTagActive: true
       },
       select: {
         id: true,
@@ -133,7 +136,8 @@ employeesRouter.post("/", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req
         mailNotificationsEnabled: true,
         webLoginEnabled: true,
         timeTrackingEnabled: true,
-        rfidTag: true
+        rfidTag: true,
+        rfidTagActive: true
       }
     });
 
@@ -200,9 +204,13 @@ employeesRouter.patch("/:id", requireRole([Role.SUPERVISOR, Role.ADMIN]), async 
   }
 
   try {
+    const updateData: Record<string, unknown> = { ...parsed.data };
+    if (parsed.data.rfidTag !== undefined) {
+      updateData.rfidTagActive = true;
+    }
     const updated = await prisma.user.update({
       where: { id: userId },
-      data: parsed.data,
+      data: updateData,
       select: {
         id: true,
         name: true,
@@ -216,7 +224,8 @@ employeesRouter.patch("/:id", requireRole([Role.SUPERVISOR, Role.ADMIN]), async 
         mailNotificationsEnabled: true,
         webLoginEnabled: true,
         timeTrackingEnabled: true,
-        rfidTag: true
+        rfidTag: true,
+        rfidTagActive: true
       }
     });
 

@@ -58,6 +58,7 @@ model User {
   carryOverVacationDays     Float    @default(0)
   overtimeBalanceHours      Float    @default(0)
   rfidTag                   String?  @unique
+  rfidTagActive             Boolean  @default(true)
 
   timeEntries               TimeEntry[]         @relation("EmployeeTimeEntries")
   leaveRequests             LeaveRequest[]      @relation("EmployeeLeaveRequests")

@@ -172,6 +172,7 @@ export const api = {
         webLoginEnabled: boolean;
         timeTrackingEnabled: boolean;
         rfidTag?: string | null;
+        rfidTagActive?: boolean;
       }>
     >("/api/employees"),
 
@@ -335,13 +336,13 @@ export const api = {
     }),
 
   assignRfidTag: (payload: { userId: string; rfidTag: string; note?: string }) =>
-    request<{ id: string; name: string; loginName: string; rfidTag: string | null }>("/api/admin/rfid/assign", {
+    request<{ id: string; name: string; loginName: string; rfidTag: string | null; rfidTagActive: boolean }>("/api/admin/rfid/assign", {
       method: "POST",
       body: JSON.stringify(payload)
     }),
 
   unassignRfidTag: (payload: { userId: string; mode?: "DEACTIVATE" | "DELETE" }) =>
-    request<{ id: string; name: string; loginName: string; rfidTag: string | null }>("/api/admin/rfid/unassign", {
+    request<{ id: string; name: string; loginName: string; rfidTag: string | null; rfidTagActive: boolean }>("/api/admin/rfid/unassign", {
       method: "POST",
       body: JSON.stringify(payload)
     }),
