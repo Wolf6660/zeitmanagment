@@ -420,7 +420,7 @@ export const api = {
     request<{ ok: boolean }>("/api/time/sick-leave/delete-day", { method: "POST", body: JSON.stringify(payload) }),
 
   pendingSpecialWork: () =>
-    request<Array<{ id: string; userId: string; date: string; createdAt: string; eventType?: string; status: "SUBMITTED" | "APPROVED" | "REJECTED"; note?: string; user: { id: string; name: string; loginName: string } }>>(
+    request<Array<{ id: string; userId: string; date: string; createdAt: string; eventType?: string; clockInTimes?: string[]; clockOutTimes?: string[]; workedHours?: number; status: "SUBMITTED" | "APPROVED" | "REJECTED"; note?: string; user: { id: string; name: string; loginName: string } }>>(
       "/api/time/special-work/pending"
     ),
 

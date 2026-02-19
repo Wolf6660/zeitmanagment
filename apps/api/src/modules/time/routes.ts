@@ -863,6 +863,11 @@ timeRouter.get("/month/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Ro
   const workingDays = parseWorkingDaySet(config?.defaultWeeklyWorkingDays);
   const holidaySet = new Set(holidays.map((h) => dayKey(h.date)));
   const approvalByDay = new Map(approvals.map((a) => [dayKey(a.date), a.status]));
+  const schoolDaySet = new Set(
+    entries
+      .filter((e) => isSchoolEntry({ reasonText: e.reasonText, correctionComment: e.correctionComment }))
+      .map((e) => dayKey(e.occurredAt))
+  );
   const creditByDay = new Map<string, number>();
   for (const c of credits) {
     const key = dayKey(c.date);
@@ -896,7 +901,8 @@ timeRouter.get("/month/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Ro
     const netMinutes = Math.max(grossMin - (autoBreakApplies ? breakMinutes : 0) + dayCredit, 0);
     const approvalStatus = approvalByDay.get(key) ?? null;
     const requiresApproval = isHoliday || weekend || ((config?.requireApprovalForCrossMidnight ?? true) && grossByDay.crossMidnightStartDays.has(key));
-    const workedRaw = Number((netMinutes / 60).toFixed(2));
+    const schoolDay = dayEntries.some((e) => isSchoolEntry({ reasonText: e.reasonText, correctionComment: e.correctionComment }));
+    const workedRaw = schoolDay ? 8 : Number((netMinutes / 60).toFixed(2));
     const workedEffective = requiresApproval && approvalStatus !== ApprovalStatus.APPROVED ? 0 : workedRaw;
     const worked = user?.timeTrackingEnabled === false
       ? Number(planned.toFixed(2))
@@ -968,6 +974,11 @@ function buildGrossMinutesByStartDay(entries: { type: TimeEntryType; occurredAt:
   return { minutesByDay, crossMidnightStartDays };
 }
 
+function isSchoolEntry(entry: { reasonText?: string | null; correctionComment?: string | null }): boolean {
+  const reason = String(entry.reasonText || entry.correctionComment || "").trim().toLowerCase();
+  return reason === "berufsschule";
+}
+
 timeRouter.get("/summary/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
   if (!req.auth) {
     res.status(401).json({ message: "Nicht authentifiziert." });
@@ -1026,9 +1037,12 @@ timeRouter.get("/summary/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, 
     const isHoliday = holidaySet.has(key);
     const weekend = isWeekend(date);
     const isSick = !weekend && !isHoliday && sickLeaves.some((s) => isDateWithinRange(date, s.startDate, s.endDate));
+    const isSchoolDay = schoolDaySet.has(key);
     const approvalStatus = approvalByDay.get(key) ?? null;
     const requiresApproval = isHoliday || weekend || ((config?.requireApprovalForCrossMidnight ?? true) && grossByDay.crossMidnightStartDays.has(key));
-    if (isSick) {
+    if (isSchoolDay) {
+      workedTotal += 8;
+    } else if (isSick) {
       workedTotal += dailyHours;
     } else if (!requiresApproval || approvalStatus === ApprovalStatus.APPROVED) {
       workedTotal += netMinutes / 60;
@@ -1397,8 +1411,63 @@ timeRouter.get("/special-work/pending", requireRole([Role.SUPERVISOR, Role.ADMIN
     include: { user: { select: { id: true, name: true, loginName: true } } },
     orderBy: [{ date: "asc" }, { createdAt: "asc" }]
   });
+  const minDate = pending[0]?.date;
+  const maxDate = pending[pending.length - 1]?.date;
+  const [entries, credits, cfg] = await Promise.all([
+    minDate && maxDate
+      ? prisma.timeEntry.findMany({
+          where: {
+            userId: { in: Array.from(new Set(pending.map((p) => p.userId))) },
+            occurredAt: {
+              gte: new Date(Date.UTC(minDate.getUTCFullYear(), minDate.getUTCMonth(), minDate.getUTCDate(), 0, 0, 0)),
+              lte: new Date(Date.UTC(maxDate.getUTCFullYear(), maxDate.getUTCMonth(), maxDate.getUTCDate(), 23, 59, 59, 999))
+            }
+          },
+          orderBy: { occurredAt: "asc" }
+        })
+      : Promise.resolve([]),
+    minDate && maxDate
+      ? prisma.breakCredit.findMany({
+          where: {
+            userId: { in: Array.from(new Set(pending.map((p) => p.userId))) },
+            date: {
+              gte: new Date(Date.UTC(minDate.getUTCFullYear(), minDate.getUTCMonth(), minDate.getUTCDate(), 0, 0, 0)),
+              lte: new Date(Date.UTC(maxDate.getUTCFullYear(), maxDate.getUTCMonth(), maxDate.getUTCDate(), 23, 59, 59, 999))
+            }
+          }
+        })
+      : Promise.resolve([]),
+    prisma.systemConfig.findUnique({ where: { id: 1 }, select: { autoBreakMinutes: true, autoBreakAfterHours: true } })
+  ]);
+  const breakMinutes = cfg?.autoBreakMinutes ?? 30;
+  const breakAfterHours = cfg?.autoBreakAfterHours ?? 6;
+  const entriesByUserDay = new Map<string, typeof entries>();
+  for (const e of entries) {
+    const key = `${e.userId}:${dayKey(e.occurredAt)}`;
+    const list = entriesByUserDay.get(key) ?? [];
+    list.push(e);
+    entriesByUserDay.set(key, list);
+  }
+  const creditsByUserDay = new Map<string, number>();
+  for (const c of credits) {
+    const key = `${c.userId}:${dayKey(c.date)}`;
+    creditsByUserDay.set(key, (creditsByUserDay.get(key) ?? 0) + c.minutes);
+  }
   res.json(
     pending.map((p) => ({
+      ...((): { clockInTimes: string[]; clockOutTimes: string[]; workedHours: number } => {
+        const key = `${p.userId}:${dayKey(p.date)}`;
+        const dayEntries = (entriesByUserDay.get(key) ?? []).sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
+        const grossMinutes = calculateWorkedMinutes(dayEntries.map((e) => ({ type: e.type, occurredAt: e.occurredAt })));
+        const autoBreakApplies = grossMinutes >= breakAfterHours * 60;
+        const credit = creditsByUserDay.get(key) ?? 0;
+        const netMinutes = Math.max(grossMinutes - (autoBreakApplies ? breakMinutes : 0) + credit, 0);
+        return {
+          clockInTimes: dayEntries.filter((e) => e.type === TimeEntryType.CLOCK_IN).map((e) => e.occurredAt.toISOString().slice(11, 16)),
+          clockOutTimes: dayEntries.filter((e) => e.type === TimeEntryType.CLOCK_OUT).map((e) => e.occurredAt.toISOString().slice(11, 16)),
+          workedHours: Number((netMinutes / 60).toFixed(2))
+        };
+      })(),
       ...p,
       date: p.date.toISOString().slice(0, 10),
       createdAt: p.createdAt.toISOString(),
@@ -1470,10 +1539,10 @@ timeRouter.get("/supervisor-overview", requireRole([Role.SUPERVISOR, Role.ADMIN]
   const autoBreakMinutes = config?.autoBreakMinutes ?? 30;
   const autoBreakAfterHours = config?.autoBreakAfterHours ?? 6;
 
-  const entriesByUser = new Map<string, { type: TimeEntryType; occurredAt: Date }[]>();
+  const entriesByUser = new Map<string, { type: TimeEntryType; occurredAt: Date; reasonText?: string | null; correctionComment?: string | null }[]>();
   for (const entry of entries) {
     const list = entriesByUser.get(entry.userId) ?? [];
-    list.push({ type: entry.type, occurredAt: entry.occurredAt });
+    list.push({ type: entry.type, occurredAt: entry.occurredAt, reasonText: entry.reasonText, correctionComment: entry.correctionComment });
     entriesByUser.set(entry.userId, list);
   }
 
@@ -1509,7 +1578,13 @@ timeRouter.get("/supervisor-overview", requireRole([Role.SUPERVISOR, Role.ADMIN]
 
   const rows = users.map((u) => {
     const dailyHours = u.dailyWorkHours ?? config?.defaultDailyHours ?? 8;
-    const grossByDay = buildGrossMinutesByStartDay(entriesByUser.get(u.id) ?? []);
+    const userEntries = entriesByUser.get(u.id) ?? [];
+    const grossByDay = buildGrossMinutesByStartDay(userEntries);
+    const schoolDaySet = new Set(
+      userEntries
+        .filter((e) => isSchoolEntry({ reasonText: e.reasonText, correctionComment: e.correctionComment }))
+        .map((e) => dayKey(e.occurredAt))
+    );
     let requiredCurrentMonthHours = 0;
     let workedCurrentMonthHours = 0;
 
@@ -1530,7 +1605,9 @@ timeRouter.get("/supervisor-overview", requireRole([Role.SUPERVISOR, Role.ADMIN]
       const approvalStatus = approvalByUserDay.get(`${u.id}:${k}`) ?? null;
       const sickForDay = (sickByUser.get(u.id) ?? []).some((s) => isDateWithinRange(d, s.startDate, s.endDate));
       const sickHoursForDay = planned > 0 && sickForDay ? planned : 0;
-      if (sickHoursForDay > 0) {
+      if (schoolDaySet.has(k)) {
+        workedCurrentMonthHours += 8;
+      } else if (sickHoursForDay > 0) {
         workedCurrentMonthHours += sickHoursForDay;
       } else if (!requiresApproval || approvalStatus === ApprovalStatus.APPROVED) {
         workedCurrentMonthHours += netMinutes / 60;

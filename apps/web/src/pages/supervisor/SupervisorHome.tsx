@@ -18,7 +18,7 @@ export function SupervisorHome() {
   const [editTo, setEditTo] = useState<Record<string, string>>({});
   const [editKind, setEditKind] = useState<Record<string, "VACATION" | "OVERTIME">>({});
   const [msg, setMsg] = useState("");
-  const [specialPending, setSpecialPending] = useState<Array<{ id: string; userId: string; date: string; createdAt: string; eventType?: string; status: "SUBMITTED" | "APPROVED" | "REJECTED"; note?: string; user: { id: string; name: string; loginName: string } }>>([]);
+  const [specialPending, setSpecialPending] = useState<Array<{ id: string; userId: string; date: string; createdAt: string; eventType?: string; clockInTimes?: string[]; clockOutTimes?: string[]; workedHours?: number; status: "SUBMITTED" | "APPROVED" | "REJECTED"; note?: string; user: { id: string; name: string; loginName: string } }>>([]);
   const [specialNotes, setSpecialNotes] = useState<Record<string, string>>({});
   const [reasonText, setReasonText] = useState("");
   const [todayEntries, setTodayEntries] = useState<Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; occurredAt: string; source: string; reasonText?: string }>>([]);
@@ -224,9 +224,9 @@ export function SupervisorHome() {
               <div><strong>Zeitraum:</strong> {p.startDate.slice(0, 10)} bis {p.endDate.slice(0, 10)}</div>
               <div><strong>Eingang:</strong> {new Date(p.requestedAt).toLocaleString("de-DE")}</div>
               <div>{p.note || "-"}</div>
-              <div>Verfuegbarer Urlaub: {p.availableVacationDays.toFixed(2)} Tage</div>
-              <div>Antragstage (Arbeitstage): {p.requestedWorkingDays.toFixed(2)} Tage</div>
-              <div>Verbleibend nach Antrag: {p.remainingVacationAfterRequest.toFixed(2)} Tage</div>
+              <div>Vorhandener Urlaub: {p.availableVacationDays.toFixed(2)} Tage</div>
+              <div>Genommene Urlaubstage (Antrag): {p.requestedWorkingDays.toFixed(2)} Tage</div>
+              <div>Verbleibender Urlaub nach Antrag: {p.remainingVacationAfterRequest.toFixed(2)} Tage</div>
               <div>Verfuegbare Ueberstunden (Monat): {p.availableOvertimeHours.toFixed(2)} h</div>
 
               <div className="card" style={{ marginTop: 10, padding: 10 }}>
@@ -285,6 +285,9 @@ export function SupervisorHome() {
               <div>Datum: {p.date}</div>
               <div><strong>Ereignis:</strong> {p.eventType || "Arbeit Feiertag/Wochenende"}</div>
               <div><strong>Eingang:</strong> {new Date(p.createdAt).toLocaleString("de-DE")}</div>
+              <div><strong>Kommen:</strong> {(p.clockInTimes || []).join(", ") || "-"}</div>
+              <div><strong>Gehen:</strong> {(p.clockOutTimes || []).join(", ") || "-"}</div>
+              <div><strong>Gesamtstunden:</strong> {(p.workedHours ?? 0).toFixed(2)} h</div>
               <div>Notiz Mitarbeiter: {p.note || "-"}</div>
               <textarea
                 style={{ marginTop: 6 }}
