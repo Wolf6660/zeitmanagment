@@ -3,7 +3,7 @@ import { api } from "../../api/client";
 
 export function MonthEditorPage() {
   const now = new Date();
-  const [employees, setEmployees] = useState<Array<{ id: string; name: string }>>([]);
+  const [employees, setEmployees] = useState<Array<{ id: string; name: string; role?: string }>>([]);
   const [monthUserId, setMonthUserId] = useState("");
   const [monthYear, setMonthYear] = useState(now.getFullYear());
   const [monthNum, setMonthNum] = useState(now.getMonth() + 1);
@@ -34,6 +34,9 @@ export function MonthEditorPage() {
   useEffect(() => {
     loadMonth().catch((e) => setMsg((e as Error).message));
   }, [monthUserId, monthYear, monthNum]);
+
+  const selectedEmployeeRole = employees.find((e) => e.id === monthUserId)?.role;
+  const selectedIsAzubi = selectedEmployeeRole === "AZUBI";
 
   return (
     <div className="card">
@@ -174,6 +177,47 @@ export function MonthEditorPage() {
                           </div>
                           <textarea style={{ marginTop: 8 }} placeholder="Notiz (Pflichtfeld)" value={overrideNote} onChange={(e) => setOverrideNote(e.target.value)} />
                           <div className="row" style={{ marginTop: 8 }}>
+                            {selectedIsAzubi && (
+                              <button
+                                className="secondary"
+                                type="button"
+                                disabled={saving}
+                                onClick={async () => {
+                                  try {
+                                    setSaving(true);
+                                    await api.dayOverrideBySupervisor({
+                                      userId: monthUserId,
+                                      date: d.date,
+                                      note: "Berufsschule",
+                                      events: [
+                                        { type: "CLOCK_IN", time: "08:00" },
+                                        { type: "CLOCK_OUT", time: "16:30" }
+                                      ]
+                                    });
+                                    const mv = await loadMonth();
+                                    const updatedDay = mv?.days?.find((x: any) => x.date === d.date);
+                                    if (updatedDay) {
+                                      setOverrideEvents(
+                                        (updatedDay.entries || []).map((x: any, idx: number) => ({
+                                          id: x.id || `${updatedDay.date}-${idx}`,
+                                          type: x.type,
+                                          time: x.time
+                                        }))
+                                      );
+                                    }
+                                    setOverrideNote("Berufsschule");
+                                    setMsg("Berufsschule (8h) eingetragen.");
+                                    setSelectedDay(d.date);
+                                  } catch (e) {
+                                    setMsg((e as Error).message);
+                                  } finally {
+                                    setSaving(false);
+                                  }
+                                }}
+                              >
+                                Berufsschule (8h)
+                              </button>
+                            )}
                             <button type="button" disabled={saving} onClick={async () => {
                               try {
                                 setSaving(true);

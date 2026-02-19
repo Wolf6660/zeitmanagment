@@ -11,14 +11,14 @@ export function SupervisorHome() {
   const [overview, setOverview] = useState<Record<string, { istHours: number; sollHours: number; overtimeHours: number }>>({});
   const [monthPlannedText, setMonthPlannedText] = useState("");
   const [vacationAvailable, setVacationAvailable] = useState<Record<string, number>>({});
-  const [pending, setPending] = useState<Array<{ id: string; kind: string; startDate: string; endDate: string; note?: string; userId: string; availableVacationDays: number; requestedWorkingDays: number; remainingVacationAfterRequest: number; availableOvertimeHours: number; user: { name: string } }>>([]);
+  const [pending, setPending] = useState<Array<{ id: string; kind: string; startDate: string; endDate: string; note?: string; requestedAt: string; userId: string; availableVacationDays: number; requestedWorkingDays: number; remainingVacationAfterRequest: number; availableOvertimeHours: number; user: { name: string } }>>([]);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [editNotes, setEditNotes] = useState<Record<string, string>>({});
   const [editFrom, setEditFrom] = useState<Record<string, string>>({});
   const [editTo, setEditTo] = useState<Record<string, string>>({});
   const [editKind, setEditKind] = useState<Record<string, "VACATION" | "OVERTIME">>({});
   const [msg, setMsg] = useState("");
-  const [specialPending, setSpecialPending] = useState<Array<{ id: string; userId: string; date: string; status: "SUBMITTED" | "APPROVED" | "REJECTED"; note?: string; user: { id: string; name: string; loginName: string } }>>([]);
+  const [specialPending, setSpecialPending] = useState<Array<{ id: string; userId: string; date: string; createdAt: string; eventType?: string; status: "SUBMITTED" | "APPROVED" | "REJECTED"; note?: string; user: { id: string; name: string; loginName: string } }>>([]);
   const [specialNotes, setSpecialNotes] = useState<Record<string, string>>({});
   const [reasonText, setReasonText] = useState("");
   const [todayEntries, setTodayEntries] = useState<Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; occurredAt: string; source: string; reasonText?: string }>>([]);
@@ -220,7 +220,9 @@ export function SupervisorHome() {
           {pending.map((p) => (
             <div key={p.id} className="card" style={{ padding: 12, borderColor: "var(--warning)", background: "rgba(245,158,11,0.08)" }}>
               <div><strong>{p.user.name}</strong></div>
-              <div>{kindLabel(p.kind)}: {p.startDate.slice(0, 10)} bis {p.endDate.slice(0, 10)}</div>
+              <div><strong>Ereignis:</strong> {kindLabel(p.kind)}</div>
+              <div><strong>Zeitraum:</strong> {p.startDate.slice(0, 10)} bis {p.endDate.slice(0, 10)}</div>
+              <div><strong>Eingang:</strong> {new Date(p.requestedAt).toLocaleString("de-DE")}</div>
               <div>{p.note || "-"}</div>
               <div>Verfuegbarer Urlaub: {p.availableVacationDays.toFixed(2)} Tage</div>
               <div>Antragstage (Arbeitstage): {p.requestedWorkingDays.toFixed(2)} Tage</div>
@@ -281,7 +283,8 @@ export function SupervisorHome() {
             <div key={p.id} className="card" style={{ padding: 10, borderColor: "var(--holiday)", background: "rgba(249,115,22,0.10)" }}>
               <div><strong>{p.user.name}</strong> ({p.user.loginName})</div>
               <div>Datum: {p.date}</div>
-              <div><strong>Typ:</strong> Arbeit Feiertag/Wochenende</div>
+              <div><strong>Ereignis:</strong> {p.eventType || "Arbeit Feiertag/Wochenende"}</div>
+              <div><strong>Eingang:</strong> {new Date(p.createdAt).toLocaleString("de-DE")}</div>
               <div>Notiz Mitarbeiter: {p.note || "-"}</div>
               <textarea
                 style={{ marginTop: 6 }}

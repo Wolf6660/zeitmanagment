@@ -850,18 +850,26 @@ timeRouter.get("/month/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Ro
   }
   const monthStart = new Date(Date.UTC(year, month - 1, 1));
   const monthEnd = new Date(Date.UTC(year, month, 0, 23, 59, 59));
-  const [config, user, holidays, entries, approvals, sickLeaves] = await Promise.all([
+  const [config, user, holidays, entries, approvals, sickLeaves, credits] = await Promise.all([
     prisma.systemConfig.findUnique({ where: { id: 1 } }),
     prisma.user.findUnique({ where: { id: targetUserId }, select: { dailyWorkHours: true, timeTrackingEnabled: true } }),
     prisma.holiday.findMany({ where: { date: { gte: monthStart, lte: monthEnd } } }),
     prisma.timeEntry.findMany({ where: { userId: targetUserId, occurredAt: { gte: monthStart, lte: monthEnd } }, orderBy: { occurredAt: "asc" } }),
     prisma.specialWorkApproval.findMany({ where: { userId: targetUserId, date: { gte: monthStart, lte: monthEnd } } }),
-    prisma.sickLeave.findMany({ where: { userId: targetUserId, startDate: { lte: monthEnd }, endDate: { gte: monthStart } } })
+    prisma.sickLeave.findMany({ where: { userId: targetUserId, startDate: { lte: monthEnd }, endDate: { gte: monthStart } } }),
+    prisma.breakCredit.findMany({ where: { userId: targetUserId, date: { gte: monthStart, lte: monthEnd } } })
   ]);
   const dailyHours = user?.dailyWorkHours ?? config?.defaultDailyHours ?? 8;
   const workingDays = parseWorkingDaySet(config?.defaultWeeklyWorkingDays);
   const holidaySet = new Set(holidays.map((h) => dayKey(h.date)));
   const approvalByDay = new Map(approvals.map((a) => [dayKey(a.date), a.status]));
+  const creditByDay = new Map<string, number>();
+  for (const c of credits) {
+    const key = dayKey(c.date);
+    creditByDay.set(key, (creditByDay.get(key) ?? 0) + c.minutes);
+  }
+  const breakMinutes = config?.autoBreakMinutes ?? 30;
+  const breakAfterHours = config?.autoBreakAfterHours ?? 6;
   const grossByDay = buildGrossMinutesByStartDay(entries.map((e) => ({ type: e.type, occurredAt: e.occurredAt })));
   const byDay = new Map<string, typeof entries>();
   for (const e of entries) {
@@ -883,9 +891,12 @@ timeRouter.get("/month/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Ro
     const isSick = planned > 0 && sickLeaves.some((s) => isDateWithinRange(date, s.startDate, s.endDate));
     const sickHours = isSick ? planned : 0;
     const grossMin = grossByDay.minutesByDay.get(key) ?? 0;
+    const autoBreakApplies = grossMin >= breakAfterHours * 60;
+    const dayCredit = creditByDay.get(key) ?? 0;
+    const netMinutes = Math.max(grossMin - (autoBreakApplies ? breakMinutes : 0) + dayCredit, 0);
     const approvalStatus = approvalByDay.get(key) ?? null;
     const requiresApproval = isHoliday || weekend || ((config?.requireApprovalForCrossMidnight ?? true) && grossByDay.crossMidnightStartDays.has(key));
-    const workedRaw = Number((grossMin / 60).toFixed(2));
+    const workedRaw = Number((netMinutes / 60).toFixed(2));
     const workedEffective = requiresApproval && approvalStatus !== ApprovalStatus.APPROVED ? 0 : workedRaw;
     const worked = user?.timeTrackingEnabled === false
       ? Number(planned.toFixed(2))
@@ -1386,7 +1397,17 @@ timeRouter.get("/special-work/pending", requireRole([Role.SUPERVISOR, Role.ADMIN
     include: { user: { select: { id: true, name: true, loginName: true } } },
     orderBy: [{ date: "asc" }, { createdAt: "asc" }]
   });
-  res.json(pending.map((p) => ({ ...p, date: p.date.toISOString().slice(0, 10) })));
+  res.json(
+    pending.map((p) => ({
+      ...p,
+      date: p.date.toISOString().slice(0, 10),
+      createdAt: p.createdAt.toISOString(),
+      eventType:
+        (p.note || "").toLowerCase().includes("0:00")
+          ? "Arbeit ueber 0:00"
+          : "Arbeit Feiertag/Wochenende"
+    }))
+  );
 });
 
 const specialDecisionSchema = z.object({
