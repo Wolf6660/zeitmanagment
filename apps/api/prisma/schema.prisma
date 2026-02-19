@@ -325,6 +325,12 @@ model SystemConfig {
   accountantMailOnSick              Boolean  @default(false)
   accountantMailOnVacation          Boolean  @default(false)
   accountantEmail                   String?
+  autoBackupEnabled                 Boolean  @default(false)
+  autoBackupDays                    String   @default("MON")
+  autoBackupTime                    String   @default("02:00")
+  autoBackupMode                    String   @default("EMPLOYEES_TIMES_ONLY")
+  autoBackupDirectory               String   @default("/app/backups")
+  autoBackupLastRunAt               DateTime?
   webPort                           Int      @default(3000)
   apiPort                           Int      @default(4000)
   terminalPort                      Int      @default(4010)

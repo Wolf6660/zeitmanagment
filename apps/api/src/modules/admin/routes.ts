@@ -10,6 +10,7 @@ import { resolveActorLoginName, writeAuditLog } from "../../utils/audit.js";
 import { sendMailIfEnabled, sendMailStrict } from "../../utils/mail.js";
 import { ensureBootstrapData } from "../../db/bootstrap.js";
 import { env } from "../../config/env.js";
+import { buildBackupPayload, type BackupMode } from "../../utils/backup.js";
 
 export const adminRouter = Router();
 
@@ -69,6 +70,11 @@ const configSchema = z.object({
   accountantMailOnSick: z.boolean().optional(),
   accountantMailOnVacation: z.boolean().optional(),
   accountantEmail: z.preprocess((v) => (v === "" ? null : v), z.string().email().nullable()).optional(),
+  autoBackupEnabled: z.boolean().optional(),
+  autoBackupDays: z.string().optional(),
+  autoBackupTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/).optional(),
+  autoBackupMode: z.enum(["FULL", "SETTINGS_ONLY", "EMPLOYEES_TIMES_ONLY"]).optional(),
+  autoBackupDirectory: z.string().min(1).optional(),
   webPort: z.number().int().min(1).max(65535).optional(),
   apiPort: z.number().int().min(1).max(65535).optional(),
   terminalPort: z.number().int().min(1).max(65535).optional()
@@ -282,77 +288,9 @@ adminRouter.post("/system-reset", async (req: AuthRequest, res) => {
 
 adminRouter.get("/backup/export", async (req: AuthRequest, res) => {
   const modeRaw = String(req.query.mode || "FULL").toUpperCase();
-  const mode = modeRaw === "SETTINGS_ONLY" || modeRaw === "EMPLOYEES_TIMES_ONLY" ? modeRaw : "FULL";
-  const [
-    config,
-    users,
-    holidays,
-    dropdownOptions,
-    terminals,
-    timeEntries,
-    leaveRequests,
-    sickLeaves,
-    breakCredits,
-    breakCreditRequests,
-    specialWorkApprovals,
-    overtimeAdjustments
-  ] = await Promise.all([
-    prisma.systemConfig.findMany(),
-    prisma.user.findMany(),
-    prisma.holiday.findMany(),
-    prisma.dropdownOption.findMany(),
-    prisma.rfidTerminal.findMany(),
-    prisma.timeEntry.findMany(),
-    prisma.leaveRequest.findMany(),
-    prisma.sickLeave.findMany(),
-    prisma.breakCredit.findMany(),
-    prisma.breakCreditRequest.findMany(),
-    prisma.specialWorkApproval.findMany(),
-    prisma.overtimeAdjustment.findMany()
-  ]);
-
-  const fullData = {
-    config,
-    users,
-    holidays,
-    dropdownOptions,
-    terminals,
-    timeEntries,
-    leaveRequests,
-    sickLeaves,
-    breakCredits,
-    breakCreditRequests,
-    specialWorkApprovals,
-    overtimeAdjustments
-  };
-
-  const settingsOnlyData = {
-    config,
-    holidays,
-    dropdownOptions,
-    terminals
-  };
-
-  const employeesTimesOnlyData = {
-    users,
-    timeEntries,
-    leaveRequests,
-    sickLeaves,
-    breakCredits,
-    breakCreditRequests,
-    specialWorkApprovals,
-    overtimeAdjustments
-  };
-
-  res.json({
-    meta: {
-      exportedAt: new Date().toISOString(),
-      version: "1",
-      system: "Zeitmanagment",
-      mode
-    },
-    data: mode === "SETTINGS_ONLY" ? settingsOnlyData : mode === "EMPLOYEES_TIMES_ONLY" ? employeesTimesOnlyData : fullData
-  });
+  const mode: BackupMode = modeRaw === "SETTINGS_ONLY" || modeRaw === "EMPLOYEES_TIMES_ONLY" ? modeRaw : "FULL";
+  const payload = await buildBackupPayload(mode);
+  res.json(payload);
 });
 
 const backupImportSchema = z.object({

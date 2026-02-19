@@ -44,6 +44,8 @@ services:
     ports:
       - "${API_PORT}:4000"
       - "${TERMINAL_PORT}:4010"
+    volumes:
+      - ./backups:/app/backups
 
   web:
     build:

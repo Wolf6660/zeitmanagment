@@ -2,9 +2,11 @@ import { createApp } from "./app.js";
 import { env } from "./config/env.js";
 import { ensureBootstrapData } from "./db/bootstrap.js";
 import { prisma } from "./db/prisma.js";
+import { startAutoBackupScheduler } from "./jobs/autoBackup.js";
 
 async function bootstrap() {
   await ensureBootstrapData();
+  startAutoBackupScheduler();
   const app = createApp();
 
   app.listen(env.API_PORT, () => {

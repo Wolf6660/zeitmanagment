@@ -321,6 +321,11 @@ export const api = {
       accountantMailOnSick?: boolean;
       accountantMailOnVacation?: boolean;
       accountantEmail?: string | null;
+      autoBackupEnabled?: boolean;
+      autoBackupDays?: string;
+      autoBackupTime?: string;
+      autoBackupMode?: "FULL" | "SETTINGS_ONLY" | "EMPLOYEES_TIMES_ONLY";
+      autoBackupDirectory?: string;
       mailOnEmployeeLeaveDecision?: boolean;
       mailOnEmployeeOvertimeDecision?: boolean;
       mailOnEmployeeLongShift?: boolean;

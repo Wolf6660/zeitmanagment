@@ -45,6 +45,11 @@ type AdminConfig = {
   accountantMailOnSick?: boolean;
   accountantMailOnVacation?: boolean;
   accountantEmail?: string | null;
+  autoBackupEnabled?: boolean;
+  autoBackupDays?: string;
+  autoBackupTime?: string;
+  autoBackupMode?: "FULL" | "SETTINGS_ONLY" | "EMPLOYEES_TIMES_ONLY";
+  autoBackupDirectory?: string;
   mailOnEmployeeLeaveDecision?: boolean;
   mailOnEmployeeOvertimeDecision?: boolean;
   mailOnEmployeeLongShift?: boolean;
@@ -210,6 +215,14 @@ export function AdminHome() {
   const [resetConfirmName, setResetConfirmName] = useState("");
   const [backupImportFile, setBackupImportFile] = useState<File | null>(null);
   const [backupImportConfirmName, setBackupImportConfirmName] = useState("");
+  const [backupImportMsg, setBackupImportMsg] = useState("");
+  const [backupImportOk, setBackupImportOk] = useState(false);
+  const [resetTimesMsg, setResetTimesMsg] = useState("");
+  const [resetTimesOk, setResetTimesOk] = useState(false);
+  const [resetEmployeesMsg, setResetEmployeesMsg] = useState("");
+  const [resetEmployeesOk, setResetEmployeesOk] = useState(false);
+  const [resetFactoryMsg, setResetFactoryMsg] = useState("");
+  const [resetFactoryOk, setResetFactoryOk] = useState(false);
   const session = getSession();
 
   const [otUserId, setOtUserId] = useState("");
@@ -545,6 +558,66 @@ export function AdminHome() {
                 Nur Mitarbeiter und Zeiten sichern
               </button>
             </div>
+            <div className="grid admin-uniform" style={{ marginTop: 12 }}>
+              <label>
+                Automatisches Backup
+                <select value={String(config.autoBackupEnabled ?? false)} onChange={(e) => setConfig({ ...config, autoBackupEnabled: e.target.value === "true" })}>
+                  <option value="true">Aktiv</option>
+                  <option value="false">Deaktiviert</option>
+                </select>
+              </label>
+              <label>
+                Backup-Typ
+                <select
+                  value={config.autoBackupMode ?? "EMPLOYEES_TIMES_ONLY"}
+                  onChange={(e) => setConfig({ ...config, autoBackupMode: e.target.value as "FULL" | "SETTINGS_ONLY" | "EMPLOYEES_TIMES_ONLY" })}
+                >
+                  <option value="FULL">Komplett</option>
+                  <option value="EMPLOYEES_TIMES_ONLY">Mitarbeiter + Zeiten</option>
+                  <option value="SETTINGS_ONLY">Nur Einstellungen</option>
+                </select>
+              </label>
+              <label>
+                Uhrzeit
+                <input
+                  type="time"
+                  step={60}
+                  value={config.autoBackupTime ?? "02:00"}
+                  onChange={(e) => setConfig({ ...config, autoBackupTime: e.target.value.slice(0, 5) })}
+                />
+              </label>
+              <label>
+                Verzeichnis (lokal im Container/NAS-Mount)
+                <input
+                  value={config.autoBackupDirectory ?? "/app/backups"}
+                  onChange={(e) => setConfig({ ...config, autoBackupDirectory: e.target.value })}
+                />
+              </label>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label>
+                  Wochentage
+                  <div className="row">
+                    {["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"].map((d) => {
+                      const set = new Set((config.autoBackupDays || "MON").split(",").filter(Boolean));
+                      const active = set.has(d);
+                      return (
+                        <button
+                          type="button"
+                          key={d}
+                          className={active ? "" : "secondary"}
+                          onClick={() => {
+                            if (active) set.delete(d); else set.add(d);
+                            setConfig({ ...config, autoBackupDays: Array.from(set).join(",") || "MON" });
+                          }}
+                        >
+                          {d}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </label>
+              </div>
+            </div>
             <div className="grid" style={{ marginTop: 12 }}>
               <label>
                 Backup-Datei einspielen (JSON)
@@ -559,8 +632,9 @@ export function AdminHome() {
                   className="secondary"
                   onClick={async () => {
                     try {
+                      setBackupImportOk(false);
                       if (!backupImportFile) {
-                        setMsg("Bitte eine Backup-Datei auswaehlen.");
+                        setBackupImportMsg("Bitte eine Backup-Datei auswaehlen.");
                         return;
                       }
                       const raw = await backupImportFile.text();
@@ -569,16 +643,19 @@ export function AdminHome() {
                         companyNameConfirmation: backupImportConfirmName,
                         backup: parsed
                       });
-                      setMsg("Backup erfolgreich eingespielt.");
+                      setBackupImportOk(true);
+                      setBackupImportMsg("Backup erfolgreich eingespielt.");
                       await loadData();
                     } catch (e) {
-                      setMsg((e as Error).message);
+                      setBackupImportOk(false);
+                      setBackupImportMsg((e as Error).message);
                     }
                   }}
                 >
                   Backup einspielen
                 </button>
               </div>
+              {backupImportMsg && <div className={backupImportOk ? "success" : "error"}>{backupImportMsg}</div>}
             </div>
           </div>
 
@@ -591,70 +668,91 @@ export function AdminHome() {
               Firmenname zur Bestaetigung
               <input value={resetConfirmName} onChange={(e) => setResetConfirmName(e.target.value)} />
             </label>
-            <div className="row" style={{ marginTop: 12 }}>
-              <button
-                className="warn"
-                onClick={async () => {
-                  try {
-                    const ok = window.confirm("Wirklich NUR Zeiten/Antraege loeschen?");
-                    if (!ok) return;
-                    const result = await api.adminSystemReset({
-                      mode: "TIMES_ONLY",
-                      companyNameConfirmation: resetConfirmName
-                    });
-                    setMsg(`Zeiten geloescht (${Object.values(result.deleted || {}).reduce((a, b) => a + b, 0)} Eintraege).`);
-                    loadData().catch(() => {
-                      setMsg("Zeiten geloescht. Aktualisierung der Ansicht fehlgeschlagen, bitte Seite neu laden.");
-                    });
-                  } catch (e) {
-                    setMsg((e as Error).message);
-                  }
-                }}
-              >
-                Zeiten loeschen
-              </button>
-              <button
-                className="warn"
-                onClick={async () => {
-                  try {
-                    const ok = window.confirm("Wirklich Mitarbeiter + Zeiten loeschen (Einstellungen bleiben)?");
-                    if (!ok) return;
-                    const result = await api.adminSystemReset({
-                      mode: "EMPLOYEES_AND_TIMES_KEEP_SETTINGS",
-                      companyNameConfirmation: resetConfirmName
-                    });
-                    setMsg(`Mitarbeiter + Zeiten geloescht (${Object.values(result.deleted || {}).reduce((a, b) => a + b, 0)} Eintraege).`);
-                    loadData().catch(() => {
-                      setMsg("Mitarbeiter + Zeiten geloescht. Aktualisierung der Ansicht fehlgeschlagen, bitte Seite neu laden.");
-                    });
-                  } catch (e) {
-                    setMsg((e as Error).message);
-                  }
-                }}
-              >
-                Mitarbeiter + Zeiten loeschen
-              </button>
-              <button
-                className="warn"
-                onClick={async () => {
-                  try {
-                    const ok = window.confirm("Wirklich ALLES loeschen und neu initialisieren?");
-                    if (!ok) return;
-                    const result = await api.adminSystemReset({
-                      mode: "FULL",
-                      companyNameConfirmation: resetConfirmName
-                    });
-                    setMsg(`System vollstaendig zurueckgesetzt (${Object.values(result.deleted || {}).reduce((a, b) => a + b, 0)} Eintraege geloescht).`);
-                    loadData().catch(() => {
-                      setMsg("Werkseinstellungen ausgefuehrt. Aktualisierung der Ansicht fehlgeschlagen, bitte Seite neu laden.");
-                    });
-                  } catch (e) {
-                    setMsg((e as Error).message);
-                  }
-                }}
-              >
-                Werkseinstellungen
-              </button>
+            <div className="grid" style={{ marginTop: 12 }}>
+              <div>
+                <button
+                  className="warn"
+                  onClick={async () => {
+                    try {
+                      setResetTimesOk(false);
+                      const ok = window.confirm("Wirklich NUR Zeiten/Antraege loeschen?");
+                      if (!ok) return;
+                      const result = await api.adminSystemReset({
+                        mode: "TIMES_ONLY",
+                        companyNameConfirmation: resetConfirmName
+                      });
+                      setResetTimesOk(true);
+                      setResetTimesMsg(`Zeiten geloescht (${Object.values(result.deleted || {}).reduce((a, b) => a + b, 0)} Eintraege).`);
+                      loadData().catch(() => {
+                        setResetTimesOk(false);
+                        setResetTimesMsg("Zeiten geloescht. Aktualisierung der Ansicht fehlgeschlagen, bitte Seite neu laden.");
+                      });
+                    } catch (e) {
+                      setResetTimesOk(false);
+                      setResetTimesMsg((e as Error).message);
+                    }
+                  }}
+                >
+                  Zeiten loeschen
+                </button>
+                {resetTimesMsg && <div className={resetTimesOk ? "success" : "error"} style={{ marginTop: 6 }}>{resetTimesMsg}</div>}
+              </div>
+              <div>
+                <button
+                  className="warn"
+                  onClick={async () => {
+                    try {
+                      setResetEmployeesOk(false);
+                      const ok = window.confirm("Wirklich Mitarbeiter + Zeiten loeschen (Einstellungen bleiben)?");
+                      if (!ok) return;
+                      const result = await api.adminSystemReset({
+                        mode: "EMPLOYEES_AND_TIMES_KEEP_SETTINGS",
+                        companyNameConfirmation: resetConfirmName
+                      });
+                      setResetEmployeesOk(true);
+                      setResetEmployeesMsg(`Mitarbeiter + Zeiten geloescht (${Object.values(result.deleted || {}).reduce((a, b) => a + b, 0)} Eintraege).`);
+                      loadData().catch(() => {
+                        setResetEmployeesOk(false);
+                        setResetEmployeesMsg("Mitarbeiter + Zeiten geloescht. Aktualisierung der Ansicht fehlgeschlagen, bitte Seite neu laden.");
+                      });
+                    } catch (e) {
+                      setResetEmployeesOk(false);
+                      setResetEmployeesMsg((e as Error).message);
+                    }
+                  }}
+                >
+                  Mitarbeiter + Zeiten loeschen
+                </button>
+                {resetEmployeesMsg && <div className={resetEmployeesOk ? "success" : "error"} style={{ marginTop: 6 }}>{resetEmployeesMsg}</div>}
+              </div>
+              <div>
+                <button
+                  className="warn"
+                  onClick={async () => {
+                    try {
+                      setResetFactoryOk(false);
+                      const ok = window.confirm("Wirklich ALLES loeschen und neu initialisieren?");
+                      if (!ok) return;
+                      const result = await api.adminSystemReset({
+                        mode: "FULL",
+                        companyNameConfirmation: resetConfirmName
+                      });
+                      setResetFactoryOk(true);
+                      setResetFactoryMsg(`System vollstaendig zurueckgesetzt (${Object.values(result.deleted || {}).reduce((a, b) => a + b, 0)} Eintraege geloescht).`);
+                      loadData().catch(() => {
+                        setResetFactoryOk(false);
+                        setResetFactoryMsg("Werkseinstellungen ausgefuehrt. Aktualisierung der Ansicht fehlgeschlagen, bitte Seite neu laden.");
+                      });
+                    } catch (e) {
+                      setResetFactoryOk(false);
+                      setResetFactoryMsg((e as Error).message);
+                    }
+                  }}
+                >
+                  Werkseinstellungen
+                </button>
+                {resetFactoryMsg && <div className={resetFactoryOk ? "success" : "error"} style={{ marginTop: 6 }}>{resetFactoryMsg}</div>}
+              </div>
             </div>
             <div className="grid" style={{ marginTop: 12 }}>
               <div className="card" style={{ padding: 10 }}>
