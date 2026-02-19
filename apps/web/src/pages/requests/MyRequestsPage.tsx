@@ -54,6 +54,10 @@ function statusBg(status: string): string {
 export function MyRequestsPage() {
   const [rows, setRows] = useState<UnifiedMyRow[]>([]);
   const [msg, setMsg] = useState("");
+  const [leaveFormMsg, setLeaveFormMsg] = useState("");
+  const [leaveFormOk, setLeaveFormOk] = useState(false);
+  const [breakFormMsg, setBreakFormMsg] = useState("");
+  const [breakFormOk, setBreakFormOk] = useState(false);
   const [kind, setKind] = useState<"VACATION" | "OVERTIME">("VACATION");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -148,17 +152,21 @@ export function MyRequestsPage() {
           <textarea placeholder="Notiz (Pflichtfeld)" value={note} onChange={(e) => setNote(e.target.value)} />
           <button onClick={async () => {
             try {
-              if (!note.trim()) { setMsg("Notiz ist Pflicht."); return; }
+              setLeaveFormOk(false);
+              if (!note.trim()) { setLeaveFormMsg("Notiz ist Pflicht."); return; }
               await api.createLeave({ kind, startDate, endDate, note: note.trim() });
-              setMsg("Antrag gestellt.");
+              setLeaveFormOk(true);
+              setLeaveFormMsg("Antrag gestellt.");
               setStartDate("");
               setEndDate("");
               setNote("");
               await load();
             } catch (e) {
-              setMsg((e as Error).message);
+              setLeaveFormOk(false);
+              setLeaveFormMsg((e as Error).message);
             }
           }}>Antrag senden</button>
+          {leaveFormMsg && <div className={leaveFormOk ? "success" : "error"}>{leaveFormMsg}</div>}
         </div>
       </div>
 
@@ -172,17 +180,21 @@ export function MyRequestsPage() {
           <textarea placeholder="Notiz (Pflichtfeld)" value={bcReason} onChange={(e) => setBcReason(e.target.value)} />
           <button onClick={async () => {
             try {
-              if (!bcDate) { setMsg("Datum ist Pflicht."); return; }
-              if (!bcReason.trim()) { setMsg("Notiz ist Pflicht."); return; }
-              if (!Number.isFinite(bcMinutes) || bcMinutes < 1 || bcMinutes > 180) { setMsg("Minuten muessen zwischen 1 und 180 liegen."); return; }
+              setBreakFormOk(false);
+              if (!bcDate) { setBreakFormMsg("Datum ist Pflicht."); return; }
+              if (!bcReason.trim()) { setBreakFormMsg("Notiz ist Pflicht."); return; }
+              if (!Number.isFinite(bcMinutes) || bcMinutes < 1 || bcMinutes > 180) { setBreakFormMsg("Minuten muessen zwischen 1 und 180 liegen."); return; }
               await api.createBreakCreditRequest({ date: bcDate, minutes: Math.floor(bcMinutes), reason: bcReason.trim() });
-              setMsg("Pausengutschrift-Antrag gestellt.");
+              setBreakFormOk(true);
+              setBreakFormMsg("Pausengutschrift-Antrag gestellt.");
               setBcReason("");
               await load();
             } catch (e) {
-              setMsg((e as Error).message);
+              setBreakFormOk(false);
+              setBreakFormMsg((e as Error).message);
             }
-          }}>Antrag senden</button>
+          }}>Pausengutschrift beantragen</button>
+          {breakFormMsg && <div className={breakFormOk ? "success" : "error"}>{breakFormMsg}</div>}
         </div>
       </div>
 
