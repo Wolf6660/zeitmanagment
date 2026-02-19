@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { api, type SpecialWorkRequestRow } from "../../api/client";
+import { api, type BreakCreditRequestRow, type SpecialWorkRequestRow } from "../../api/client";
 import { StatusBadge } from "../../components/StatusBadge";
 
 type LeaveRow = {
@@ -18,7 +18,7 @@ type LeaveRow = {
 
 type UnifiedRow = {
   id: string;
-  source: "LEAVE" | "SPECIAL";
+  source: "LEAVE" | "SPECIAL" | "BREAK";
   status: string;
   employeeText: string;
   eventText: string;
@@ -57,8 +57,8 @@ export function RequestsPage() {
   const [msg, setMsg] = useState("");
 
   useEffect(() => {
-    Promise.all([api.allLeaves(), api.allSpecialWork()])
-      .then(([leaveRows, specialRows]) => {
+    Promise.all([api.allLeaves(), api.allSpecialWork(), api.allBreakCreditRequests()])
+      .then(([leaveRows, specialRows, breakCreditRows]) => {
         const mappedLeaves: UnifiedRow[] = (leaveRows as LeaveRow[]).map((r) => ({
           id: r.id,
           source: "LEAVE",
@@ -95,7 +95,25 @@ export function RequestsPage() {
           decidedAtText: r.decidedAt ? new Date(r.decidedAt).toLocaleString("de-DE") : "-"
         }));
 
-        const all = [...mappedLeaves, ...mappedSpecial].sort((a, b) => {
+        const mappedBreakCredits: UnifiedRow[] = (breakCreditRows as BreakCreditRequestRow[]).map((r) => ({
+          id: r.id,
+          source: "BREAK",
+          status: r.status,
+          employeeText: `${r.user.name} (${r.user.loginName})`,
+          eventText: "Pausengutschrift",
+          fromDate: r.date,
+          toDate: "-",
+          requestedAt: r.requestedAt,
+          clockIn: "-",
+          clockOut: "-",
+          workedHoursText: `${r.minutes} min`,
+          requestNote: r.reason,
+          decisionNote: r.decisionNote || "-",
+          decidedByText: r.decidedBy ? `${r.decidedBy.name} (${r.decidedBy.loginName})` : "-",
+          decidedAtText: r.decidedAt ? new Date(r.decidedAt).toLocaleString("de-DE") : "-"
+        }));
+
+        const all = [...mappedLeaves, ...mappedSpecial, ...mappedBreakCredits].sort((a, b) => {
           if (a.status === "SUBMITTED" && b.status !== "SUBMITTED") return -1;
           if (a.status !== "SUBMITTED" && b.status === "SUBMITTED") return 1;
           return new Date(b.fromDate).getTime() - new Date(a.fromDate).getTime();

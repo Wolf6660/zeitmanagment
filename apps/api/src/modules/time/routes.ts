@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { ApprovalStatus, Role, TimeEntrySource, TimeEntryType } from "@prisma/client";
+import { ApprovalStatus, BreakCreditRequestStatus, Role, TimeEntrySource, TimeEntryType } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../../db/prisma.js";
 import { AuthRequest, requireAuth, requireRole } from "../../utils/auth.js";
@@ -315,6 +315,197 @@ timeRouter.post("/break-credit", requireRole([Role.SUPERVISOR, Role.ADMIN]), asy
   });
 
   res.status(201).json(result);
+});
+
+const breakCreditRequestSchema = z.object({
+  date: z.string().min(10),
+  minutes: z.number().int().min(1).max(180),
+  reason: z.string().max(1000)
+});
+
+timeRouter.post("/break-credit/request", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+  const parsed = breakCreditRequestSchema.safeParse(req.body);
+  if (!parsed.success || !req.auth) {
+    res.status(400).json({ message: "Ungueltige Eingaben. Notiz ist Pflicht." });
+    return;
+  }
+  if (!parsed.data.reason.trim()) {
+    res.status(400).json({ message: "Notiz ist Pflicht." });
+    return;
+  }
+  const dateParts = parseIsoDateParts(parsed.data.date);
+  if (!dateParts) {
+    res.status(400).json({ message: "Datum ist ungueltig." });
+    return;
+  }
+  const dayStart = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, 0, 0, 0));
+  const exists = await prisma.breakCreditRequest.findFirst({
+    where: {
+      userId: req.auth.userId,
+      date: dayStart,
+      status: { in: [BreakCreditRequestStatus.SUBMITTED, BreakCreditRequestStatus.APPROVED] }
+    }
+  });
+  if (exists) {
+    res.status(409).json({ message: "Fuer diesen Tag existiert bereits eine Pausengutschrift (offen/genehmigt)." });
+    return;
+  }
+  const created = await prisma.breakCreditRequest.create({
+    data: {
+      userId: req.auth.userId,
+      date: dayStart,
+      minutes: parsed.data.minutes,
+      reason: parsed.data.reason.trim()
+    },
+    include: {
+      user: { select: { id: true, name: true, loginName: true } }
+    }
+  });
+  await writeAuditLog({
+    actorUserId: req.auth.userId,
+    actorLoginName: await resolveActorLoginName(req.auth.userId),
+    action: "BREAK_CREDIT_REQUEST_CREATED",
+    targetType: "BreakCreditRequest",
+    targetId: created.id,
+    payload: parsed.data
+  });
+  res.status(201).json({
+    ...created,
+    date: created.date.toISOString().slice(0, 10)
+  });
+});
+
+timeRouter.get("/break-credit/request/my", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+  if (!req.auth) {
+    res.status(401).json({ message: "Nicht authentifiziert." });
+    return;
+  }
+  const rows = await prisma.breakCreditRequest.findMany({
+    where: { userId: req.auth.userId },
+    include: {
+      user: { select: { id: true, name: true, loginName: true } },
+      decidedBy: { select: { id: true, name: true, loginName: true } }
+    },
+    orderBy: [{ status: "asc" }, { date: "desc" }, { requestedAt: "desc" }]
+  });
+  res.json(rows.map((r) => ({ ...r, date: r.date.toISOString().slice(0, 10) })));
+});
+
+timeRouter.get("/break-credit/request/pending", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (_req: AuthRequest, res) => {
+  const rows = await prisma.breakCreditRequest.findMany({
+    where: { status: BreakCreditRequestStatus.SUBMITTED },
+    include: { user: { select: { id: true, name: true, loginName: true } } },
+    orderBy: [{ requestedAt: "asc" }]
+  });
+  res.json(rows.map((r) => ({ ...r, date: r.date.toISOString().slice(0, 10) })));
+});
+
+timeRouter.get("/break-credit/request/all", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (_req: AuthRequest, res) => {
+  const rows = await prisma.breakCreditRequest.findMany({
+    include: {
+      user: { select: { id: true, name: true, loginName: true } },
+      decidedBy: { select: { id: true, name: true, loginName: true } }
+    },
+    orderBy: [{ requestedAt: "desc" }]
+  });
+  res.json(rows.map((r) => ({ ...r, date: r.date.toISOString().slice(0, 10) })));
+});
+
+const breakCreditRequestCancelSchema = z.object({
+  requestId: z.string().min(1)
+});
+
+timeRouter.post("/break-credit/request/cancel", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+  const parsed = breakCreditRequestCancelSchema.safeParse(req.body);
+  if (!parsed.success || !req.auth) {
+    res.status(400).json({ message: "Ungueltige Eingaben." });
+    return;
+  }
+  const row = await prisma.breakCreditRequest.findUnique({ where: { id: parsed.data.requestId } });
+  if (!row || row.userId !== req.auth.userId) {
+    res.status(404).json({ message: "Antrag nicht gefunden." });
+    return;
+  }
+  if (row.status !== BreakCreditRequestStatus.SUBMITTED) {
+    res.status(400).json({ message: "Nur offene Antraege koennen storniert werden." });
+    return;
+  }
+  const updated = await prisma.breakCreditRequest.update({
+    where: { id: row.id },
+    data: { status: BreakCreditRequestStatus.CANCELED }
+  });
+  await writeAuditLog({
+    actorUserId: req.auth.userId,
+    actorLoginName: await resolveActorLoginName(req.auth.userId),
+    action: "BREAK_CREDIT_REQUEST_CANCELED",
+    targetType: "BreakCreditRequest",
+    targetId: updated.id
+  });
+  res.json({ ...updated, date: updated.date.toISOString().slice(0, 10) });
+});
+
+const breakCreditDecisionSchema = z.object({
+  requestId: z.string().min(1),
+  decision: z.enum(["APPROVED", "REJECTED"]),
+  decisionNote: z.string().max(1000)
+});
+
+timeRouter.post("/break-credit/request/decision", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+  const parsed = breakCreditDecisionSchema.safeParse(req.body);
+  if (!parsed.success || !req.auth) {
+    res.status(400).json({ message: "Ungueltige Eingaben. Notiz ist Pflicht." });
+    return;
+  }
+  if (!parsed.data.decisionNote.trim()) {
+    res.status(400).json({ message: "Notiz ist Pflicht." });
+    return;
+  }
+  const result = await prisma.$transaction(async (tx) => {
+    const row = await tx.breakCreditRequest.findUnique({ where: { id: parsed.data.requestId } });
+    if (!row) throw new Error("NOT_FOUND");
+    if (row.status !== BreakCreditRequestStatus.SUBMITTED) throw new Error("ALREADY_DECIDED");
+    const updated = await tx.breakCreditRequest.update({
+      where: { id: row.id },
+      data: {
+        status: parsed.data.decision === "APPROVED" ? BreakCreditRequestStatus.APPROVED : BreakCreditRequestStatus.REJECTED,
+        decisionNote: parsed.data.decisionNote.trim(),
+        decidedById: req.auth!.userId,
+        decidedAt: new Date()
+      }
+    });
+    if (parsed.data.decision === "APPROVED") {
+      await tx.breakCredit.create({
+        data: {
+          userId: row.userId,
+          date: row.date,
+          minutes: row.minutes,
+          reason: `Pausengutschrift Antrag: ${row.reason}`,
+          createdById: req.auth!.userId
+        }
+      });
+    }
+    return updated;
+  }).catch((e: Error) => {
+    if (e.message === "NOT_FOUND") {
+      res.status(404).json({ message: "Antrag nicht gefunden." });
+      return null;
+    }
+    if (e.message === "ALREADY_DECIDED") {
+      res.status(400).json({ message: "Antrag wurde bereits bearbeitet." });
+      return null;
+    }
+    throw e;
+  });
+  if (!result) return;
+  await writeAuditLog({
+    actorUserId: req.auth.userId,
+    actorLoginName: await resolveActorLoginName(req.auth.userId),
+    action: parsed.data.decision === "APPROVED" ? "BREAK_CREDIT_REQUEST_APPROVED" : "BREAK_CREDIT_REQUEST_REJECTED",
+    targetType: "BreakCreditRequest",
+    targetId: result.id,
+    payload: parsed.data
+  });
+  res.json({ ...result, date: result.date.toISOString().slice(0, 10) });
 });
 
 const sickSchema = z.object({

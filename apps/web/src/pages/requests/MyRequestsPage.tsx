@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { api, type SpecialWorkRequestRow } from "../../api/client";
+import { api, type BreakCreditRequestRow, type SpecialWorkRequestRow } from "../../api/client";
 import { StatusBadge } from "../../components/StatusBadge";
 
 type MyLeaveRow = {
@@ -17,7 +17,7 @@ type MyLeaveRow = {
 
 type UnifiedMyRow = {
   id: string;
-  source: "LEAVE" | "SPECIAL";
+  source: "LEAVE" | "SPECIAL" | "BREAK";
   status: string;
   eventText: string;
   fromDate: string;
@@ -30,6 +30,7 @@ type UnifiedMyRow = {
   decisionNote: string;
   decidedByText: string;
   decidedAtText: string;
+  canCancel: boolean;
 };
 
 function kindLabel(kind: string): string {
@@ -57,9 +58,12 @@ export function MyRequestsPage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [note, setNote] = useState("");
+  const [bcDate, setBcDate] = useState("");
+  const [bcMinutes, setBcMinutes] = useState(30);
+  const [bcReason, setBcReason] = useState("");
 
   async function load() {
-    const [leaves, special] = await Promise.all([api.myLeaves(), api.mySpecialWork()]);
+    const [leaves, special, breakCredits] = await Promise.all([api.myLeaves(), api.mySpecialWork(), api.myBreakCreditRequests()]);
 
     const mappedLeaves: UnifiedMyRow[] = (leaves as MyLeaveRow[]).map((r) => ({
       id: r.id,
@@ -75,7 +79,8 @@ export function MyRequestsPage() {
       requestNote: r.note || "-",
       decisionNote: r.decisionNote || "-",
       decidedByText: r.decidedBy ? `${r.decidedBy.name} (${r.decidedBy.loginName})` : "-",
-      decidedAtText: r.decidedAt ? new Date(r.decidedAt).toLocaleString("de-DE") : "-"
+      decidedAtText: r.decidedAt ? new Date(r.decidedAt).toLocaleString("de-DE") : "-",
+      canCancel: r.status === "SUBMITTED"
     }));
 
     const mappedSpecial: UnifiedMyRow[] = (special as SpecialWorkRequestRow[]).map((r) => ({
@@ -92,10 +97,29 @@ export function MyRequestsPage() {
       requestNote: "-",
       decisionNote: r.note || "-",
       decidedByText: r.decidedBy ? `${r.decidedBy.name} (${r.decidedBy.loginName})` : "-",
-      decidedAtText: r.decidedAt ? new Date(r.decidedAt).toLocaleString("de-DE") : "-"
+      decidedAtText: r.decidedAt ? new Date(r.decidedAt).toLocaleString("de-DE") : "-",
+      canCancel: false
     }));
 
-    const sorted = [...mappedLeaves, ...mappedSpecial].sort((a, b) => {
+    const mappedBreakCredits: UnifiedMyRow[] = (breakCredits as BreakCreditRequestRow[]).map((r) => ({
+      id: r.id,
+      source: "BREAK",
+      status: r.status,
+      eventText: "Pausengutschrift",
+      fromDate: r.date,
+      toDate: "-",
+      requestedAtText: new Date(r.requestedAt).toLocaleString("de-DE"),
+      clockIn: "-",
+      clockOut: "-",
+      workedHoursText: `${r.minutes} min`,
+      requestNote: r.reason,
+      decisionNote: r.decisionNote || "-",
+      decidedByText: r.decidedBy ? `${r.decidedBy.name} (${r.decidedBy.loginName})` : "-",
+      decidedAtText: r.decidedAt ? new Date(r.decidedAt).toLocaleString("de-DE") : "-",
+      canCancel: r.status === "SUBMITTED"
+    }));
+
+    const sorted = [...mappedLeaves, ...mappedSpecial, ...mappedBreakCredits].sort((a, b) => {
       if (a.status === "SUBMITTED" && b.status !== "SUBMITTED") return -1;
       if (a.status !== "SUBMITTED" && b.status === "SUBMITTED") return 1;
       return new Date(b.fromDate).getTime() - new Date(a.fromDate).getTime();
@@ -138,6 +162,30 @@ export function MyRequestsPage() {
         </div>
       </div>
 
+      <div className="card" style={{ padding: 12, marginBottom: 12 }}>
+        <h4>Pausengutschrift beantragen</h4>
+        <div className="grid">
+          <div className="row">
+            <input type="date" value={bcDate} onChange={(e) => setBcDate(e.target.value)} />
+            <input type="number" min={1} max={180} value={bcMinutes} onChange={(e) => setBcMinutes(Number(e.target.value || 0))} />
+          </div>
+          <textarea placeholder="Notiz (Pflichtfeld)" value={bcReason} onChange={(e) => setBcReason(e.target.value)} />
+          <button onClick={async () => {
+            try {
+              if (!bcDate) { setMsg("Datum ist Pflicht."); return; }
+              if (!bcReason.trim()) { setMsg("Notiz ist Pflicht."); return; }
+              if (!Number.isFinite(bcMinutes) || bcMinutes < 1 || bcMinutes > 180) { setMsg("Minuten muessen zwischen 1 und 180 liegen."); return; }
+              await api.createBreakCreditRequest({ date: bcDate, minutes: Math.floor(bcMinutes), reason: bcReason.trim() });
+              setMsg("Pausengutschrift-Antrag gestellt.");
+              setBcReason("");
+              await load();
+            } catch (e) {
+              setMsg((e as Error).message);
+            }
+          }}>Antrag senden</button>
+        </div>
+      </div>
+
       <h4>Meine Antraege</h4>
       <div className="admin-table-wrap">
         <table>
@@ -155,6 +203,7 @@ export function MyRequestsPage() {
               <th>Entscheidungsnotiz</th>
               <th>Entscheider</th>
               <th>Entscheidungsdatum</th>
+              <th>Aktion</th>
             </tr>
           </thead>
           <tbody>
@@ -180,9 +229,31 @@ export function MyRequestsPage() {
                 <td>{r.decisionNote}</td>
                 <td>{r.decidedByText}</td>
                 <td>{r.decidedAtText}</td>
+                <td>
+                  {r.canCancel ? (
+                    <button
+                      className="secondary"
+                      onClick={async () => {
+                        try {
+                          if (r.source === "LEAVE") {
+                            await api.cancelLeave(r.id);
+                          } else if (r.source === "BREAK") {
+                            await api.cancelBreakCreditRequest(r.id);
+                          }
+                          setMsg("Antrag storniert.");
+                          await load();
+                        } catch (e) {
+                          setMsg((e as Error).message);
+                        }
+                      }}
+                    >
+                      Stornieren
+                    </button>
+                  ) : "-"}
+                </td>
               </tr>
             ))}
-            {rows.length === 0 && <tr><td colSpan={12}>Keine Antraege vorhanden.</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={13}>Keine Antraege vorhanden.</td></tr>}
           </tbody>
         </table>
       </div>

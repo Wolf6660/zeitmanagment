@@ -19,7 +19,9 @@ export function SupervisorHome() {
   const [editKind, setEditKind] = useState<Record<string, "VACATION" | "OVERTIME">>({});
   const [msg, setMsg] = useState("");
   const [specialPending, setSpecialPending] = useState<Array<{ id: string; userId: string; date: string; createdAt: string; eventType?: string; clockInTimes?: string[]; clockOutTimes?: string[]; workedHours?: number; status: "SUBMITTED" | "APPROVED" | "REJECTED"; note?: string; user: { id: string; name: string; loginName: string } }>>([]);
+  const [breakPending, setBreakPending] = useState<Array<{ id: string; userId: string; date: string; minutes: number; reason: string; status: "SUBMITTED" | "APPROVED" | "REJECTED" | "CANCELED"; requestedAt: string; user: { id: string; name: string; loginName: string } }>>([]);
   const [specialNotes, setSpecialNotes] = useState<Record<string, string>>({});
+  const [breakNotes, setBreakNotes] = useState<Record<string, string>>({});
   const [reasonText, setReasonText] = useState("");
   const [todayEntries, setTodayEntries] = useState<Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; occurredAt: string; source: string; reasonText?: string }>>([]);
   const [todayOverview, setTodayOverview] = useState<Array<{ id: string; userId: string; userName: string; loginName: string; type: "CLOCK_IN" | "CLOCK_OUT"; occurredAt: string; source: string; reasonText?: string | null }>>([]);
@@ -32,11 +34,12 @@ export function SupervisorHome() {
 
   async function loadData() {
     if (!session) return;
-    const [e, p, ov, sp, t, to] = await Promise.all([
+    const [e, p, ov, sp, bp, t, to] = await Promise.all([
       api.employees(),
       api.pendingLeaves(),
       api.supervisorOverview(),
       api.pendingSpecialWork(),
+      api.pendingBreakCreditRequests(),
       api.todayEntries(session.user.id),
       api.todayOverview()
     ]);
@@ -45,6 +48,7 @@ export function SupervisorHome() {
     setOverview(Object.fromEntries(ov.rows.map((x) => [x.userId, { istHours: x.istHours, sollHours: x.sollHours, overtimeHours: x.overtimeHours }])));
     setMonthPlannedText(`${ov.monthLabel} - ${ov.monthPlannedHours.toFixed(2)} Stunden`);
     setSpecialPending(sp);
+    setBreakPending(bp);
     setTodayEntries(t);
     setTodayOverview(to);
     const vacRows = await Promise.all(
@@ -315,7 +319,41 @@ export function SupervisorHome() {
               </div>
             </div>
           ))}
-          {pending.length === 0 && specialPending.length === 0 && <div>Keine offenen Antraege.</div>}
+          {breakPending.map((p) => (
+            <div key={p.id} className="card" style={{ padding: 10, borderColor: "var(--break-credit)", background: "color-mix(in srgb, var(--break-credit) 20%, white)" }}>
+              <div><strong>{p.user.name}</strong> ({p.user.loginName})</div>
+              <div><strong>Ereignis:</strong> Pausengutschrift</div>
+              <div><strong>Datum:</strong> {p.date}</div>
+              <div><strong>Minuten:</strong> {p.minutes}</div>
+              <div><strong>Eingang:</strong> {new Date(p.requestedAt).toLocaleString("de-DE")}</div>
+              <div><strong>Notiz Mitarbeiter:</strong> {p.reason || "-"}</div>
+              <textarea
+                style={{ marginTop: 6 }}
+                placeholder="Entscheidungsnotiz (Pflicht)"
+                value={breakNotes[p.id] || ""}
+                onChange={(e) => setBreakNotes({ ...breakNotes, [p.id]: e.target.value })}
+              />
+              <div className="row" style={{ marginTop: 8 }}>
+                <button onClick={async () => {
+                  try {
+                    const n = (breakNotes[p.id] || "").trim();
+                    if (!n) { setMsg("Entscheidungsnotiz ist Pflicht."); return; }
+                    await api.decideBreakCreditRequest({ requestId: p.id, decision: "APPROVED", decisionNote: n });
+                    await loadData();
+                  } catch (e) { setMsg((e as Error).message); }
+                }}>Genehmigen</button>
+                <button className="secondary" onClick={async () => {
+                  try {
+                    const n = (breakNotes[p.id] || "").trim();
+                    if (!n) { setMsg("Entscheidungsnotiz ist Pflicht."); return; }
+                    await api.decideBreakCreditRequest({ requestId: p.id, decision: "REJECTED", decisionNote: n });
+                    await loadData();
+                  } catch (e) { setMsg((e as Error).message); }
+                }}>Ablehnen</button>
+              </div>
+            </div>
+          ))}
+          {pending.length === 0 && specialPending.length === 0 && breakPending.length === 0 && <div>Keine offenen Antraege.</div>}
           {msg && <div className="error">{msg}</div>}
         </div>
       </div>

@@ -43,6 +43,13 @@ enum ApprovalStatus {
   REJECTED
 }
 
+enum BreakCreditRequestStatus {
+  SUBMITTED
+  APPROVED
+  REJECTED
+  CANCELED
+}
+
 model User {
   id                        String   @id @default(cuid())
   name                      String
@@ -75,6 +82,8 @@ model User {
   auditLogs                 AuditLog[] @relation("AuditActor")
   decidedSpecialApprovals   SpecialWorkApproval[] @relation("SpecialWorkApprovalDecider")
   specialWorkApprovals      SpecialWorkApproval[] @relation("SpecialWorkApprovalEmployee")
+  breakCreditRequests       BreakCreditRequest[] @relation("BreakCreditRequestEmployee")
+  decidedBreakCreditRequests BreakCreditRequest[] @relation("BreakCreditRequestDecider")
 
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
@@ -156,6 +165,25 @@ model BreakCredit {
   createdAt         DateTime @default(now())
 
   @@index([userId, date])
+}
+
+model BreakCreditRequest {
+  id                String                   @id @default(cuid())
+  userId            String
+  date              DateTime
+  minutes           Int
+  reason            String
+  status            BreakCreditRequestStatus @default(SUBMITTED)
+  requestedAt       DateTime                 @default(now())
+  decidedAt         DateTime?
+  decisionNote      String?
+  decidedById       String?
+
+  user              User                     @relation("BreakCreditRequestEmployee", fields: [userId], references: [id])
+  decidedBy         User?                    @relation("BreakCreditRequestDecider", fields: [decidedById], references: [id])
+
+  @@index([userId, date])
+  @@index([status, date])
 }
 
 model LeaveRequest {

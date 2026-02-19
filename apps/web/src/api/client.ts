@@ -30,6 +30,20 @@ export type SpecialWorkRequestRow = {
   decidedBy?: { id: string; name: string; loginName: string } | null;
 };
 
+export type BreakCreditRequestRow = {
+  id: string;
+  userId: string;
+  date: string;
+  minutes: number;
+  reason: string;
+  status: "SUBMITTED" | "APPROVED" | "REJECTED" | "CANCELED";
+  requestedAt: string;
+  decidedAt?: string | null;
+  decisionNote?: string | null;
+  user: { id: string; name: string; loginName: string };
+  decidedBy?: { id: string; name: string; loginName: string } | null;
+};
+
 export function getSession(): Session | null {
   const raw = localStorage.getItem("zm_session");
   if (!raw) return null;
@@ -163,6 +177,12 @@ export const api = {
     request<{ warningOverdrawn: boolean; availableVacationDays: number; availableOvertimeHours: number }>("/api/leave", {
       method: "POST",
       body: JSON.stringify(payload)
+    }),
+
+  cancelLeave: (leaveId: string) =>
+    request("/api/leave/cancel", {
+      method: "POST",
+      body: JSON.stringify({ leaveId })
     }),
 
   summary: (userId: string) =>
@@ -434,6 +454,30 @@ export const api = {
 
   deleteSickLeaveDay: (payload: { userId: string; date: string }) =>
     request<{ ok: boolean }>("/api/time/sick-leave/delete-day", { method: "POST", body: JSON.stringify(payload) }),
+
+  createBreakCreditRequest: (payload: { date: string; minutes: number; reason: string }) =>
+    request<BreakCreditRequestRow>("/api/time/break-credit/request", { method: "POST", body: JSON.stringify(payload) }),
+
+  myBreakCreditRequests: () =>
+    request<Array<BreakCreditRequestRow>>("/api/time/break-credit/request/my"),
+
+  pendingBreakCreditRequests: () =>
+    request<Array<BreakCreditRequestRow>>("/api/time/break-credit/request/pending"),
+
+  allBreakCreditRequests: () =>
+    request<Array<BreakCreditRequestRow>>("/api/time/break-credit/request/all"),
+
+  cancelBreakCreditRequest: (requestId: string) =>
+    request<BreakCreditRequestRow>("/api/time/break-credit/request/cancel", {
+      method: "POST",
+      body: JSON.stringify({ requestId })
+    }),
+
+  decideBreakCreditRequest: (payload: { requestId: string; decision: "APPROVED" | "REJECTED"; decisionNote: string }) =>
+    request<BreakCreditRequestRow>("/api/time/break-credit/request/decision", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
 
   pendingSpecialWork: () =>
     request<Array<SpecialWorkRequestRow>>(
