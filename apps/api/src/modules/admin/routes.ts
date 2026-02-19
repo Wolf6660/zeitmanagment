@@ -9,6 +9,7 @@ import { AuthRequest, requireAuth, requireRole } from "../../utils/auth.js";
 import { resolveActorLoginName, writeAuditLog } from "../../utils/audit.js";
 import { sendMailIfEnabled, sendMailStrict } from "../../utils/mail.js";
 import { ensureBootstrapData } from "../../db/bootstrap.js";
+import { env } from "../../config/env.js";
 
 export const adminRouter = Router();
 
@@ -240,8 +241,9 @@ adminRouter.post("/system-reset", async (req: AuthRequest, res) => {
       addCount("leaveRequests", await tx.leaveRequest.deleteMany({}));
       addCount("overtimeAdjustments", await tx.overtimeAdjustment.deleteMany({}));
       addCount("vacationBalances", await tx.vacationBalance.deleteMany({}));
-      addCount("users", await tx.user.deleteMany({ where: { role: { not: Role.ADMIN } } }));
+      addCount("users", await tx.user.deleteMany({ where: { loginName: { not: env.ADMIN_LOGIN_NAME } } }));
     });
+    await ensureBootstrapData();
   } else {
     await prisma.$transaction(async (tx) => {
       addCount("breakCredits", await tx.breakCredit.deleteMany({}));
@@ -262,14 +264,18 @@ adminRouter.post("/system-reset", async (req: AuthRequest, res) => {
     await ensureBootstrapData();
   }
 
-  await writeAuditLog({
-    actorUserId: mode === "FULL" ? undefined : req.auth.userId,
-    actorLoginName: mode === "FULL" ? "system-reset" : await resolveActorLoginName(req.auth.userId),
-    action: "SYSTEM_RESET",
-    targetType: "System",
-    targetId: mode,
-    payload: { mode, deleted }
-  });
+  try {
+    await writeAuditLog({
+      actorUserId: mode === "FULL" ? undefined : req.auth.userId,
+      actorLoginName: mode === "FULL" ? "system-reset" : await resolveActorLoginName(req.auth.userId),
+      action: "SYSTEM_RESET",
+      targetType: "System",
+      targetId: mode,
+      payload: { mode, deleted }
+    });
+  } catch {
+    // Reset ist bereits erfolgreich; Log-Fehler darf keinen 5xx mehr erzeugen.
+  }
 
   res.json({ ok: true, mode, deleted });
 });

@@ -603,7 +603,9 @@ export function AdminHome() {
                       companyNameConfirmation: resetConfirmName
                     });
                     setMsg(`Zeiten geloescht (${Object.values(result.deleted || {}).reduce((a, b) => a + b, 0)} Eintraege).`);
-                    await loadData();
+                    loadData().catch(() => {
+                      setMsg("Zeiten geloescht. Aktualisierung der Ansicht fehlgeschlagen, bitte Seite neu laden.");
+                    });
                   } catch (e) {
                     setMsg((e as Error).message);
                   }
@@ -622,7 +624,9 @@ export function AdminHome() {
                       companyNameConfirmation: resetConfirmName
                     });
                     setMsg(`Mitarbeiter + Zeiten geloescht (${Object.values(result.deleted || {}).reduce((a, b) => a + b, 0)} Eintraege).`);
-                    await loadData();
+                    loadData().catch(() => {
+                      setMsg("Mitarbeiter + Zeiten geloescht. Aktualisierung der Ansicht fehlgeschlagen, bitte Seite neu laden.");
+                    });
                   } catch (e) {
                     setMsg((e as Error).message);
                   }
@@ -641,7 +645,9 @@ export function AdminHome() {
                       companyNameConfirmation: resetConfirmName
                     });
                     setMsg(`System vollstaendig zurueckgesetzt (${Object.values(result.deleted || {}).reduce((a, b) => a + b, 0)} Eintraege geloescht).`);
-                    await loadData();
+                    loadData().catch(() => {
+                      setMsg("Werkseinstellungen ausgefuehrt. Aktualisierung der Ansicht fehlgeschlagen, bitte Seite neu laden.");
+                    });
                   } catch (e) {
                     setMsg((e as Error).message);
                   }
