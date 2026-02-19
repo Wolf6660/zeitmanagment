@@ -274,7 +274,9 @@ adminRouter.post("/system-reset", async (req: AuthRequest, res) => {
   res.json({ ok: true, mode, deleted });
 });
 
-adminRouter.get("/backup/export", async (_req: AuthRequest, res) => {
+adminRouter.get("/backup/export", async (req: AuthRequest, res) => {
+  const modeRaw = String(req.query.mode || "FULL").toUpperCase();
+  const mode = modeRaw === "SETTINGS_ONLY" || modeRaw === "EMPLOYEES_TIMES_ONLY" ? modeRaw : "FULL";
   const [
     config,
     users,
@@ -303,26 +305,47 @@ adminRouter.get("/backup/export", async (_req: AuthRequest, res) => {
     prisma.overtimeAdjustment.findMany()
   ]);
 
+  const fullData = {
+    config,
+    users,
+    holidays,
+    dropdownOptions,
+    terminals,
+    timeEntries,
+    leaveRequests,
+    sickLeaves,
+    breakCredits,
+    breakCreditRequests,
+    specialWorkApprovals,
+    overtimeAdjustments
+  };
+
+  const settingsOnlyData = {
+    config,
+    holidays,
+    dropdownOptions,
+    terminals
+  };
+
+  const employeesTimesOnlyData = {
+    users,
+    timeEntries,
+    leaveRequests,
+    sickLeaves,
+    breakCredits,
+    breakCreditRequests,
+    specialWorkApprovals,
+    overtimeAdjustments
+  };
+
   res.json({
     meta: {
       exportedAt: new Date().toISOString(),
       version: "1",
-      system: "Zeitmanagment"
+      system: "Zeitmanagment",
+      mode
     },
-    data: {
-      config,
-      users,
-      holidays,
-      dropdownOptions,
-      terminals,
-      timeEntries,
-      leaveRequests,
-      sickLeaves,
-      breakCredits,
-      breakCreditRequests,
-      specialWorkApprovals,
-      overtimeAdjustments
-    }
+    data: mode === "SETTINGS_ONLY" ? settingsOnlyData : mode === "EMPLOYEES_TIMES_ONLY" ? employeesTimesOnlyData : fullData
   });
 });
 

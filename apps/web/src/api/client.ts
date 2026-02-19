@@ -511,6 +511,6 @@ export const api = {
       body: JSON.stringify(payload)
     }),
 
-  adminBackupExport: () =>
-    request<Record<string, unknown>>("/api/admin/backup/export")
+  adminBackupExport: (mode: "FULL" | "SETTINGS_ONLY" | "EMPLOYEES_TIMES_ONLY" = "FULL") =>
+    request<Record<string, unknown>>(`/api/admin/backup/export?mode=${mode}`)
 };
