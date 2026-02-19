@@ -93,14 +93,18 @@ adminRouter.patch("/config", async (req, res) => {
       data: parsed.data
     });
     const authReq = req as AuthRequest;
-    await writeAuditLog({
-      actorUserId: authReq.auth?.userId,
-      actorLoginName: await resolveActorLoginName(authReq.auth?.userId),
-      action: "SYSTEM_CONFIG_UPDATED",
-      targetType: "SystemConfig",
-      targetId: "1",
-      payload: parsed.data
-    });
+    try {
+      await writeAuditLog({
+        actorUserId: authReq.auth?.userId,
+        actorLoginName: await resolveActorLoginName(authReq.auth?.userId),
+        action: "SYSTEM_CONFIG_UPDATED",
+        targetType: "SystemConfig",
+        targetId: "1",
+        payload: parsed.data
+      });
+    } catch {
+      // Konfiguration wurde gespeichert; Log-Fehler darf kein 400 ausloesen.
+    }
     res.json(updated);
   } catch {
     res.status(400).json({ message: "Konfiguration konnte nicht gespeichert werden." });

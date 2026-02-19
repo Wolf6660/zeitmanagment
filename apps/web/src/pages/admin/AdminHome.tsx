@@ -223,6 +223,8 @@ export function AdminHome() {
   const [resetEmployeesOk, setResetEmployeesOk] = useState(false);
   const [resetFactoryMsg, setResetFactoryMsg] = useState("");
   const [resetFactoryOk, setResetFactoryOk] = useState(false);
+  const [autoBackupSaveMsg, setAutoBackupSaveMsg] = useState("");
+  const [autoBackupSaveOk, setAutoBackupSaveOk] = useState(false);
   const session = getSession();
 
   const [otUserId, setOtUserId] = useState("");
@@ -486,11 +488,12 @@ export function AdminHome() {
       {section === "system" && (
         <>
           <div className="card admin-section-card admin-uniform" style={{ padding: 12 }}>
-            <h4>Backup</h4>
-            <div style={{ color: "var(--muted)", marginBottom: 8 }}>
-              Backup-Dateien werden als JSON heruntergeladen.
-            </div>
-            <div className="row" style={{ marginTop: 8 }}>
+          <h4>Backup</h4>
+          <div style={{ color: "var(--muted)", marginBottom: 8 }}>
+            Backup-Dateien werden als JSON heruntergeladen.
+          </div>
+          <h4 style={{ margin: 0 }}>Manuelles Backup</h4>
+          <div className="row" style={{ marginTop: 8 }}>
               <button
                 className="secondary"
                 onClick={async () => {
@@ -559,6 +562,7 @@ export function AdminHome() {
               </button>
             </div>
             <div className="grid admin-uniform" style={{ marginTop: 12 }}>
+              <h4 style={{ margin: 0, gridColumn: "1 / -1" }}>Automatisches Backup</h4>
               <label>
                 Automatisches Backup
                 <select value={String(config.autoBackupEnabled ?? false)} onChange={(e) => setConfig({ ...config, autoBackupEnabled: e.target.value === "true" })}>
@@ -605,6 +609,7 @@ export function AdminHome() {
                           type="button"
                           key={d}
                           className={active ? "" : "secondary"}
+                          style={active ? { background: "var(--approved)", color: "#ffffff" } : { background: "#111827", color: "#ffffff" }}
                           onClick={() => {
                             if (active) set.delete(d); else set.add(d);
                             setConfig({ ...config, autoBackupDays: Array.from(set).join(",") || "MON" });
@@ -616,9 +621,31 @@ export function AdminHome() {
                     })}
                   </div>
                 </label>
+                <div style={{ color: "var(--muted)", marginTop: 6 }}>
+                  Hinweis: <span style={{ color: "var(--approved)", fontWeight: 700 }}>Gruen</span> = Backup wird an diesem Tag ausgefuehrt, <span style={{ color: "#111827", fontWeight: 700 }}>Schwarz</span> = kein Backup an diesem Tag.
+                </div>
               </div>
+              <div className="row" style={{ gridColumn: "1 / -1" }}>
+                <button
+                  onClick={async () => {
+                    try {
+                      setAutoBackupSaveOk(false);
+                      await api.updateConfig(config);
+                      setAutoBackupSaveOk(true);
+                      setAutoBackupSaveMsg("Automatische Backup-Einstellungen gespeichert.");
+                    } catch (e) {
+                      setAutoBackupSaveOk(false);
+                      setAutoBackupSaveMsg((e as Error).message);
+                    }
+                  }}
+                >
+                  Einstellungen speichern
+                </button>
+              </div>
+              {autoBackupSaveMsg && <div className={autoBackupSaveOk ? "success" : "error"} style={{ gridColumn: "1 / -1" }}>{autoBackupSaveMsg}</div>}
             </div>
             <div className="grid" style={{ marginTop: 12 }}>
+              <h4 style={{ margin: 0, gridColumn: "1 / -1" }}>Backup einspielen</h4>
               <label>
                 Backup-Datei einspielen (JSON)
                 <input type="file" accept="application/json,.json" onChange={(e) => setBackupImportFile(e.target.files?.[0] ?? null)} />
@@ -668,7 +695,8 @@ export function AdminHome() {
               Firmenname zur Bestaetigung
               <input value={resetConfirmName} onChange={(e) => setResetConfirmName(e.target.value)} />
             </label>
-            <div className="grid" style={{ marginTop: 12 }}>
+            <div className="grid" style={{ marginTop: 12, gridTemplateColumns: "repeat(3, minmax(220px, 1fr))", gap: 12 }}>
+              <h4 style={{ margin: 0, gridColumn: "1 / -1" }}>Loeschaktionen</h4>
               <div>
                 <button
                   className="warn"
@@ -2001,23 +2029,6 @@ export function AdminHome() {
           </div>
         </div>
       )}
-
-      <div className="row" style={{ marginTop: 12 }}>
-        <button
-          onClick={async () => {
-            try {
-              await api.updateConfig(config);
-              setMsg("Gespeichert.");
-              const pcfg = await api.publicConfig();
-              applyTheme(pcfg);
-            } catch (e) {
-              setMsg((e as Error).message);
-            }
-          }}
-        >
-          Aenderungen speichern
-        </button>
-      </div>
 
       {msg && <div className="success" style={{ marginTop: 10 }}>{msg}</div>}
     </div>
