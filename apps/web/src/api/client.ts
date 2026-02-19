@@ -503,5 +503,14 @@ export const api = {
     ),
 
   uploadLogo: (payload: { filename: string; contentBase64: string }) =>
-    request<{ logoUrl: string }>("/api/admin/logo-upload", { method: "POST", body: JSON.stringify(payload) })
+    request<{ logoUrl: string }>("/api/admin/logo-upload", { method: "POST", body: JSON.stringify(payload) }),
+
+  adminSystemReset: (payload: { mode: "FULL" | "TIMES_ONLY" | "EMPLOYEES_AND_TIMES_KEEP_SETTINGS"; companyNameConfirmation: string }) =>
+    request<{ ok: boolean; mode: string; deleted?: Record<string, number>; message?: string }>("/api/admin/system-reset", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+
+  adminBackupExport: () =>
+    request<Record<string, unknown>>("/api/admin/backup/export")
 };

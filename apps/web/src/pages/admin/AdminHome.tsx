@@ -207,6 +207,7 @@ export function AdminHome() {
   const [editingAssignedTargetUserId, setEditingAssignedTargetUserId] = useState<string>("");
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [msg, setMsg] = useState("");
+  const [resetConfirmName, setResetConfirmName] = useState("");
   const session = getSession();
 
   const [otUserId, setOtUserId] = useState("");
@@ -273,6 +274,7 @@ export function AdminHome() {
   const sectionTitle = useMemo(() => {
     if (section === "company") return "Firmenstammdaten";
     if (section === "rules") return "Regeln";
+    if (section === "system") return "System";
     if (section === "colors") return "Farben";
     if (section === "mail") return "E-Mail";
     if (section === "employees") return "Mitarbeiter";
@@ -294,6 +296,7 @@ export function AdminHome() {
       <div className="row" style={{ marginBottom: 12 }}>
         <button onClick={() => setSearchParams({ section: "company" })}>Firmenstammdaten</button>
         <button onClick={() => setSearchParams({ section: "rules" })}>Regeln</button>
+        <button onClick={() => setSearchParams({ section: "system" })}>System</button>
         <button onClick={() => setSearchParams({ section: "colors" })}>Farben</button>
         <button onClick={() => setSearchParams({ section: "mail" })}>E-Mail</button>
         <button onClick={() => setSearchParams({ section: "employees" })}>Mitarbeiter</button>
@@ -461,6 +464,100 @@ export function AdminHome() {
                 })}
               </div>
             </label>
+          </div>
+        </div>
+      )}
+
+      {section === "system" && (
+        <div className="card admin-section-card admin-uniform" style={{ padding: 12 }}>
+          <h4>Daten loeschen</h4>
+          <div style={{ color: "var(--muted)", marginBottom: 8 }}>
+            Zum Schutz muss der exakte Firmenname eingetragen werden: <strong>{config.companyName}</strong>
+          </div>
+          <label>
+            Firmenname zur Bestaetigung
+            <input value={resetConfirmName} onChange={(e) => setResetConfirmName(e.target.value)} />
+          </label>
+          <div className="row" style={{ marginTop: 12 }}>
+            <button
+              className="secondary"
+              onClick={async () => {
+                try {
+                  const payload = await api.adminBackupExport();
+                  const raw = JSON.stringify(payload, null, 2);
+                  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+                  const blob = new Blob([raw], { type: "application/json" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `zeitmanagment-backup-${stamp}.json`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                  setMsg("Backup exportiert.");
+                } catch (e) {
+                  setMsg((e as Error).message);
+                }
+              }}
+            >
+              Backup JSON herunterladen
+            </button>
+            <button
+              className="warn"
+              onClick={async () => {
+                try {
+                  const ok = window.confirm("Wirklich NUR Zeiten/Antraege loeschen?");
+                  if (!ok) return;
+                  const result = await api.adminSystemReset({
+                    mode: "TIMES_ONLY",
+                    companyNameConfirmation: resetConfirmName
+                  });
+                  setMsg(`Zeiten geloescht (${Object.values(result.deleted || {}).reduce((a, b) => a + b, 0)} Eintraege).`);
+                  await loadData();
+                } catch (e) {
+                  setMsg((e as Error).message);
+                }
+              }}
+            >
+              Nur Zeiten loeschen
+            </button>
+            <button
+              className="warn"
+              onClick={async () => {
+                try {
+                  const ok = window.confirm("Wirklich Mitarbeiter + Zeiten loeschen (Einstellungen bleiben)?");
+                  if (!ok) return;
+                  const result = await api.adminSystemReset({
+                    mode: "EMPLOYEES_AND_TIMES_KEEP_SETTINGS",
+                    companyNameConfirmation: resetConfirmName
+                  });
+                  setMsg(`Mitarbeiter + Zeiten geloescht (${Object.values(result.deleted || {}).reduce((a, b) => a + b, 0)} Eintraege).`);
+                  await loadData();
+                } catch (e) {
+                  setMsg((e as Error).message);
+                }
+              }}
+            >
+              Mitarbeiter + Zeiten loeschen
+            </button>
+            <button
+              className="warn"
+              onClick={async () => {
+                try {
+                  const ok = window.confirm("Wirklich ALLES loeschen und neu initialisieren?");
+                  if (!ok) return;
+                  const result = await api.adminSystemReset({
+                    mode: "FULL",
+                    companyNameConfirmation: resetConfirmName
+                  });
+                  setMsg(`System vollstaendig zurueckgesetzt (${Object.values(result.deleted || {}).reduce((a, b) => a + b, 0)} Eintraege geloescht).`);
+                  await loadData();
+                } catch (e) {
+                  setMsg((e as Error).message);
+                }
+              }}
+            >
+              Alles loeschen
+            </button>
           </div>
         </div>
       )}

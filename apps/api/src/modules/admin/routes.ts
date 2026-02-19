@@ -8,6 +8,7 @@ import { prisma } from "../../db/prisma.js";
 import { AuthRequest, requireAuth, requireRole } from "../../utils/auth.js";
 import { resolveActorLoginName, writeAuditLog } from "../../utils/audit.js";
 import { sendMailIfEnabled, sendMailStrict } from "../../utils/mail.js";
+import { ensureBootstrapData } from "../../db/bootstrap.js";
 
 export const adminRouter = Router();
 
@@ -190,6 +191,139 @@ adminRouter.post("/mail/test-employee", async (req: AuthRequest, res) => {
   } catch (e) {
     res.status(400).json({ message: (e as Error).message || "Mitarbeiter-Testmail fehlgeschlagen." });
   }
+});
+
+const resetSchema = z.object({
+  mode: z.enum(["FULL", "TIMES_ONLY", "EMPLOYEES_AND_TIMES_KEEP_SETTINGS"]),
+  companyNameConfirmation: z.string().min(1)
+});
+
+adminRouter.post("/system-reset", async (req: AuthRequest, res) => {
+  const parsed = resetSchema.safeParse(req.body);
+  if (!parsed.success || !req.auth) {
+    res.status(400).json({ message: "Ungueltige Eingaben." });
+    return;
+  }
+
+  const cfg = await prisma.systemConfig.findUnique({ where: { id: 1 }, select: { companyName: true } });
+  const expected = (cfg?.companyName || "").trim();
+  if (!expected || parsed.data.companyNameConfirmation.trim() !== expected) {
+    res.status(400).json({ message: "Bestaetigung fehlgeschlagen: Firmenname stimmt nicht ueberein." });
+    return;
+  }
+
+  const mode = parsed.data.mode;
+  const deleted: Record<string, number> = {};
+
+  const addCount = (key: string, value: { count: number }) => {
+    deleted[key] = value.count;
+  };
+
+  if (mode === "TIMES_ONLY") {
+    await prisma.$transaction(async (tx) => {
+      addCount("breakCredits", await tx.breakCredit.deleteMany({}));
+      addCount("breakCreditRequests", await tx.breakCreditRequest.deleteMany({}));
+      addCount("specialWorkApprovals", await tx.specialWorkApproval.deleteMany({}));
+      addCount("timeEntries", await tx.timeEntry.deleteMany({}));
+      addCount("sickLeaves", await tx.sickLeave.deleteMany({}));
+      addCount("leaveRequests", await tx.leaveRequest.deleteMany({}));
+      addCount("overtimeAdjustments", await tx.overtimeAdjustment.deleteMany({}));
+      addCount("vacationBalances", await tx.vacationBalance.deleteMany({}));
+    });
+  } else if (mode === "EMPLOYEES_AND_TIMES_KEEP_SETTINGS") {
+    await prisma.$transaction(async (tx) => {
+      addCount("breakCredits", await tx.breakCredit.deleteMany({}));
+      addCount("breakCreditRequests", await tx.breakCreditRequest.deleteMany({}));
+      addCount("specialWorkApprovals", await tx.specialWorkApproval.deleteMany({}));
+      addCount("timeEntries", await tx.timeEntry.deleteMany({}));
+      addCount("sickLeaves", await tx.sickLeave.deleteMany({}));
+      addCount("leaveRequests", await tx.leaveRequest.deleteMany({}));
+      addCount("overtimeAdjustments", await tx.overtimeAdjustment.deleteMany({}));
+      addCount("vacationBalances", await tx.vacationBalance.deleteMany({}));
+      addCount("users", await tx.user.deleteMany({ where: { role: { not: Role.ADMIN } } }));
+    });
+  } else {
+    await prisma.$transaction(async (tx) => {
+      addCount("breakCredits", await tx.breakCredit.deleteMany({}));
+      addCount("breakCreditRequests", await tx.breakCreditRequest.deleteMany({}));
+      addCount("specialWorkApprovals", await tx.specialWorkApproval.deleteMany({}));
+      addCount("timeEntries", await tx.timeEntry.deleteMany({}));
+      addCount("sickLeaves", await tx.sickLeave.deleteMany({}));
+      addCount("leaveRequests", await tx.leaveRequest.deleteMany({}));
+      addCount("overtimeAdjustments", await tx.overtimeAdjustment.deleteMany({}));
+      addCount("vacationBalances", await tx.vacationBalance.deleteMany({}));
+      addCount("dropdownOptions", await tx.dropdownOption.deleteMany({}));
+      addCount("holidays", await tx.holiday.deleteMany({}));
+      addCount("rfidTerminals", await tx.rfidTerminal.deleteMany({}));
+      addCount("auditLogs", await tx.auditLog.deleteMany({}));
+      addCount("users", await tx.user.deleteMany({}));
+      addCount("systemConfig", await tx.systemConfig.deleteMany({}));
+    });
+    await ensureBootstrapData();
+  }
+
+  await writeAuditLog({
+    actorUserId: mode === "FULL" ? undefined : req.auth.userId,
+    actorLoginName: mode === "FULL" ? "system-reset" : await resolveActorLoginName(req.auth.userId),
+    action: "SYSTEM_RESET",
+    targetType: "System",
+    targetId: mode,
+    payload: { mode, deleted }
+  });
+
+  res.json({ ok: true, mode, deleted });
+});
+
+adminRouter.get("/backup/export", async (_req: AuthRequest, res) => {
+  const [
+    config,
+    users,
+    holidays,
+    dropdownOptions,
+    terminals,
+    timeEntries,
+    leaveRequests,
+    sickLeaves,
+    breakCredits,
+    breakCreditRequests,
+    specialWorkApprovals,
+    overtimeAdjustments
+  ] = await Promise.all([
+    prisma.systemConfig.findMany(),
+    prisma.user.findMany(),
+    prisma.holiday.findMany(),
+    prisma.dropdownOption.findMany(),
+    prisma.rfidTerminal.findMany(),
+    prisma.timeEntry.findMany(),
+    prisma.leaveRequest.findMany(),
+    prisma.sickLeave.findMany(),
+    prisma.breakCredit.findMany(),
+    prisma.breakCreditRequest.findMany(),
+    prisma.specialWorkApproval.findMany(),
+    prisma.overtimeAdjustment.findMany()
+  ]);
+
+  res.json({
+    meta: {
+      exportedAt: new Date().toISOString(),
+      version: "1",
+      system: "Zeitmanagment"
+    },
+    data: {
+      config,
+      users,
+      holidays,
+      dropdownOptions,
+      terminals,
+      timeEntries,
+      leaveRequests,
+      sickLeaves,
+      breakCredits,
+      breakCreditRequests,
+      specialWorkApprovals,
+      overtimeAdjustments
+    }
+  });
 });
 
 const holidaySchema = z.object({
