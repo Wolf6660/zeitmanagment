@@ -36,6 +36,7 @@ const configSchema = z.object({
   requireNoteLeaveSupervisorUpdate: z.boolean().optional(),
   requireNoteOvertimeAdjustment: z.boolean().optional(),
   requireNoteOvertimeAccountSet: z.boolean().optional(),
+  requireOtherSupervisorForBreakCreditApproval: z.boolean().optional(),
   colorApproved: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
   colorRejected: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
   colorManualCorrection: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),

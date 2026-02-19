@@ -290,6 +290,7 @@ model SystemConfig {
   requireNoteLeaveSupervisorUpdate  Boolean  @default(true)
   requireNoteOvertimeAdjustment     Boolean  @default(true)
   requireNoteOvertimeAccountSet     Boolean  @default(true)
+  requireOtherSupervisorForBreakCreditApproval Boolean @default(false)
 
   colorApproved                     String   @default("#22C55E")
   colorRejected                     String   @default("#EF4444")

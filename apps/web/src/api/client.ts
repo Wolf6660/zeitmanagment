@@ -299,6 +299,7 @@ export const api = {
       requireNoteLeaveSupervisorUpdate?: boolean;
       requireNoteOvertimeAdjustment?: boolean;
       requireNoteOvertimeAccountSet?: boolean;
+      requireOtherSupervisorForBreakCreditApproval?: boolean;
       colorApproved: string;
       colorRejected: string;
       colorManualCorrection: string;

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { ApprovalStatus, BreakCreditRequestStatus, Role, TimeEntrySource, TimeEntryType } from "@prisma/client";
+import { ApprovalStatus, BreakCreditRequestStatus, LeaveKind, LeaveStatus, Role, TimeEntrySource, TimeEntryType } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../../db/prisma.js";
 import { AuthRequest, requireAuth, requireRole } from "../../utils/auth.js";
@@ -339,6 +339,58 @@ timeRouter.post("/break-credit/request", requireRole([Role.EMPLOYEE, Role.AZUBI,
     return;
   }
   const dayStart = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, 0, 0, 0));
+  const dayEnd = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, 23, 59, 59, 999));
+
+  const [config, dayEntries, leaveOnDay] = await Promise.all([
+    prisma.systemConfig.findUnique({ where: { id: 1 }, select: { autoBreakAfterHours: true } }),
+    prisma.timeEntry.findMany({
+      where: {
+        userId: req.auth.userId,
+        occurredAt: {
+          gte: dayStart,
+          lte: new Date(dayEnd.getTime() + 24 * 60 * 60 * 1000)
+        }
+      },
+      orderBy: { occurredAt: "asc" },
+      select: { type: true, occurredAt: true, reasonText: true, correctionComment: true }
+    }),
+    prisma.leaveRequest.findFirst({
+      where: {
+        userId: req.auth.userId,
+        status: LeaveStatus.APPROVED,
+        kind: { in: [LeaveKind.VACATION, LeaveKind.OVERTIME] },
+        startDate: { lte: dayEnd },
+        endDate: { gte: dayStart }
+      },
+      select: { kind: true }
+    })
+  ]);
+
+  if (leaveOnDay?.kind === LeaveKind.VACATION) {
+    res.status(400).json({ message: "Pausengutschrift nicht moeglich: an diesem Tag ist Urlaub eingetragen." });
+    return;
+  }
+  if (leaveOnDay?.kind === LeaveKind.OVERTIME) {
+    res.status(400).json({ message: "Pausengutschrift nicht moeglich: an diesem Tag ist Ueberstundenfrei eingetragen." });
+    return;
+  }
+  const schoolOnDay = dayEntries.some((e) => isSchoolEntry({ reasonText: e.reasonText, correctionComment: e.correctionComment }));
+  if (schoolOnDay) {
+    res.status(400).json({ message: "Pausengutschrift nicht moeglich: an diesem Tag ist Berufsschule eingetragen." });
+    return;
+  }
+  const grossByDay = buildGrossMinutesByStartDay(dayEntries.map((e) => ({ type: e.type, occurredAt: e.occurredAt })));
+  const grossMinutes = grossByDay.minutesByDay.get(dayKey(dayStart)) ?? 0;
+  if (grossMinutes <= 0) {
+    res.status(400).json({ message: "Pausengutschrift nicht moeglich: an diesem Tag wurde keine Arbeitszeit erfasst." });
+    return;
+  }
+  const autoBreakAfterHours = config?.autoBreakAfterHours ?? 6;
+  if (grossMinutes < autoBreakAfterHours * 60) {
+    res.status(400).json({ message: `Pausengutschrift nicht moeglich: automatische Pause greift erst ab ${autoBreakAfterHours} Stunden Arbeitszeit.` });
+    return;
+  }
+
   const exists = await prisma.breakCreditRequest.findFirst({
     where: {
       userId: req.auth.userId,
@@ -460,10 +512,17 @@ timeRouter.post("/break-credit/request/decision", requireRole([Role.SUPERVISOR, 
     res.status(400).json({ message: "Notiz ist Pflicht." });
     return;
   }
+  const [cfg, actor] = await Promise.all([
+    prisma.systemConfig.findUnique({ where: { id: 1 }, select: { requireOtherSupervisorForBreakCreditApproval: true } }),
+    prisma.user.findUnique({ where: { id: req.auth.userId }, select: { role: true } })
+  ]);
   const result = await prisma.$transaction(async (tx) => {
     const row = await tx.breakCreditRequest.findUnique({ where: { id: parsed.data.requestId } });
     if (!row) throw new Error("NOT_FOUND");
     if (row.status !== BreakCreditRequestStatus.SUBMITTED) throw new Error("ALREADY_DECIDED");
+    if ((cfg?.requireOtherSupervisorForBreakCreditApproval ?? false) && actor?.role === Role.SUPERVISOR && row.userId === req.auth!.userId) {
+      throw new Error("SELF_APPROVAL_BLOCKED");
+    }
     const updated = await tx.breakCreditRequest.update({
       where: { id: row.id },
       data: {
@@ -492,6 +551,10 @@ timeRouter.post("/break-credit/request/decision", requireRole([Role.SUPERVISOR, 
     }
     if (e.message === "ALREADY_DECIDED") {
       res.status(400).json({ message: "Antrag wurde bereits bearbeitet." });
+      return null;
+    }
+    if (e.message === "SELF_APPROVAL_BLOCKED") {
+      res.status(403).json({ message: "Eigene Pausengutschrift darf laut Regel nur durch anderen Vorgesetzten oder Admin genehmigt werden." });
       return null;
     }
     throw e;

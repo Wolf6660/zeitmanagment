@@ -23,6 +23,7 @@ type AdminConfig = {
   requireNoteLeaveSupervisorUpdate?: boolean;
   requireNoteOvertimeAdjustment?: boolean;
   requireNoteOvertimeAccountSet?: boolean;
+  requireOtherSupervisorForBreakCreditApproval?: boolean;
   colorApproved: string;
   colorRejected: string;
   colorManualCorrection: string;
@@ -423,6 +424,16 @@ export function AdminHome() {
           <label>
             Mussfeld: Notiz bei Ueberstundenkonto setzen
             <select value={String(config.requireNoteOvertimeAccountSet ?? true)} onChange={(e) => setConfig({ ...config, requireNoteOvertimeAccountSet: e.target.value === "true" })}>
+              <option value="true">Aktiv</option>
+              <option value="false">Deaktiviert</option>
+            </select>
+          </label>
+          <label>
+            Pausengutschrift Vorgesetzte: Freigabe nur durch anderen Vorgesetzten/Admin
+            <select
+              value={String(config.requireOtherSupervisorForBreakCreditApproval ?? false)}
+              onChange={(e) => setConfig({ ...config, requireOtherSupervisorForBreakCreditApproval: e.target.value === "true" })}
+            >
               <option value="true">Aktiv</option>
               <option value="false">Deaktiviert</option>
             </select>
