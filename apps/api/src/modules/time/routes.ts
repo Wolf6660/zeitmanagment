@@ -132,7 +132,7 @@ const clockSchema = z.object({
   reasonText: z.string().max(255).optional()
 });
 
-timeRouter.post("/clock", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+timeRouter.post("/clock", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
   const parsed = clockSchema.safeParse(req.body);
   if (!parsed.success || !req.auth) {
     res.status(400).json({ message: "Ungueltige Eingaben. Grund ist Pflicht." });
@@ -183,7 +183,7 @@ const selfCorrectionSchema = z.object({
   correctionComment: z.string().max(1000)
 });
 
-timeRouter.post("/self-correction", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+timeRouter.post("/self-correction", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
   const parsed = selfCorrectionSchema.safeParse(req.body);
   if (!parsed.success || !req.auth) {
     res.status(400).json({ message: "Ungueltige Eingaben. Notiz ist Pflicht." });
@@ -731,7 +731,7 @@ timeRouter.post("/azubi/school-day", requireRole([Role.AZUBI]), async (req: Auth
         isManualCorrection: true,
         correctionComment: "Berufsschule",
         reasonText: "Berufsschule",
-        occurredAt: new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, 16, 30, 0)),
+        occurredAt: new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, 16, 0, 0)),
         createdById: req.auth.userId
       }
     ]
@@ -749,7 +749,7 @@ timeRouter.post("/azubi/school-day", requireRole([Role.AZUBI]), async (req: Auth
   res.json({ ok: true });
 });
 
-timeRouter.post("/day-override-self", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+timeRouter.post("/day-override-self", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
   const parsed = selfDayOverrideSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ message: zodFirstMessage(parsed) });
@@ -832,7 +832,7 @@ timeRouter.post("/day-override-self", requireRole([Role.EMPLOYEE, Role.SUPERVISO
   }
 });
 
-timeRouter.get("/month/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+timeRouter.get("/month/:userId", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
   if (!req.auth) {
     res.status(401).json({ message: "Nicht authentifiziert." });
     return;
@@ -979,7 +979,14 @@ function isSchoolEntry(entry: { reasonText?: string | null; correctionComment?: 
   return reason === "berufsschule";
 }
 
-timeRouter.get("/summary/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+function resolveSpecialEventType(note?: string | null): string {
+  const v = String(note || "").toLowerCase();
+  if (v.includes("0:00")) return "Arbeit ueber 0:00";
+  if (v.includes("12")) return "Arbeit ueber 12 Stunden";
+  return "Arbeit Feiertag/Wochenende";
+}
+
+timeRouter.get("/summary/:userId", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
   if (!req.auth) {
     res.status(401).json({ message: "Nicht authentifiziert." });
     return;
@@ -1114,7 +1121,7 @@ timeRouter.get("/summary/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, 
   });
 });
 
-timeRouter.get("/today/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+timeRouter.get("/today/:userId", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
   if (!req.auth) {
     res.status(401).json({ message: "Nicht authentifiziert." });
     return;
@@ -1476,11 +1483,159 @@ timeRouter.get("/special-work/pending", requireRole([Role.SUPERVISOR, Role.ADMIN
       ...p,
       date: p.date.toISOString().slice(0, 10),
       createdAt: p.createdAt.toISOString(),
-      eventType:
-        (p.note || "").toLowerCase().includes("0:00")
-          ? "Arbeit ueber 0:00"
-          : "Arbeit Feiertag/Wochenende"
+      eventType: resolveSpecialEventType(p.note)
     }))
+  );
+});
+
+timeRouter.get("/special-work/all", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (_req, res) => {
+  const rows = await prisma.specialWorkApproval.findMany({
+    include: {
+      user: { select: { id: true, name: true, loginName: true } },
+      decidedBy: { select: { id: true, name: true, loginName: true } }
+    },
+    orderBy: [{ date: "desc" }, { createdAt: "desc" }]
+  });
+  const minDate = rows[rows.length - 1]?.date;
+  const maxDate = rows[0]?.date;
+  const [entries, credits, cfg] = await Promise.all([
+    minDate && maxDate
+      ? prisma.timeEntry.findMany({
+          where: {
+            userId: { in: Array.from(new Set(rows.map((r) => r.userId))) },
+            occurredAt: {
+              gte: new Date(Date.UTC(minDate.getUTCFullYear(), minDate.getUTCMonth(), minDate.getUTCDate(), 0, 0, 0)),
+              lte: new Date(Date.UTC(maxDate.getUTCFullYear(), maxDate.getUTCMonth(), maxDate.getUTCDate(), 23, 59, 59, 999))
+            }
+          },
+          orderBy: { occurredAt: "asc" }
+        })
+      : Promise.resolve([]),
+    minDate && maxDate
+      ? prisma.breakCredit.findMany({
+          where: {
+            userId: { in: Array.from(new Set(rows.map((r) => r.userId))) },
+            date: {
+              gte: new Date(Date.UTC(minDate.getUTCFullYear(), minDate.getUTCMonth(), minDate.getUTCDate(), 0, 0, 0)),
+              lte: new Date(Date.UTC(maxDate.getUTCFullYear(), maxDate.getUTCMonth(), maxDate.getUTCDate(), 23, 59, 59, 999))
+            }
+          }
+        })
+      : Promise.resolve([]),
+    prisma.systemConfig.findUnique({ where: { id: 1 }, select: { autoBreakMinutes: true, autoBreakAfterHours: true } })
+  ]);
+  const breakMinutes = cfg?.autoBreakMinutes ?? 30;
+  const breakAfterHours = cfg?.autoBreakAfterHours ?? 6;
+  const entriesByUserDay = new Map<string, typeof entries>();
+  for (const e of entries) {
+    const key = `${e.userId}:${dayKey(e.occurredAt)}`;
+    const list = entriesByUserDay.get(key) ?? [];
+    list.push(e);
+    entriesByUserDay.set(key, list);
+  }
+  const creditsByUserDay = new Map<string, number>();
+  for (const c of credits) {
+    const key = `${c.userId}:${dayKey(c.date)}`;
+    creditsByUserDay.set(key, (creditsByUserDay.get(key) ?? 0) + c.minutes);
+  }
+
+  res.json(
+    rows.map((p) => {
+      const key = `${p.userId}:${dayKey(p.date)}`;
+      const dayEntries = (entriesByUserDay.get(key) ?? []).sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
+      const grossMinutes = calculateWorkedMinutes(dayEntries.map((e) => ({ type: e.type, occurredAt: e.occurredAt })));
+      const autoBreakApplies = grossMinutes >= breakAfterHours * 60;
+      const credit = creditsByUserDay.get(key) ?? 0;
+      const netMinutes = Math.max(grossMinutes - (autoBreakApplies ? breakMinutes : 0) + credit, 0);
+      return {
+        ...p,
+        date: p.date.toISOString().slice(0, 10),
+        createdAt: p.createdAt.toISOString(),
+        decidedAt: p.decidedAt ? p.decidedAt.toISOString() : null,
+        eventType: resolveSpecialEventType(p.note),
+        clockInTimes: dayEntries.filter((e) => e.type === TimeEntryType.CLOCK_IN).map((e) => e.occurredAt.toISOString().slice(11, 16)),
+        clockOutTimes: dayEntries.filter((e) => e.type === TimeEntryType.CLOCK_OUT).map((e) => e.occurredAt.toISOString().slice(11, 16)),
+        workedHours: Number((netMinutes / 60).toFixed(2))
+      };
+    })
+  );
+});
+
+timeRouter.get("/special-work/my", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+  if (!req.auth) {
+    res.status(401).json({ message: "Nicht authentifiziert." });
+    return;
+  }
+  const rows = await prisma.specialWorkApproval.findMany({
+    where: { userId: req.auth.userId },
+    include: {
+      user: { select: { id: true, name: true, loginName: true } },
+      decidedBy: { select: { id: true, name: true, loginName: true } }
+    },
+    orderBy: [{ date: "desc" }, { createdAt: "desc" }]
+  });
+  const minDate = rows[rows.length - 1]?.date;
+  const maxDate = rows[0]?.date;
+  const [entries, credits, cfg] = await Promise.all([
+    minDate && maxDate
+      ? prisma.timeEntry.findMany({
+          where: {
+            userId: req.auth.userId,
+            occurredAt: {
+              gte: new Date(Date.UTC(minDate.getUTCFullYear(), minDate.getUTCMonth(), minDate.getUTCDate(), 0, 0, 0)),
+              lte: new Date(Date.UTC(maxDate.getUTCFullYear(), maxDate.getUTCMonth(), maxDate.getUTCDate(), 23, 59, 59, 999))
+            }
+          },
+          orderBy: { occurredAt: "asc" }
+        })
+      : Promise.resolve([]),
+    minDate && maxDate
+      ? prisma.breakCredit.findMany({
+          where: {
+            userId: req.auth.userId,
+            date: {
+              gte: new Date(Date.UTC(minDate.getUTCFullYear(), minDate.getUTCMonth(), minDate.getUTCDate(), 0, 0, 0)),
+              lte: new Date(Date.UTC(maxDate.getUTCFullYear(), maxDate.getUTCMonth(), maxDate.getUTCDate(), 23, 59, 59, 999))
+            }
+          }
+        })
+      : Promise.resolve([]),
+    prisma.systemConfig.findUnique({ where: { id: 1 }, select: { autoBreakMinutes: true, autoBreakAfterHours: true } })
+  ]);
+  const breakMinutes = cfg?.autoBreakMinutes ?? 30;
+  const breakAfterHours = cfg?.autoBreakAfterHours ?? 6;
+  const entriesByDay = new Map<string, typeof entries>();
+  for (const e of entries) {
+    const key = dayKey(e.occurredAt);
+    const list = entriesByDay.get(key) ?? [];
+    list.push(e);
+    entriesByDay.set(key, list);
+  }
+  const creditsByDay = new Map<string, number>();
+  for (const c of credits) {
+    const key = dayKey(c.date);
+    creditsByDay.set(key, (creditsByDay.get(key) ?? 0) + c.minutes);
+  }
+
+  res.json(
+    rows.map((p) => {
+      const key = dayKey(p.date);
+      const dayEntries = (entriesByDay.get(key) ?? []).sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
+      const grossMinutes = calculateWorkedMinutes(dayEntries.map((e) => ({ type: e.type, occurredAt: e.occurredAt })));
+      const autoBreakApplies = grossMinutes >= breakAfterHours * 60;
+      const credit = creditsByDay.get(key) ?? 0;
+      const netMinutes = Math.max(grossMinutes - (autoBreakApplies ? breakMinutes : 0) + credit, 0);
+      return {
+        ...p,
+        date: p.date.toISOString().slice(0, 10),
+        createdAt: p.createdAt.toISOString(),
+        decidedAt: p.decidedAt ? p.decidedAt.toISOString() : null,
+        eventType: resolveSpecialEventType(p.note),
+        clockInTimes: dayEntries.filter((e) => e.type === TimeEntryType.CLOCK_IN).map((e) => e.occurredAt.toISOString().slice(11, 16)),
+        clockOutTimes: dayEntries.filter((e) => e.type === TimeEntryType.CLOCK_OUT).map((e) => e.occurredAt.toISOString().slice(11, 16)),
+        workedHours: Number((netMinutes / 60).toFixed(2))
+      };
+    })
   );
 });
 

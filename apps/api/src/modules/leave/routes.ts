@@ -139,7 +139,7 @@ const createSchema = z.object({
   note: z.string().max(1000).optional().default("")
 });
 
-leaveRouter.post("/", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+leaveRouter.post("/", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success || !req.auth) {
     res.status(400).json({ message: "Ungueltige Eingaben. Notiz ist Pflicht." });
@@ -216,7 +216,7 @@ leaveRouter.post("/", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMIN]),
   });
 });
 
-leaveRouter.get("/my", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+leaveRouter.get("/my", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
   if (!req.auth) {
     res.status(401).json({ message: "Nicht authentifiziert." });
     return;
@@ -248,7 +248,7 @@ const cancelSchema = z.object({
   leaveId: z.string().min(1)
 });
 
-leaveRouter.post("/cancel", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+leaveRouter.post("/cancel", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
   const parsed = cancelSchema.safeParse(req.body);
   if (!parsed.success || !req.auth) {
     res.status(400).json({ message: "Ungueltige Eingaben." });
@@ -455,7 +455,7 @@ leaveRouter.get("/pending", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (_
   res.json(enriched);
 });
 
-leaveRouter.get("/availability/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+leaveRouter.get("/availability/:userId", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
   if (!req.auth) {
     res.status(401).json({ message: "Nicht authentifiziert." });
     return;

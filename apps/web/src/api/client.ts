@@ -14,6 +14,22 @@ export type Session = {
   user: SessionUser;
 };
 
+export type SpecialWorkRequestRow = {
+  id: string;
+  userId: string;
+  date: string;
+  createdAt: string;
+  decidedAt?: string | null;
+  eventType?: string;
+  clockInTimes?: string[];
+  clockOutTimes?: string[];
+  workedHours?: number;
+  status: "SUBMITTED" | "APPROVED" | "REJECTED";
+  note?: string;
+  user: { id: string; name: string; loginName: string };
+  decidedBy?: { id: string; name: string; loginName: string } | null;
+};
+
 export function getSession(): Session | null {
   const raw = localStorage.getItem("zm_session");
   if (!raw) return null;
@@ -420,9 +436,15 @@ export const api = {
     request<{ ok: boolean }>("/api/time/sick-leave/delete-day", { method: "POST", body: JSON.stringify(payload) }),
 
   pendingSpecialWork: () =>
-    request<Array<{ id: string; userId: string; date: string; createdAt: string; eventType?: string; clockInTimes?: string[]; clockOutTimes?: string[]; workedHours?: number; status: "SUBMITTED" | "APPROVED" | "REJECTED"; note?: string; user: { id: string; name: string; loginName: string } }>>(
+    request<Array<SpecialWorkRequestRow>>(
       "/api/time/special-work/pending"
     ),
+
+  allSpecialWork: () =>
+    request<Array<SpecialWorkRequestRow>>("/api/time/special-work/all"),
+
+  mySpecialWork: () =>
+    request<Array<SpecialWorkRequestRow>>("/api/time/special-work/my"),
 
   decideSpecialWork: (payload: { approvalId: string; decision: "APPROVED" | "REJECTED"; note: string }) =>
     request<{ id: string; status: "APPROVED" | "REJECTED" }>("/api/time/special-work/decision", {

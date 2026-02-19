@@ -1,6 +1,36 @@
 import React, { useEffect, useState } from "react";
-import { api } from "../../api/client";
+import { api, type SpecialWorkRequestRow } from "../../api/client";
 import { StatusBadge } from "../../components/StatusBadge";
+
+type MyLeaveRow = {
+  id: string;
+  status: string;
+  kind: string;
+  startDate: string;
+  endDate: string;
+  note?: string;
+  requestedAt: string;
+  decisionNote?: string | null;
+  decidedAt?: string | null;
+  decidedBy?: { id: string; name: string; loginName: string } | null;
+};
+
+type UnifiedMyRow = {
+  id: string;
+  source: "LEAVE" | "SPECIAL";
+  status: string;
+  eventText: string;
+  fromDate: string;
+  toDate: string;
+  requestedAtText: string;
+  clockIn: string;
+  clockOut: string;
+  workedHoursText: string;
+  requestNote: string;
+  decisionNote: string;
+  decidedByText: string;
+  decidedAtText: string;
+};
 
 function kindLabel(kind: string): string {
   return kind === "VACATION" ? "Urlaub" : "Ueberstunden";
@@ -14,19 +44,14 @@ function statusLabel(status: string): string {
   return status;
 }
 
+function statusBg(status: string): string {
+  if (status === "APPROVED") return "rgba(34,197,94,0.10)";
+  if (status === "REJECTED") return "rgba(239,68,68,0.10)";
+  return "rgba(245,158,11,0.10)";
+}
+
 export function MyRequestsPage() {
-  const [rows, setRows] = useState<Array<{
-    id: string;
-    status: string;
-    kind: string;
-    startDate: string;
-    endDate: string;
-    note?: string;
-    requestedAt: string;
-    decisionNote?: string | null;
-    decidedAt?: string | null;
-    decidedBy?: { id: string; name: string; loginName: string } | null;
-  }>>([]);
+  const [rows, setRows] = useState<UnifiedMyRow[]>([]);
   const [msg, setMsg] = useState("");
   const [kind, setKind] = useState<"VACATION" | "OVERTIME">("VACATION");
   const [startDate, setStartDate] = useState("");
@@ -34,11 +59,46 @@ export function MyRequestsPage() {
   const [note, setNote] = useState("");
 
   async function load() {
-    const data = await api.myLeaves();
-    const sorted = [...data].sort((a, b) => {
+    const [leaves, special] = await Promise.all([api.myLeaves(), api.mySpecialWork()]);
+
+    const mappedLeaves: UnifiedMyRow[] = (leaves as MyLeaveRow[]).map((r) => ({
+      id: r.id,
+      source: "LEAVE",
+      status: r.status,
+      eventText: kindLabel(r.kind),
+      fromDate: r.startDate.slice(0, 10),
+      toDate: r.endDate.slice(0, 10),
+      requestedAtText: new Date(r.requestedAt).toLocaleString("de-DE"),
+      clockIn: "-",
+      clockOut: "-",
+      workedHoursText: "-",
+      requestNote: r.note || "-",
+      decisionNote: r.decisionNote || "-",
+      decidedByText: r.decidedBy ? `${r.decidedBy.name} (${r.decidedBy.loginName})` : "-",
+      decidedAtText: r.decidedAt ? new Date(r.decidedAt).toLocaleString("de-DE") : "-"
+    }));
+
+    const mappedSpecial: UnifiedMyRow[] = (special as SpecialWorkRequestRow[]).map((r) => ({
+      id: r.id,
+      source: "SPECIAL",
+      status: r.status,
+      eventText: r.eventType || "Sonderantrag",
+      fromDate: r.date,
+      toDate: "-",
+      requestedAtText: new Date(r.createdAt).toLocaleString("de-DE"),
+      clockIn: (r.clockInTimes || []).join(", ") || "-",
+      clockOut: (r.clockOutTimes || []).join(", ") || "-",
+      workedHoursText: `${(r.workedHours ?? 0).toFixed(2)} h`,
+      requestNote: "-",
+      decisionNote: r.note || "-",
+      decidedByText: r.decidedBy ? `${r.decidedBy.name} (${r.decidedBy.loginName})` : "-",
+      decidedAtText: r.decidedAt ? new Date(r.decidedAt).toLocaleString("de-DE") : "-"
+    }));
+
+    const sorted = [...mappedLeaves, ...mappedSpecial].sort((a, b) => {
       if (a.status === "SUBMITTED" && b.status !== "SUBMITTED") return -1;
       if (a.status !== "SUBMITTED" && b.status === "SUBMITTED") return 1;
-      return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+      return new Date(b.fromDate).getTime() - new Date(a.fromDate).getTime();
     });
     setRows(sorted);
   }
@@ -79,53 +139,53 @@ export function MyRequestsPage() {
       </div>
 
       <h4>Meine Antraege</h4>
-      <table>
-        <thead>
-          <tr>
-            <th>Status</th>
-            <th>Typ</th>
-            <th>Von</th>
-            <th>Bis</th>
-            <th>Antragsnotiz</th>
-            <th>Entscheidungsnotiz</th>
-            <th>Entscheider</th>
-            <th>Entscheidungsdatum</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr
-              key={r.id}
-              style={{
-                background:
-                  r.status === "APPROVED"
-                    ? "rgba(34,197,94,0.10)"
-                    : r.status === "REJECTED"
-                      ? "rgba(239,68,68,0.10)"
-                      : "rgba(245,158,11,0.10)"
-              }}
-            >
-              <td>
-                {r.status === "APPROVED" ? (
-                  <StatusBadge text="Genehmigt" color="var(--approved)" />
-                ) : r.status === "REJECTED" ? (
-                  <StatusBadge text="Abgelehnt" color="var(--rejected)" />
-                ) : (
-                  <StatusBadge text={statusLabel(r.status)} color="var(--warning)" />
-                )}
-              </td>
-              <td>{kindLabel(r.kind)}</td>
-              <td>{r.startDate.slice(0, 10)}</td>
-              <td>{r.endDate.slice(0, 10)}</td>
-              <td>{r.note || "-"}</td>
-              <td>{r.decisionNote || "-"}</td>
-              <td>{r.decidedBy ? `${r.decidedBy.name} (${r.decidedBy.loginName})` : "-"}</td>
-              <td>{r.decidedAt ? new Date(r.decidedAt).toLocaleString("de-DE") : "-"}</td>
+      <div className="admin-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Ereignis</th>
+              <th>Von/Datum</th>
+              <th>Bis</th>
+              <th>Kommen</th>
+              <th>Gehen</th>
+              <th>Gesamtstunden</th>
+              <th>Eingang</th>
+              <th>Antragsnotiz</th>
+              <th>Entscheidungsnotiz</th>
+              <th>Entscheider</th>
+              <th>Entscheidungsdatum</th>
             </tr>
-          ))}
-          {rows.length === 0 && <tr><td colSpan={8}>Keine Antraege vorhanden.</td></tr>}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={`${r.source}-${r.id}`} style={{ background: statusBg(r.status) }}>
+                <td>
+                  {r.status === "APPROVED" ? (
+                    <StatusBadge text="Genehmigt" color="var(--approved)" />
+                  ) : r.status === "REJECTED" ? (
+                    <StatusBadge text="Abgelehnt" color="var(--rejected)" />
+                  ) : (
+                    <StatusBadge text={statusLabel(r.status)} color="var(--warning)" />
+                  )}
+                </td>
+                <td>{r.eventText}</td>
+                <td>{r.fromDate}</td>
+                <td>{r.toDate}</td>
+                <td>{r.clockIn}</td>
+                <td>{r.clockOut}</td>
+                <td>{r.workedHoursText}</td>
+                <td>{r.requestedAtText}</td>
+                <td>{r.requestNote}</td>
+                <td>{r.decisionNote}</td>
+                <td>{r.decidedByText}</td>
+                <td>{r.decidedAtText}</td>
+              </tr>
+            ))}
+            {rows.length === 0 && <tr><td colSpan={12}>Keine Antraege vorhanden.</td></tr>}
+          </tbody>
+        </table>
+      </div>
       {msg && <div className="error" style={{ marginTop: 10 }}>{msg}</div>}
     </div>
   );

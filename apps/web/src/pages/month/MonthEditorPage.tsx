@@ -191,7 +191,7 @@ export function MonthEditorPage() {
                                       note: "Berufsschule",
                                       events: [
                                         { type: "CLOCK_IN", time: "08:00" },
-                                        { type: "CLOCK_OUT", time: "16:30" }
+                                        { type: "CLOCK_OUT", time: "16:00" }
                                       ]
                                     });
                                     const mv = await loadMonth();
