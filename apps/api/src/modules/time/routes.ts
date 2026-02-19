@@ -5,7 +5,7 @@ import { prisma } from "../../db/prisma.js";
 import { AuthRequest, requireAuth, requireRole } from "../../utils/auth.js";
 import { dayKey, isWeekend } from "../../utils/date.js";
 import { resolveActorLoginName, writeAuditLog } from "../../utils/audit.js";
-import { getSupervisorEmails, sendEventMail, sendMailIfEnabled } from "../../utils/mail.js";
+import { getSupervisorEmails, sendEventMail, sendMailIfEnabled, sendMailStrict } from "../../utils/mail.js";
 
 export const timeRouter = Router();
 
@@ -1177,6 +1177,122 @@ timeRouter.get("/month/:userId", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SU
     });
   }
   res.json({ year, month, dailyHours, monthPlanned: Number(monthPlanned.toFixed(2)), monthWorked: Number(monthWorked.toFixed(2)), days });
+});
+
+const monthMailSchema = z.object({
+  userId: z.string().min(1),
+  year: z.number().int().min(2000).max(2100),
+  month: z.number().int().min(1).max(12),
+  recipient: z.enum(["SELF", "EMPLOYEE"]).optional().default("SELF")
+});
+
+timeRouter.post("/month/send-mail", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+  const parsed = monthMailSchema.safeParse(req.body);
+  if (!parsed.success || !req.auth) {
+    res.status(400).json({ message: "Ungueltige Eingaben." });
+    return;
+  }
+
+  const { userId, year, month, recipient } = parsed.data;
+  if ((req.auth.role === Role.EMPLOYEE || req.auth.role === Role.AZUBI) && req.auth.userId !== userId) {
+    res.status(403).json({ message: "Keine Berechtigung." });
+    return;
+  }
+  if ((req.auth.role === Role.EMPLOYEE || req.auth.role === Role.AZUBI) && recipient !== "SELF") {
+    res.status(403).json({ message: "Mitarbeiter duerfen nur an die eigene E-Mail senden." });
+    return;
+  }
+
+  const monthStart = new Date(Date.UTC(year, month - 1, 1));
+  const monthEnd = new Date(Date.UTC(year, month, 0, 23, 59, 59));
+
+  const [config, targetUser, actorUser, holidays, entries, approvals, sickLeaves, credits] = await Promise.all([
+    prisma.systemConfig.findUnique({ where: { id: 1 } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { id: true, name: true, email: true, dailyWorkHours: true, timeTrackingEnabled: true } }),
+    prisma.user.findUnique({ where: { id: req.auth.userId }, select: { id: true, name: true, email: true } }),
+    prisma.holiday.findMany({ where: { date: { gte: monthStart, lte: monthEnd } } }),
+    prisma.timeEntry.findMany({ where: { userId, occurredAt: { gte: monthStart, lte: monthEnd } }, orderBy: { occurredAt: "asc" } }),
+    prisma.specialWorkApproval.findMany({ where: { userId, date: { gte: monthStart, lte: monthEnd } } }),
+    prisma.sickLeave.findMany({ where: { userId, startDate: { lte: monthEnd }, endDate: { gte: monthStart } } }),
+    prisma.breakCredit.findMany({ where: { userId, date: { gte: monthStart, lte: monthEnd } } })
+  ]);
+
+  if (!targetUser) {
+    res.status(404).json({ message: "Mitarbeiter nicht gefunden." });
+    return;
+  }
+
+  const recipientMail = recipient === "EMPLOYEE" ? targetUser.email : actorUser?.email;
+  if (!recipientMail) {
+    res.status(400).json({ message: "Keine E-Mailadresse fuer den Versand vorhanden." });
+    return;
+  }
+
+  const dailyHours = targetUser.dailyWorkHours ?? config?.defaultDailyHours ?? 8;
+  const workingDays = parseWorkingDaySet(config?.defaultWeeklyWorkingDays);
+  const holidaySet = new Set(holidays.map((h) => dayKey(h.date)));
+  const approvalByDay = new Map(approvals.map((a) => [dayKey(a.date), a.status]));
+  const creditByDay = new Map<string, number>();
+  for (const c of credits) {
+    const key = dayKey(c.date);
+    creditByDay.set(key, (creditByDay.get(key) ?? 0) + c.minutes);
+  }
+  const breakMinutes = config?.autoBreakMinutes ?? 30;
+  const breakAfterHours = config?.autoBreakAfterHours ?? 6;
+  const grossByDay = buildGrossMinutesByStartDay(entries.map((e) => ({ type: e.type, occurredAt: e.occurredAt })));
+  const byDay = new Map<string, typeof entries>();
+  for (const e of entries) {
+    const key = dayKey(e.occurredAt);
+    const list = byDay.get(key) ?? [];
+    list.push(e);
+    byDay.set(key, list);
+  }
+
+  let monthPlanned = 0;
+  let monthWorked = 0;
+  const lines: string[] = [];
+  lines.push(`Monatsbericht ${String(month).padStart(2, "0")}/${year}`);
+  lines.push(`Mitarbeiter: ${targetUser.name}`);
+  lines.push("");
+  lines.push("Datum | Soll | Ist | Buchungen");
+  lines.push("----------------------------------------------");
+  for (let d = 1; d <= monthEnd.getUTCDate(); d += 1) {
+    const date = new Date(Date.UTC(year, month - 1, d));
+    const key = dayKey(date);
+    const dayEntries = (byDay.get(key) ?? []).sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
+    const isHoliday = holidaySet.has(key);
+    const weekend = isWeekend(date);
+    const planned = workingDays.has(date.getUTCDay()) && !isHoliday ? dailyHours : 0;
+    const isSick = planned > 0 && sickLeaves.some((s) => isDateWithinRange(date, s.startDate, s.endDate));
+    const sickHours = isSick ? planned : 0;
+    const grossMin = grossByDay.minutesByDay.get(key) ?? 0;
+    const autoBreakApplies = grossMin >= breakAfterHours * 60;
+    const dayCredit = creditByDay.get(key) ?? 0;
+    const netMinutes = Math.max(grossMin - (autoBreakApplies ? breakMinutes : 0) + dayCredit, 0);
+    const approvalStatus = approvalByDay.get(key) ?? null;
+    const requiresApproval = isHoliday || weekend || ((config?.requireApprovalForCrossMidnight ?? true) && grossByDay.crossMidnightStartDays.has(key));
+    const schoolDay = dayEntries.some((e) => isSchoolEntry({ reasonText: e.reasonText, correctionComment: e.correctionComment }));
+    const workedRaw = schoolDay ? 8 : Number((netMinutes / 60).toFixed(2));
+    const workedEffective = requiresApproval && approvalStatus !== ApprovalStatus.APPROVED ? 0 : workedRaw;
+    const worked = targetUser.timeTrackingEnabled === false
+      ? Number(planned.toFixed(2))
+      : Number((sickHours > 0 ? sickHours : workedEffective).toFixed(2));
+    monthPlanned += planned;
+    monthWorked += worked;
+    const bookings = dayEntries.map((e) => `${e.type === "CLOCK_IN" ? "K" : "G"} ${e.occurredAt.toISOString().slice(11, 16)}`).join(", ");
+    lines.push(`${key} | ${planned.toFixed(2)} | ${worked.toFixed(2)} | ${bookings || "-"}`);
+  }
+  lines.push("----------------------------------------------");
+  lines.push(`Monat Sollstunden: ${monthPlanned.toFixed(2)} h`);
+  lines.push(`Monat Iststunden: ${monthWorked.toFixed(2)} h`);
+
+  await sendMailStrict({
+    to: recipientMail,
+    subject: `Monatsbericht ${String(month).padStart(2, "0")}/${year} - ${targetUser.name}`,
+    text: lines.join("\n")
+  });
+
+  res.json({ ok: true, sentTo: recipientMail });
 });
 
 function calculateWorkedMinutes(entries: { type: TimeEntryType; occurredAt: Date }[]): number {

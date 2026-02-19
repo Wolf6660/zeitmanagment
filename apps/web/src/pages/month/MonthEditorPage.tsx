@@ -48,6 +48,30 @@ export function MonthEditorPage() {
         <input type="number" value={monthYear} onChange={(e) => setMonthYear(Number(e.target.value))} style={{ maxWidth: 120 }} />
         <input type="number" min={1} max={12} value={monthNum} onChange={(e) => setMonthNum(Number(e.target.value))} style={{ maxWidth: 90 }} />
         <button className="secondary" type="button" onClick={() => loadMonth()}>Laden</button>
+        <button
+          className="secondary"
+          type="button"
+          onClick={() => {
+            window.print();
+          }}
+        >
+          PDF exportieren
+        </button>
+        <button
+          className="secondary"
+          type="button"
+          onClick={async () => {
+            try {
+              if (!monthUserId) { setMsg("Bitte Mitarbeiter auswaehlen."); return; }
+              await api.sendMonthReportMail({ userId: monthUserId, year: monthYear, month: monthNum, recipient: "SELF" });
+              setMsg("Monatsbericht per E-Mail versendet.");
+            } catch (e) {
+              setMsg((e as Error).message);
+            }
+          }}
+        >
+          Per Mail senden
+        </button>
       </div>
 
       {monthView && (

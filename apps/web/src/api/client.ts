@@ -139,6 +139,12 @@ export const api = {
       }>;
     }>(`/api/time/month/${userId}?year=${year}&month=${month}`),
 
+  sendMonthReportMail: (payload: { userId: string; year: number; month: number; recipient?: "SELF" | "EMPLOYEE" }) =>
+    request<{ ok: boolean; sentTo: string }>("/api/time/month/send-mail", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+
   dayOverrideSelf: (payload: { date: string; note: string; events: Array<{ type: "CLOCK_IN" | "CLOCK_OUT"; time: string }> }) =>
     request("/api/time/day-override-self", { method: "POST", body: JSON.stringify(payload) }),
 
