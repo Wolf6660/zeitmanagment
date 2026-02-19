@@ -512,5 +512,11 @@ export const api = {
     }),
 
   adminBackupExport: (mode: "FULL" | "SETTINGS_ONLY" | "EMPLOYEES_TIMES_ONLY" = "FULL") =>
-    request<Record<string, unknown>>(`/api/admin/backup/export?mode=${mode}`)
+    request<Record<string, unknown>>(`/api/admin/backup/export?mode=${mode}`),
+
+  adminBackupImport: (payload: { companyNameConfirmation: string; backup: Record<string, unknown> }) =>
+    request<{ ok: boolean; imported: string[] }>("/api/admin/backup/import", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    })
 };

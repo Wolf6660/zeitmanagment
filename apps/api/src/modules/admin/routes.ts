@@ -349,6 +349,173 @@ adminRouter.get("/backup/export", async (req: AuthRequest, res) => {
   });
 });
 
+const backupImportSchema = z.object({
+  companyNameConfirmation: z.string().min(1),
+  backup: z.record(z.any())
+});
+
+function normalizeRowDates(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(row)) {
+    if (typeof value === "string" && (key.endsWith("At") || key.toLowerCase().endsWith("date"))) {
+      out[key] = new Date(value);
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
+adminRouter.post("/backup/import", async (req: AuthRequest, res) => {
+  const parsed = backupImportSchema.safeParse(req.body);
+  if (!parsed.success || !req.auth) {
+    res.status(400).json({ message: "Ungueltige Eingaben." });
+    return;
+  }
+
+  const cfg = await prisma.systemConfig.findUnique({ where: { id: 1 }, select: { companyName: true } });
+  const expected = (cfg?.companyName || "").trim();
+  if (!expected || parsed.data.companyNameConfirmation.trim() !== expected) {
+    res.status(400).json({ message: "Bestaetigung fehlgeschlagen: Firmenname stimmt nicht ueberein." });
+    return;
+  }
+
+  const backup = parsed.data.backup as { data?: Record<string, unknown> };
+  const data = backup.data;
+  if (!data || typeof data !== "object") {
+    res.status(400).json({ message: "Backup-Format ungueltig (data fehlt)." });
+    return;
+  }
+
+  const toRows = (key: string): Array<Record<string, unknown>> => {
+    const v = data[key];
+    if (!v) return [];
+    if (Array.isArray(v)) return v.filter((x) => x && typeof x === "object") as Array<Record<string, unknown>>;
+    if (typeof v === "object") return [v as Record<string, unknown>];
+    return [];
+  };
+
+  const rowsConfig = toRows("config");
+  const rowsUsers = toRows("users");
+  const rowsHolidays = toRows("holidays");
+  const rowsDropdown = toRows("dropdownOptions");
+  const rowsTerminals = toRows("terminals");
+  const rowsTimeEntries = toRows("timeEntries");
+  const rowsLeaveRequests = toRows("leaveRequests");
+  const rowsSickLeaves = toRows("sickLeaves");
+  const rowsBreakCredits = toRows("breakCredits");
+  const rowsBreakCreditRequests = toRows("breakCreditRequests");
+  const rowsSpecialApprovals = toRows("specialWorkApprovals");
+  const rowsOvertimeAdjustments = toRows("overtimeAdjustments");
+
+  const importKeys = [
+    rowsConfig.length ? "config" : "",
+    rowsUsers.length ? "users" : "",
+    rowsHolidays.length ? "holidays" : "",
+    rowsDropdown.length ? "dropdownOptions" : "",
+    rowsTerminals.length ? "terminals" : "",
+    rowsTimeEntries.length ? "timeEntries" : "",
+    rowsLeaveRequests.length ? "leaveRequests" : "",
+    rowsSickLeaves.length ? "sickLeaves" : "",
+    rowsBreakCredits.length ? "breakCredits" : "",
+    rowsBreakCreditRequests.length ? "breakCreditRequests" : "",
+    rowsSpecialApprovals.length ? "specialWorkApprovals" : "",
+    rowsOvertimeAdjustments.length ? "overtimeAdjustments" : ""
+  ].filter(Boolean);
+
+  if (importKeys.length === 0) {
+    res.status(400).json({ message: "Backup enthaelt keine importierbaren Daten." });
+    return;
+  }
+
+  await prisma.$transaction(async (tx) => {
+    // Delete existing data for all provided categories.
+    if (
+      rowsUsers.length ||
+      rowsTimeEntries.length ||
+      rowsLeaveRequests.length ||
+      rowsSickLeaves.length ||
+      rowsBreakCredits.length ||
+      rowsBreakCreditRequests.length ||
+      rowsSpecialApprovals.length ||
+      rowsOvertimeAdjustments.length
+    ) {
+      await tx.breakCredit.deleteMany({});
+      await tx.breakCreditRequest.deleteMany({});
+      await tx.specialWorkApproval.deleteMany({});
+      await tx.timeEntry.deleteMany({});
+      await tx.sickLeave.deleteMany({});
+      await tx.leaveRequest.deleteMany({});
+      await tx.overtimeAdjustment.deleteMany({});
+      await tx.vacationBalance.deleteMany({});
+    }
+    if (rowsUsers.length) {
+      await tx.user.deleteMany({});
+    }
+    if (rowsDropdown.length) {
+      await tx.dropdownOption.deleteMany({});
+    }
+    if (rowsHolidays.length) {
+      await tx.holiday.deleteMany({});
+    }
+    if (rowsTerminals.length) {
+      await tx.rfidTerminal.deleteMany({});
+    }
+    if (rowsConfig.length) {
+      await tx.systemConfig.deleteMany({});
+    }
+
+    // Reinsert in FK-safe order.
+    if (rowsConfig.length) {
+      await tx.systemConfig.createMany({ data: rowsConfig.map((r) => normalizeRowDates(r)) as any[] });
+    }
+    if (rowsUsers.length) {
+      await tx.user.createMany({ data: rowsUsers.map((r) => normalizeRowDates(r)) as any[] });
+    }
+    if (rowsHolidays.length) {
+      await tx.holiday.createMany({ data: rowsHolidays.map((r) => normalizeRowDates(r)) as any[] });
+    }
+    if (rowsDropdown.length) {
+      await tx.dropdownOption.createMany({ data: rowsDropdown.map((r) => normalizeRowDates(r)) as any[] });
+    }
+    if (rowsTerminals.length) {
+      await tx.rfidTerminal.createMany({ data: rowsTerminals.map((r) => normalizeRowDates(r)) as any[] });
+    }
+    if (rowsTimeEntries.length) {
+      await tx.timeEntry.createMany({ data: rowsTimeEntries.map((r) => normalizeRowDates(r)) as any[] });
+    }
+    if (rowsLeaveRequests.length) {
+      await tx.leaveRequest.createMany({ data: rowsLeaveRequests.map((r) => normalizeRowDates(r)) as any[] });
+    }
+    if (rowsSickLeaves.length) {
+      await tx.sickLeave.createMany({ data: rowsSickLeaves.map((r) => normalizeRowDates(r)) as any[] });
+    }
+    if (rowsBreakCredits.length) {
+      await tx.breakCredit.createMany({ data: rowsBreakCredits.map((r) => normalizeRowDates(r)) as any[] });
+    }
+    if (rowsBreakCreditRequests.length) {
+      await tx.breakCreditRequest.createMany({ data: rowsBreakCreditRequests.map((r) => normalizeRowDates(r)) as any[] });
+    }
+    if (rowsSpecialApprovals.length) {
+      await tx.specialWorkApproval.createMany({ data: rowsSpecialApprovals.map((r) => normalizeRowDates(r)) as any[] });
+    }
+    if (rowsOvertimeAdjustments.length) {
+      await tx.overtimeAdjustment.createMany({ data: rowsOvertimeAdjustments.map((r) => normalizeRowDates(r)) as any[] });
+    }
+  });
+
+  await writeAuditLog({
+    actorUserId: req.auth.userId,
+    actorLoginName: await resolveActorLoginName(req.auth.userId),
+    action: "BACKUP_IMPORTED",
+    targetType: "System",
+    targetId: "backup",
+    payload: { imported: importKeys }
+  });
+
+  res.json({ ok: true, imported: importKeys });
+});
+
 const holidaySchema = z.object({
   date: z.coerce.date(),
   name: z.string().min(1)

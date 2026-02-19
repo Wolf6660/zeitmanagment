@@ -208,6 +208,8 @@ export function AdminHome() {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [msg, setMsg] = useState("");
   const [resetConfirmName, setResetConfirmName] = useState("");
+  const [backupImportFile, setBackupImportFile] = useState<File | null>(null);
+  const [backupImportConfirmName, setBackupImportConfirmName] = useState("");
   const session = getSession();
 
   const [otUserId, setOtUserId] = useState("");
@@ -469,165 +471,204 @@ export function AdminHome() {
       )}
 
       {section === "system" && (
-        <div className="card admin-section-card admin-uniform" style={{ padding: 12 }}>
-          <h4>Backup</h4>
-          <div style={{ color: "var(--muted)", marginBottom: 8 }}>
-            Backup-Dateien werden als JSON heruntergeladen.
-          </div>
-          <div className="row" style={{ marginTop: 8 }}>
-            <button
-              className="secondary"
-              onClick={async () => {
-                try {
-                  const payload = await api.adminBackupExport("FULL");
-                  const raw = JSON.stringify(payload, null, 2);
-                  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-                  const blob = new Blob([raw], { type: "application/json" });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = `zeitmanagment-backup-komplett-${stamp}.json`;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                  setMsg("Komplettes Backup exportiert.");
-                } catch (e) {
-                  setMsg((e as Error).message);
-                }
-              }}
-            >
-              Komplettes Backup
-            </button>
-            <button
-              className="secondary"
-              onClick={async () => {
-                try {
-                  const payload = await api.adminBackupExport("SETTINGS_ONLY");
-                  const raw = JSON.stringify(payload, null, 2);
-                  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-                  const blob = new Blob([raw], { type: "application/json" });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = `zeitmanagment-backup-einstellungen-${stamp}.json`;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                  setMsg("Backup nur Einstellungen exportiert.");
-                } catch (e) {
-                  setMsg((e as Error).message);
-                }
-              }}
-            >
-              Nur Einstellungen sichern
-            </button>
-            <button
-              className="secondary"
-              onClick={async () => {
-                try {
-                  const payload = await api.adminBackupExport("EMPLOYEES_TIMES_ONLY");
-                  const raw = JSON.stringify(payload, null, 2);
-                  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-                  const blob = new Blob([raw], { type: "application/json" });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = `zeitmanagment-backup-mitarbeiter-zeiten-${stamp}.json`;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                  setMsg("Backup nur Mitarbeiter und Zeiten exportiert.");
-                } catch (e) {
-                  setMsg((e as Error).message);
-                }
-              }}
-            >
-              Nur Mitarbeiter und Zeiten sichern
-            </button>
+        <>
+          <div className="card admin-section-card admin-uniform" style={{ padding: 12 }}>
+            <h4>Backup</h4>
+            <div style={{ color: "var(--muted)", marginBottom: 8 }}>
+              Backup-Dateien werden als JSON heruntergeladen.
+            </div>
+            <div className="row" style={{ marginTop: 8 }}>
+              <button
+                className="secondary"
+                onClick={async () => {
+                  try {
+                    const payload = await api.adminBackupExport("FULL");
+                    const raw = JSON.stringify(payload, null, 2);
+                    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+                    const blob = new Blob([raw], { type: "application/json" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `zeitmanagment-backup-komplett-${stamp}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    setMsg("Komplettes Backup exportiert.");
+                  } catch (e) {
+                    setMsg((e as Error).message);
+                  }
+                }}
+              >
+                Komplettes Backup
+              </button>
+              <button
+                className="secondary"
+                onClick={async () => {
+                  try {
+                    const payload = await api.adminBackupExport("SETTINGS_ONLY");
+                    const raw = JSON.stringify(payload, null, 2);
+                    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+                    const blob = new Blob([raw], { type: "application/json" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `zeitmanagment-backup-einstellungen-${stamp}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    setMsg("Backup nur Einstellungen exportiert.");
+                  } catch (e) {
+                    setMsg((e as Error).message);
+                  }
+                }}
+              >
+                Nur Einstellungen sichern
+              </button>
+              <button
+                className="secondary"
+                onClick={async () => {
+                  try {
+                    const payload = await api.adminBackupExport("EMPLOYEES_TIMES_ONLY");
+                    const raw = JSON.stringify(payload, null, 2);
+                    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+                    const blob = new Blob([raw], { type: "application/json" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `zeitmanagment-backup-mitarbeiter-zeiten-${stamp}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    setMsg("Backup nur Mitarbeiter und Zeiten exportiert.");
+                  } catch (e) {
+                    setMsg((e as Error).message);
+                  }
+                }}
+              >
+                Nur Mitarbeiter und Zeiten sichern
+              </button>
+            </div>
+            <div className="grid" style={{ marginTop: 12 }}>
+              <label>
+                Backup-Datei einspielen (JSON)
+                <input type="file" accept="application/json,.json" onChange={(e) => setBackupImportFile(e.target.files?.[0] ?? null)} />
+              </label>
+              <label>
+                Firmenname zur Bestaetigung
+                <input value={backupImportConfirmName} onChange={(e) => setBackupImportConfirmName(e.target.value)} />
+              </label>
+              <div className="row">
+                <button
+                  className="secondary"
+                  onClick={async () => {
+                    try {
+                      if (!backupImportFile) {
+                        setMsg("Bitte eine Backup-Datei auswaehlen.");
+                        return;
+                      }
+                      const raw = await backupImportFile.text();
+                      const parsed = JSON.parse(raw) as Record<string, unknown>;
+                      await api.adminBackupImport({
+                        companyNameConfirmation: backupImportConfirmName,
+                        backup: parsed
+                      });
+                      setMsg("Backup erfolgreich eingespielt.");
+                      await loadData();
+                    } catch (e) {
+                      setMsg((e as Error).message);
+                    }
+                  }}
+                >
+                  Backup einspielen
+                </button>
+              </div>
+            </div>
           </div>
 
-          <h4 style={{ marginTop: 16 }}>Daten loeschen</h4>
-          <div style={{ color: "var(--muted)", marginBottom: 8 }}>
-            Zum Schutz muss der exakte Firmenname eingetragen werden: <strong>{config.companyName}</strong>
-          </div>
-          <label>
-            Firmenname zur Bestaetigung
-            <input value={resetConfirmName} onChange={(e) => setResetConfirmName(e.target.value)} />
-          </label>
-          <div className="row" style={{ marginTop: 12 }}>
-            <button
-              className="warn"
-              onClick={async () => {
-                try {
-                  const ok = window.confirm("Wirklich NUR Zeiten/Antraege loeschen?");
-                  if (!ok) return;
-                  const result = await api.adminSystemReset({
-                    mode: "TIMES_ONLY",
-                    companyNameConfirmation: resetConfirmName
-                  });
-                  setMsg(`Zeiten geloescht (${Object.values(result.deleted || {}).reduce((a, b) => a + b, 0)} Eintraege).`);
-                  await loadData();
-                } catch (e) {
-                  setMsg((e as Error).message);
-                }
-              }}
-            >
-              Zeiten loeschen
-            </button>
-            <button
-              className="warn"
-              onClick={async () => {
-                try {
-                  const ok = window.confirm("Wirklich Mitarbeiter + Zeiten loeschen (Einstellungen bleiben)?");
-                  if (!ok) return;
-                  const result = await api.adminSystemReset({
-                    mode: "EMPLOYEES_AND_TIMES_KEEP_SETTINGS",
-                    companyNameConfirmation: resetConfirmName
-                  });
-                  setMsg(`Mitarbeiter + Zeiten geloescht (${Object.values(result.deleted || {}).reduce((a, b) => a + b, 0)} Eintraege).`);
-                  await loadData();
-                } catch (e) {
-                  setMsg((e as Error).message);
-                }
-              }}
-            >
-              Mitarbeiter + Zeiten loeschen
-            </button>
-            <button
-              className="warn"
-              onClick={async () => {
-                try {
-                  const ok = window.confirm("Wirklich ALLES loeschen und neu initialisieren?");
-                  if (!ok) return;
-                  const result = await api.adminSystemReset({
-                    mode: "FULL",
-                    companyNameConfirmation: resetConfirmName
-                  });
-                  setMsg(`System vollstaendig zurueckgesetzt (${Object.values(result.deleted || {}).reduce((a, b) => a + b, 0)} Eintraege geloescht).`);
-                  await loadData();
-                } catch (e) {
-                  setMsg((e as Error).message);
-                }
-              }}
-            >
-              Werkseinstellungen
-            </button>
-          </div>
-          <div className="grid" style={{ marginTop: 12 }}>
-            <div className="card" style={{ padding: 10 }}>
-              <strong>Zeiten loeschen</strong>
-              <div>Loescht alle Zeitdaten bei allen Mitarbeitern: Kommen/Gehen, Krank, Urlaub/AZ-Antraege, Pausengutschrift, Sonderfreigaben, Ueberstundenbuchungen.</div>
-              <div>Einstellungen, Mitarbeiter, Vorgesetzte und Admins bleiben erhalten.</div>
+          <div className="card admin-section-card admin-uniform" style={{ padding: 12, marginTop: 12 }}>
+            <h4>Daten loeschen</h4>
+            <div style={{ color: "var(--muted)", marginBottom: 8 }}>
+              Zum Schutz muss der exakte Firmenname eingetragen werden: <strong>{config.companyName}</strong>
             </div>
-            <div className="card" style={{ padding: 10 }}>
-              <strong>Mitarbeiter + Zeiten loeschen</strong>
-              <div>Loescht alle Zeitdaten und alle Mitarbeiter (außer Admin-Benutzer).</div>
-              <div>Firmeneinstellungen, Farben, Regeln, Mail-Setup und Systemparameter bleiben erhalten.</div>
+            <label>
+              Firmenname zur Bestaetigung
+              <input value={resetConfirmName} onChange={(e) => setResetConfirmName(e.target.value)} />
+            </label>
+            <div className="row" style={{ marginTop: 12 }}>
+              <button
+                className="warn"
+                onClick={async () => {
+                  try {
+                    const ok = window.confirm("Wirklich NUR Zeiten/Antraege loeschen?");
+                    if (!ok) return;
+                    const result = await api.adminSystemReset({
+                      mode: "TIMES_ONLY",
+                      companyNameConfirmation: resetConfirmName
+                    });
+                    setMsg(`Zeiten geloescht (${Object.values(result.deleted || {}).reduce((a, b) => a + b, 0)} Eintraege).`);
+                    await loadData();
+                  } catch (e) {
+                    setMsg((e as Error).message);
+                  }
+                }}
+              >
+                Zeiten loeschen
+              </button>
+              <button
+                className="warn"
+                onClick={async () => {
+                  try {
+                    const ok = window.confirm("Wirklich Mitarbeiter + Zeiten loeschen (Einstellungen bleiben)?");
+                    if (!ok) return;
+                    const result = await api.adminSystemReset({
+                      mode: "EMPLOYEES_AND_TIMES_KEEP_SETTINGS",
+                      companyNameConfirmation: resetConfirmName
+                    });
+                    setMsg(`Mitarbeiter + Zeiten geloescht (${Object.values(result.deleted || {}).reduce((a, b) => a + b, 0)} Eintraege).`);
+                    await loadData();
+                  } catch (e) {
+                    setMsg((e as Error).message);
+                  }
+                }}
+              >
+                Mitarbeiter + Zeiten loeschen
+              </button>
+              <button
+                className="warn"
+                onClick={async () => {
+                  try {
+                    const ok = window.confirm("Wirklich ALLES loeschen und neu initialisieren?");
+                    if (!ok) return;
+                    const result = await api.adminSystemReset({
+                      mode: "FULL",
+                      companyNameConfirmation: resetConfirmName
+                    });
+                    setMsg(`System vollstaendig zurueckgesetzt (${Object.values(result.deleted || {}).reduce((a, b) => a + b, 0)} Eintraege geloescht).`);
+                    await loadData();
+                  } catch (e) {
+                    setMsg((e as Error).message);
+                  }
+                }}
+              >
+                Werkseinstellungen
+              </button>
             </div>
-            <div className="card" style={{ padding: 10 }}>
-              <strong>Werkseinstellungen</strong>
-              <div>Loescht alle Daten inkl. Einstellungen, Benutzer, Mitarbeiter, Feiertage, RFID und Logs und initialisiert das System neu.</div>
-              <div>Danach wird das System mit Standarddaten/Default-Admin aus der Umgebung neu angelegt.</div>
+            <div className="grid" style={{ marginTop: 12 }}>
+              <div className="card" style={{ padding: 10 }}>
+                <strong>Zeiten loeschen</strong>
+                <div>Loescht alle Zeitdaten bei allen Mitarbeitern: Kommen/Gehen, Krank, Urlaub/AZ-Antraege, Pausengutschrift, Sonderfreigaben, Ueberstundenbuchungen.</div>
+                <div>Einstellungen, Mitarbeiter, Vorgesetzte und Admins bleiben erhalten.</div>
+              </div>
+              <div className="card" style={{ padding: 10 }}>
+                <strong>Mitarbeiter + Zeiten loeschen</strong>
+                <div>Loescht alle Zeitdaten und alle Mitarbeiter (außer Admin-Benutzer).</div>
+                <div>Firmeneinstellungen, Farben, Regeln, Mail-Setup und Systemparameter bleiben erhalten.</div>
+              </div>
+              <div className="card" style={{ padding: 10 }}>
+                <strong>Werkseinstellungen</strong>
+                <div>Loescht alle Daten inkl. Einstellungen, Benutzer, Mitarbeiter, Feiertage, RFID und Logs und initialisiert das System neu.</div>
+                <div>Danach wird das System mit Standarddaten/Default-Admin aus der Umgebung neu angelegt.</div>
+              </div>
             </div>
           </div>
-        </div>
+        </>
       )}
 
       {section === "colors" && (
