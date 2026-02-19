@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../../api/client";
+import { printMonthReport } from "./printReport";
 
 export function MonthEditorPage() {
   const now = new Date();
@@ -51,8 +52,14 @@ export function MonthEditorPage() {
         <button
           className="secondary"
           type="button"
-          onClick={() => {
-            window.print();
+          onClick={async () => {
+            try {
+              if (!monthUserId) { setMsg("Bitte Mitarbeiter auswaehlen."); return; }
+              const report = await api.monthReport(monthUserId, monthYear, monthNum);
+              printMonthReport(report);
+            } catch (e) {
+              setMsg((e as Error).message);
+            }
           }}
         >
           PDF exportieren

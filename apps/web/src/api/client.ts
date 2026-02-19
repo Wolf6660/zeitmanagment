@@ -44,6 +44,31 @@ export type BreakCreditRequestRow = {
   decidedBy?: { id: string; name: string; loginName: string } | null;
 };
 
+export type MonthReportRow = {
+  date: string;
+  clockIn: string;
+  clockOut: string;
+  plannedHours: number | null;
+  workedHours: number | null;
+  pauseMinutes: number | null;
+  note: string;
+  isContinuation: boolean;
+  isDayTotalRow: boolean;
+};
+
+export type MonthReport = {
+  year: number;
+  month: number;
+  monthLabel: string;
+  companyName: string;
+  companyLogoUrl?: string | null;
+  employeeName: string;
+  rows: MonthReportRow[];
+  totals: { plannedHours: number; workedHours: number };
+  vacation: { availableDays: number; plannedFutureDays: number };
+  overtime: { monthStartHours: number; monthEndHours: number };
+};
+
 export function getSession(): Session | null {
   const raw = localStorage.getItem("zm_session");
   if (!raw) return null;
@@ -138,6 +163,9 @@ export const api = {
         entries: Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; time: string; source: string; reasonText?: string }>;
       }>;
     }>(`/api/time/month/${userId}?year=${year}&month=${month}`),
+
+  monthReport: (userId: string, year: number, month: number) =>
+    request<MonthReport>(`/api/time/month-report/${userId}?year=${year}&month=${month}`),
 
   sendMonthReportMail: (payload: { userId: string; year: number; month: number; recipient?: "SELF" | "EMPLOYEE" }) =>
     request<{ ok: boolean; sentTo: string }>("/api/time/month/send-mail", {

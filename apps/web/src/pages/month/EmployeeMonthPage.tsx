@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api, getSession } from "../../api/client";
+import { printMonthReport } from "./printReport";
 
 export function EmployeeMonthPage() {
   const session = getSession();
@@ -34,8 +35,13 @@ export function EmployeeMonthPage() {
         <button className="secondary" onClick={() => load()}>Laden</button>
         <button
           className="secondary"
-          onClick={() => {
-            window.print();
+          onClick={async () => {
+            try {
+              const report = await api.monthReport(session.user.id, monthYear, monthNum);
+              printMonthReport(report);
+            } catch (e) {
+              setMsg((e as Error).message);
+            }
           }}
         >
           PDF exportieren

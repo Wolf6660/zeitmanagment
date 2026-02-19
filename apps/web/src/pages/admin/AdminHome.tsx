@@ -1179,12 +1179,24 @@ export function AdminHome() {
         <div className="grid admin-section">
           <div className="card admin-section-card admin-uniform" style={{ padding: 12 }}>
             <h4>Neuen Mitarbeiter anlegen</h4>
-            <div className="grid">
-              <input placeholder="Name" value={newEmployee.name} onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })} />
-              <input placeholder="E-Mail" value={newEmployee.email} onChange={(e) => setNewEmployee({ ...newEmployee, email: e.target.value })} />
-              <input placeholder="Loginname" value={newEmployee.loginName} onChange={(e) => setNewEmployee({ ...newEmployee, loginName: e.target.value })} />
-              <input placeholder="Passwort" type="password" value={newEmployee.password} onChange={(e) => setNewEmployee({ ...newEmployee, password: e.target.value })} />
-              <div style={{ color: "var(--muted)", fontSize: 12 }}>Passwort: mindestens 8 Zeichen und mindestens eine Zahl oder ein Sonderzeichen.</div>
+            <div className="grid admin-uniform">
+              <label>
+                Name
+                <input placeholder="Name" value={newEmployee.name} onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })} />
+              </label>
+              <label>
+                E-Mail
+                <input placeholder="E-Mail" value={newEmployee.email} onChange={(e) => setNewEmployee({ ...newEmployee, email: e.target.value })} />
+              </label>
+              <label>
+                Loginname
+                <input placeholder="Loginname" value={newEmployee.loginName} onChange={(e) => setNewEmployee({ ...newEmployee, loginName: e.target.value })} />
+              </label>
+              <label>
+                Passwort
+                <input placeholder="Passwort" type="password" value={newEmployee.password} onChange={(e) => setNewEmployee({ ...newEmployee, password: e.target.value })} />
+              </label>
+              <div style={{ gridColumn: "1 / -1", color: "var(--muted)", fontSize: 12 }}>Passwort: mindestens 8 Zeichen und mindestens eine Zahl oder ein Sonderzeichen.</div>
               <label>
                 Rolle
                 <select value={newEmployee.role} onChange={(e) => setNewEmployee({ ...newEmployee, role: e.target.value as "EMPLOYEE" | "AZUBI" | "SUPERVISOR" | "ADMIN" })}>
@@ -1204,7 +1216,7 @@ export function AdminHome() {
                   <option value="no">Nein</option>
                 </select>
               </label>
-              <div style={{ color: "var(--muted)", fontSize: 12 }}>E-Mail ist nur Pflicht, wenn Mailbenachrichtigung = Ja.</div>
+              <div style={{ gridColumn: "1 / -1", color: "var(--muted)", fontSize: 12 }}>E-Mail ist nur Pflicht, wenn Mailbenachrichtigung = Ja.</div>
               <label>
                 Jahresurlaub (Tage)
                 <input

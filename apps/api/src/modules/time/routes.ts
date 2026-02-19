@@ -1179,6 +1179,229 @@ timeRouter.get("/month/:userId", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SU
   res.json({ year, month, dailyHours, monthPlanned: Number(monthPlanned.toFixed(2)), monthWorked: Number(monthWorked.toFixed(2)), days });
 });
 
+timeRouter.get("/month-report/:userId", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+  if (!req.auth) {
+    res.status(401).json({ message: "Nicht authentifiziert." });
+    return;
+  }
+  const targetUserId = String(req.params.userId);
+  if ((req.auth.role === Role.EMPLOYEE || req.auth.role === Role.AZUBI) && req.auth.userId !== targetUserId) {
+    res.status(403).json({ message: "Keine Berechtigung." });
+    return;
+  }
+  const year = Number(req.query.year);
+  const month = Number(req.query.month);
+  if (!year || !month || month < 1 || month > 12) {
+    res.status(400).json({ message: "Jahr/Monat ungueltig." });
+    return;
+  }
+
+  const monthStart = new Date(Date.UTC(year, month - 1, 1));
+  const monthEnd = new Date(Date.UTC(year, month, 0, 23, 59, 59));
+  const yearStart = new Date(Date.UTC(year, 0, 1));
+  const yearEnd = new Date(Date.UTC(year, 11, 31, 23, 59, 59));
+  const nextDayAfterMonthEnd = new Date(Date.UTC(year, month, 1, 0, 0, 0));
+
+  const [config, user, holidays, entries, approvals, sickLeaves, credits, vacationApprovedInYear, futureVacationApproved, overtimeAdjustmentsInMonth, holidaysInYear] = await Promise.all([
+    prisma.systemConfig.findUnique({ where: { id: 1 } }),
+    prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: {
+        id: true,
+        name: true,
+        annualVacationDays: true,
+        carryOverVacationDays: true,
+        overtimeBalanceHours: true,
+        dailyWorkHours: true,
+        timeTrackingEnabled: true
+      }
+    }),
+    prisma.holiday.findMany({ where: { date: { gte: monthStart, lte: monthEnd } } }),
+    prisma.timeEntry.findMany({ where: { userId: targetUserId, occurredAt: { gte: monthStart, lte: monthEnd } }, orderBy: { occurredAt: "asc" } }),
+    prisma.specialWorkApproval.findMany({ where: { userId: targetUserId, date: { gte: monthStart, lte: monthEnd } } }),
+    prisma.sickLeave.findMany({ where: { userId: targetUserId, startDate: { lte: monthEnd }, endDate: { gte: monthStart } } }),
+    prisma.breakCredit.findMany({ where: { userId: targetUserId, date: { gte: monthStart, lte: monthEnd } } }),
+    prisma.leaveRequest.findMany({
+      where: {
+        userId: targetUserId,
+        kind: LeaveKind.VACATION,
+        status: LeaveStatus.APPROVED,
+        startDate: { lte: yearEnd },
+        endDate: { gte: yearStart }
+      }
+    }),
+    prisma.leaveRequest.findMany({
+      where: {
+        userId: targetUserId,
+        kind: LeaveKind.VACATION,
+        status: LeaveStatus.APPROVED,
+        startDate: { gte: nextDayAfterMonthEnd, lte: yearEnd }
+      }
+    }),
+    prisma.overtimeAdjustment.findMany({
+      where: { userId: targetUserId, date: { gte: monthStart, lte: monthEnd } },
+      select: { hours: true }
+    }),
+    prisma.holiday.findMany({ where: { date: { gte: yearStart, lte: yearEnd } }, select: { date: true } })
+  ]);
+
+  if (!user) {
+    res.status(404).json({ message: "Mitarbeiter nicht gefunden." });
+    return;
+  }
+
+  const dailyHours = user.dailyWorkHours ?? config?.defaultDailyHours ?? 8;
+  const workingDays = parseWorkingDaySet(config?.defaultWeeklyWorkingDays);
+  const holidaySet = new Set(holidays.map((h) => dayKey(h.date)));
+  const holidayYearSet = new Set(holidaysInYear.map((h) => dayKey(h.date)));
+  const approvalByDay = new Map(approvals.map((a) => [dayKey(a.date), a.status]));
+  const creditByDay = new Map<string, number>();
+  for (const c of credits) {
+    const key = dayKey(c.date);
+    creditByDay.set(key, (creditByDay.get(key) ?? 0) + c.minutes);
+  }
+  const breakMinutes = config?.autoBreakMinutes ?? 30;
+  const breakAfterHours = config?.autoBreakAfterHours ?? 6;
+  const grossByDay = buildGrossMinutesByStartDay(entries.map((e) => ({ type: e.type, occurredAt: e.occurredAt })));
+  const byDay = new Map<string, typeof entries>();
+  for (const e of entries) {
+    const key = dayKey(e.occurredAt);
+    const list = byDay.get(key) ?? [];
+    list.push(e);
+    byDay.set(key, list);
+  }
+
+  const monthNameRaw = monthStart.toLocaleDateString("de-DE", { month: "long", year: "numeric", timeZone: "UTC" });
+  const monthLabel = monthNameRaw.charAt(0).toUpperCase() + monthNameRaw.slice(1);
+
+  let monthPlanned = 0;
+  let monthWorked = 0;
+  const rows: Array<{
+    date: string;
+    clockIn: string;
+    clockOut: string;
+    plannedHours: number | null;
+    workedHours: number | null;
+    pauseMinutes: number | null;
+    note: string;
+    isContinuation: boolean;
+    isDayTotalRow: boolean;
+  }> = [];
+
+  for (let d = 1; d <= monthEnd.getUTCDate(); d += 1) {
+    const date = new Date(Date.UTC(year, month - 1, d));
+    const key = dayKey(date);
+    const dayEntries = (byDay.get(key) ?? []).sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
+    const isHoliday = holidaySet.has(key);
+    const weekend = isWeekend(date);
+    const planned = workingDays.has(date.getUTCDay()) && !isHoliday ? dailyHours : 0;
+    const isSick = planned > 0 && sickLeaves.some((s) => isDateWithinRange(date, s.startDate, s.endDate));
+    const sickHours = isSick ? planned : 0;
+    const grossMin = grossByDay.minutesByDay.get(key) ?? 0;
+    const autoBreakApplies = grossMin >= breakAfterHours * 60;
+    const dayCredit = creditByDay.get(key) ?? 0;
+    const netMinutes = Math.max(grossMin - (autoBreakApplies ? breakMinutes : 0) + dayCredit, 0);
+    const approvalStatus = approvalByDay.get(key) ?? null;
+    const requiresApproval = isHoliday || weekend || ((config?.requireApprovalForCrossMidnight ?? true) && grossByDay.crossMidnightStartDays.has(key));
+    const schoolDay = dayEntries.some((e) => isSchoolEntry({ reasonText: e.reasonText, correctionComment: e.correctionComment }));
+    const workedRaw = schoolDay ? 8 : Number((netMinutes / 60).toFixed(2));
+    const workedEffective = requiresApproval && approvalStatus !== ApprovalStatus.APPROVED ? 0 : workedRaw;
+    const worked = user.timeTrackingEnabled === false
+      ? Number(planned.toFixed(2))
+      : Number((sickHours > 0 ? sickHours : workedEffective).toFixed(2));
+
+    monthPlanned += planned;
+    monthWorked += worked;
+
+    const dayNotes = Array.from(
+      new Set(
+        dayEntries
+          .map((e) => String(e.reasonText || e.correctionComment || "").trim())
+          .filter((x) => x.length > 0)
+      )
+    ).join(" | ");
+
+    const lines: Array<{ clockIn: string; clockOut: string }> = [];
+    let openIn = "";
+    for (const e of dayEntries) {
+      const t = e.occurredAt.toISOString().slice(11, 16);
+      if (e.type === TimeEntryType.CLOCK_IN) {
+        if (openIn) lines.push({ clockIn: openIn, clockOut: "" });
+        openIn = t;
+      } else {
+        if (openIn) {
+          lines.push({ clockIn: openIn, clockOut: t });
+          openIn = "";
+        } else {
+          lines.push({ clockIn: "", clockOut: t });
+        }
+      }
+    }
+    if (openIn) lines.push({ clockIn: openIn, clockOut: "" });
+    if (lines.length === 0) lines.push({ clockIn: "", clockOut: "" });
+
+    const pauseDeducted = Math.max((autoBreakApplies ? breakMinutes : 0) - dayCredit, 0);
+
+    for (let i = 0; i < lines.length; i += 1) {
+      const isFirst = i === 0;
+      const isLast = i === lines.length - 1;
+      rows.push({
+        date: isFirst ? key : "",
+        clockIn: lines[i].clockIn,
+        clockOut: lines[i].clockOut,
+        plannedHours: isFirst ? Number(planned.toFixed(2)) : null,
+        workedHours: isLast ? Number(worked.toFixed(2)) : null,
+        pauseMinutes: isFirst ? pauseDeducted : null,
+        note: isFirst ? dayNotes : "",
+        isContinuation: !isFirst,
+        isDayTotalRow: isLast
+      });
+    }
+  }
+
+  const approvedVacationDaysInYear = vacationApprovedInYear.reduce((sum, v) => {
+    const start = new Date(Math.max(v.startDate.getTime(), yearStart.getTime()));
+    const end = new Date(Math.min(v.endDate.getTime(), yearEnd.getTime()));
+    return sum + countWorkingDaysInRange(start, end, workingDays, holidayYearSet);
+  }, 0);
+
+  const futurePlannedVacationDays = futureVacationApproved.reduce((sum, v) => {
+    const start = new Date(Math.max(v.startDate.getTime(), nextDayAfterMonthEnd.getTime()));
+    const end = new Date(Math.min(v.endDate.getTime(), yearEnd.getTime()));
+    return sum + countWorkingDaysInRange(start, end, workingDays, holidayYearSet);
+  }, 0);
+
+  const availableVacationDays = user.timeTrackingEnabled === false
+    ? 999999
+    : Number((user.carryOverVacationDays + user.annualVacationDays - approvedVacationDaysInYear).toFixed(2));
+
+  const overtimeStartMonth = Number((user.overtimeBalanceHours ?? 0).toFixed(2));
+  const overtimeManualDelta = overtimeAdjustmentsInMonth.reduce((sum, a) => sum + a.hours, 0);
+  const overtimeEndMonth = Number((overtimeStartMonth + (monthWorked - monthPlanned) + overtimeManualDelta).toFixed(2));
+
+  res.json({
+    year,
+    month,
+    monthLabel,
+    companyName: config?.companyName || "Musterfirma",
+    companyLogoUrl: config?.companyLogoUrl || null,
+    employeeName: user.name,
+    rows,
+    totals: {
+      plannedHours: Number(monthPlanned.toFixed(2)),
+      workedHours: Number(monthWorked.toFixed(2))
+    },
+    vacation: {
+      availableDays: availableVacationDays,
+      plannedFutureDays: Number(futurePlannedVacationDays.toFixed(2))
+    },
+    overtime: {
+      monthStartHours: overtimeStartMonth,
+      monthEndHours: overtimeEndMonth
+    }
+  });
+});
+
 const monthMailSchema = z.object({
   userId: z.string().min(1),
   year: z.number().int().min(2000).max(2100),
@@ -1354,6 +1577,18 @@ function resolveSpecialEventType(note?: string | null): string {
   if (v.includes("0:00")) return "Arbeit ueber 0:00";
   if (v.includes("12")) return "Arbeit ueber 12 Stunden";
   return "Arbeit Feiertag/Wochenende";
+}
+
+function countWorkingDaysInRange(start: Date, end: Date, workingDays: Set<number>, holidaySet: Set<string>): number {
+  let out = 0;
+  const cur = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()));
+  const last = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate()));
+  while (cur <= last) {
+    const key = dayKey(cur);
+    if (workingDays.has(cur.getUTCDay()) && !holidaySet.has(key)) out += 1;
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+  return out;
 }
 
 timeRouter.get("/summary/:userId", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
