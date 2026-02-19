@@ -487,13 +487,12 @@ export function AdminHome() {
 
       {section === "system" && (
         <>
-          <div className="card admin-section-card admin-uniform" style={{ padding: 12 }}>
-          <h4>Backup</h4>
-          <div style={{ color: "var(--muted)", marginBottom: 8 }}>
-            Backup-Dateien werden als JSON heruntergeladen.
-          </div>
-          <h4 style={{ margin: 0 }}>Manuelles Backup</h4>
-          <div className="row" style={{ marginTop: 8 }}>
+          <div className="card admin-section-card" style={{ padding: 12 }}>
+            <h4 style={{ margin: 0 }}>Manuelles Backup</h4>
+            <div style={{ color: "var(--muted)", marginTop: 6 }}>
+              Backup-Dateien werden als JSON heruntergeladen.
+            </div>
+            <div className="row" style={{ marginTop: 10 }}>
               <button
                 className="secondary"
                 onClick={async () => {
@@ -561,8 +560,11 @@ export function AdminHome() {
                 Nur Mitarbeiter und Zeiten sichern
               </button>
             </div>
+          </div>
+
+          <div className="card admin-section-card admin-uniform" style={{ padding: 12, marginTop: 12 }}>
+            <h4 style={{ margin: 0 }}>Automatisches Backup</h4>
             <div className="grid admin-uniform" style={{ marginTop: 12 }}>
-              <h4 style={{ margin: 0, gridColumn: "1 / -1" }}>Automatisches Backup</h4>
               <label>
                 Automatisches Backup
                 <select value={String(config.autoBackupEnabled ?? false)} onChange={(e) => setConfig({ ...config, autoBackupEnabled: e.target.value === "true" })}>
@@ -644,8 +646,11 @@ export function AdminHome() {
               </div>
               {autoBackupSaveMsg && <div className={autoBackupSaveOk ? "success" : "error"} style={{ gridColumn: "1 / -1" }}>{autoBackupSaveMsg}</div>}
             </div>
+          </div>
+
+          <div className="card admin-section-card admin-uniform" style={{ padding: 12, marginTop: 12 }}>
+            <h4 style={{ margin: 0 }}>Backup einspielen</h4>
             <div className="grid" style={{ marginTop: 12 }}>
-              <h4 style={{ margin: 0, gridColumn: "1 / -1" }}>Backup einspielen</h4>
               <label>
                 Backup-Datei einspielen (JSON)
                 <input type="file" accept="application/json,.json" onChange={(e) => setBackupImportFile(e.target.files?.[0] ?? null)} />
