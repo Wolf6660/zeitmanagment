@@ -1022,6 +1022,11 @@ timeRouter.get("/summary/:userId", requireRole([Role.EMPLOYEE, Role.SUPERVISOR, 
 
   const holidaySet = new Set(holidays.map((h) => dayKey(h.date)));
   const approvalByDay = new Map(approvals.map((a) => [dayKey(a.date), a.status]));
+  const schoolDaySet = new Set(
+    entries
+      .filter((e) => isSchoolEntry({ reasonText: e.reasonText, correctionComment: e.correctionComment }))
+      .map((e) => dayKey(e.occurredAt))
+  );
 
   let workedTotal = 0;
   let expectedTotal = 0;
