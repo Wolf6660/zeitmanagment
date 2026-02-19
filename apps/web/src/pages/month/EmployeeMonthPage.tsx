@@ -36,10 +36,16 @@ export function EmployeeMonthPage() {
         <button
           className="secondary"
           onClick={async () => {
+            const printWin = window.open("", "_blank");
             try {
+              if (!printWin) { setMsg("Popup blockiert. Bitte Popups erlauben."); return; }
+              printWin.document.open();
+              printWin.document.write("<html><body style='font-family:sans-serif;padding:16px'>Stundenzettel wird geladen...</body></html>");
+              printWin.document.close();
               const report = await api.monthReport(session.user.id, monthYear, monthNum);
-              printMonthReport(report);
+              printMonthReport(report, printWin);
             } catch (e) {
+              if (printWin && !printWin.closed) printWin.close();
               setMsg((e as Error).message);
             }
           }}

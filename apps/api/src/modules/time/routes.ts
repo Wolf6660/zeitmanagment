@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { ApprovalStatus, BreakCreditRequestStatus, LeaveKind, LeaveStatus, Role, TimeEntrySource, TimeEntryType } from "@prisma/client";
 import { z } from "zod";
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { prisma } from "../../db/prisma.js";
 import { AuthRequest, requireAuth, requireRole } from "../../utils/auth.js";
 import { dayKey, isWeekend } from "../../utils/date.js";
@@ -1508,11 +1509,20 @@ timeRouter.post("/month/send-mail", requireRole([Role.EMPLOYEE, Role.AZUBI, Role
   lines.push("----------------------------------------------");
   lines.push(`Monat Sollstunden: ${monthPlanned.toFixed(2)} h`);
   lines.push(`Monat Iststunden: ${monthWorked.toFixed(2)} h`);
+  const pdfTitle = `Stundenzettel ${String(month).padStart(2, "0")}/${year} - ${targetUser.name}`;
+  const pdfBuffer = await buildSimpleReportPdf(pdfTitle, lines);
 
   await sendMailStrict({
     to: recipientMail,
     subject: `Monatsbericht ${String(month).padStart(2, "0")}/${year} - ${targetUser.name}`,
-    text: lines.join("\n")
+    text: `Im Anhang finden Sie den Stundenzettel als PDF.\n\nMitarbeiter: ${targetUser.name}\nMonat: ${String(month).padStart(2, "0")}/${year}`,
+    attachments: [
+      {
+        filename: `stundenzettel-${targetUser.name.replace(/\s+/g, "-").toLowerCase()}-${year}-${String(month).padStart(2, "0")}.pdf`,
+        content: pdfBuffer,
+        contentType: "application/pdf"
+      }
+    ]
   });
 
   res.json({ ok: true, sentTo: recipientMail });
@@ -1589,6 +1599,33 @@ function countWorkingDaysInRange(start: Date, end: Date, workingDays: Set<number
     cur.setUTCDate(cur.getUTCDate() + 1);
   }
   return out;
+}
+
+async function buildSimpleReportPdf(title: string, lines: string[]): Promise<Buffer> {
+  const pdf = await PDFDocument.create();
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  let page = pdf.addPage([595.28, 841.89]); // A4
+  let y = page.getHeight() - 44;
+  const left = 40;
+  const lineHeight = 14;
+
+  const newPage = () => {
+    page = pdf.addPage([595.28, 841.89]);
+    y = page.getHeight() - 44;
+  };
+
+  page.drawText(title, { x: left, y, size: 14, font: bold, color: rgb(0.06, 0.12, 0.22) });
+  y -= 22;
+
+  for (const line of lines) {
+    if (y < 50) newPage();
+    page.drawText(line, { x: left, y, size: 10, font, color: rgb(0.08, 0.08, 0.1) });
+    y -= lineHeight;
+  }
+
+  const bytes = await pdf.save();
+  return Buffer.from(bytes);
 }
 
 timeRouter.get("/summary/:userId", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {

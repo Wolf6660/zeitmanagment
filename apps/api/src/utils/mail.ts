@@ -36,7 +36,7 @@ function buildTransport(cfg: MailConfig & { smtpHost: string; smtpUser: string; 
   });
 }
 
-export async function sendMailIfEnabled(opts: { to: string; subject: string; text: string }): Promise<void> {
+export async function sendMailIfEnabled(opts: { to: string; subject: string; text: string; html?: string; attachments?: Array<{ filename: string; content: Buffer; contentType?: string }> }): Promise<void> {
   const cfg = await prisma.systemConfig.findUnique({ where: { id: 1 } });
   if (!cfg?.smtpEnabled || !cfg.smtpHost || !cfg.smtpUser || !cfg.smtpPassword || !cfg.smtpFrom) {
     return;
@@ -53,11 +53,13 @@ export async function sendMailIfEnabled(opts: { to: string; subject: string; tex
     from: cfg.smtpSenderName ? `"${cfg.smtpSenderName}" <${cfg.smtpFrom}>` : cfg.smtpFrom,
     to: opts.to,
     subject: opts.subject,
-    text: opts.text
+    text: opts.text,
+    html: opts.html,
+    attachments: opts.attachments
   });
 }
 
-export async function sendMailStrict(opts: { to: string; subject: string; text: string }): Promise<void> {
+export async function sendMailStrict(opts: { to: string; subject: string; text: string; html?: string; attachments?: Array<{ filename: string; content: Buffer; contentType?: string }> }): Promise<void> {
   const cfg = await prisma.systemConfig.findUnique({
     where: { id: 1 },
     select: {
@@ -77,7 +79,9 @@ export async function sendMailStrict(opts: { to: string; subject: string; text: 
     from: cfg.smtpSenderName ? `"${cfg.smtpSenderName}" <${cfg.smtpFrom}>` : cfg.smtpFrom,
     to: opts.to,
     subject: opts.subject,
-    text: opts.text
+    text: opts.text,
+    html: opts.html,
+    attachments: opts.attachments
   });
 }
 

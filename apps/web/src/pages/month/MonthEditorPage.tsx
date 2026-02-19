@@ -53,11 +53,17 @@ export function MonthEditorPage() {
           className="secondary"
           type="button"
           onClick={async () => {
+            const printWin = window.open("", "_blank");
             try {
               if (!monthUserId) { setMsg("Bitte Mitarbeiter auswaehlen."); return; }
+              if (!printWin) { setMsg("Popup blockiert. Bitte Popups erlauben."); return; }
+              printWin.document.open();
+              printWin.document.write("<html><body style='font-family:sans-serif;padding:16px'>Stundenzettel wird geladen...</body></html>");
+              printWin.document.close();
               const report = await api.monthReport(monthUserId, monthYear, monthNum);
-              printMonthReport(report);
+              printMonthReport(report, printWin);
             } catch (e) {
+              if (printWin && !printWin.closed) printWin.close();
               setMsg((e as Error).message);
             }
           }}

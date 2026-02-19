@@ -21,11 +21,13 @@ function fmtPause(minutes: number | null): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
-export function printMonthReport(report: MonthReport): void {
-  const w = window.open("", "_blank", "noopener,noreferrer");
-  if (!w) throw new Error("Popup blockiert. Bitte Popups fuer diese Seite erlauben.");
+export function printMonthReport(report: MonthReport, w?: Window | null): void {
+  const target = w || window.open("", "_blank");
+  if (!target) throw new Error("Popup blockiert. Bitte Popups fuer diese Seite erlauben.");
 
-  const logoUrl = report.companyLogoUrl ? new URL(report.companyLogoUrl, window.location.origin).toString() : "";
+  const logoUrl = report.companyLogoUrl
+    ? (/^(https?:|data:)/i.test(report.companyLogoUrl) ? report.companyLogoUrl : `${window.location.origin}${report.companyLogoUrl.startsWith("/") ? "" : "/"}${report.companyLogoUrl}`)
+    : "";
   const logo = logoUrl ? `<img src="${esc(logoUrl)}" alt="Logo" />` : "";
   const rowsHtml = report.rows.map((r) => {
     const rowClass = r.isContinuation ? "cont" : "";
@@ -103,9 +105,9 @@ export function printMonthReport(report: MonthReport): void {
 </body>
 </html>`;
 
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
-  w.focus();
-  setTimeout(() => w.print(), 250);
+  target.document.open();
+  target.document.write(html);
+  target.document.close();
+  target.focus();
+  setTimeout(() => target.print(), 250);
 }
