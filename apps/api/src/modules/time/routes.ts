@@ -1698,7 +1698,9 @@ async function buildStyledMonthPdf(title: string, report: MonthReportData): Prom
     y -= rowHeight;
   }
 
-  if (y < 92) newPage();
+  // Fuer die Zusammenfassung unten immer zusaetzlich Platz reservieren
+  // (mindestens etwa 3 Zeilen mehr Luft).
+  if (y < 134) newPage();
   page.drawText(`Monatssumme Soll: ${report.totals.plannedHours.toFixed(2)} h`, { x: left, y, size: 10, font: bold });
   y -= 13;
   page.drawText(`Monatssumme Ist: ${report.totals.workedHours.toFixed(2)} h`, { x: left, y, size: 10, font: bold });
