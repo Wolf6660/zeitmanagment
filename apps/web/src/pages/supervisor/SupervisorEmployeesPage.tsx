@@ -164,7 +164,7 @@ export function SupervisorEmployeesPage() {
           {employees.map((e) => {
             const isEdit = editingId === e.id;
             const canEdit = e.role === "EMPLOYEE" || e.role === "AZUBI";
-            const canResetPassword = canEdit || e.id === session?.user.id;
+            const canResetPassword = session?.user.role === "ADMIN" || canEdit || e.id === session?.user.id;
             return (
               <tr key={e.id}>
                 <td>{isEdit ? <input value={editing.name ?? e.name} onChange={(ev) => setEditing({ ...editing, name: ev.target.value })} /> : e.name}</td>
