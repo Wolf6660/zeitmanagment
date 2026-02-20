@@ -39,13 +39,29 @@ export function EmployeeMonthPage() {
     monthWorked: number;
     days: Array<{ date: string; plannedHours: number; workedHours: number; sickHours?: number; isSick?: boolean; isHoliday: boolean; isWeekend: boolean; specialWorkApprovalStatus?: "SUBMITTED" | "APPROVED" | "REJECTED" | null; hasManualCorrection?: boolean; hasBulkEntry?: boolean; entries: Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; time: string; source?: string; reasonText?: string }> }>;
   } | null>(null);
+  const [monthMeta, setMonthMeta] = useState<{
+    annualVacationDays: number;
+    availableVacationDays: number;
+    plannedFutureVacationDays: number;
+    monthStartOvertimeHours: number;
+  } | null>(null);
   const [msg, setMsg] = useState("");
   const [actionMsg, setActionMsg] = useState("");
 
   async function load() {
     if (!session) return;
-    const mv = await api.monthView(session.user.id, monthYear, monthNum);
+    const [mv, report, me] = await Promise.all([
+      api.monthView(session.user.id, monthYear, monthNum),
+      api.monthReport(session.user.id, monthYear, monthNum),
+      api.me()
+    ]);
     setMonthView(mv);
+    setMonthMeta({
+      annualVacationDays: me.annualVacationDays ?? 0,
+      availableVacationDays: report.vacation.availableDays ?? 0,
+      plannedFutureVacationDays: report.vacation.plannedFutureDays ?? 0,
+      monthStartOvertimeHours: report.overtime.monthStartHours ?? 0
+    });
   }
 
   useEffect(() => {
@@ -97,8 +113,14 @@ export function EmployeeMonthPage() {
         </button>
         {monthView && (
           <>
-            <span>Monat Soll: <strong>{monthView.monthPlanned.toFixed(2)} h</strong></span>
-            <span>Monat Ist: <strong>{monthView.monthWorked.toFixed(2)} h</strong></span>
+            <span>Sollstunden Monat: <strong>{monthView.monthPlanned.toFixed(2)} h</strong></span>
+            <span>Geleistete Stunden: <strong>{monthView.monthWorked.toFixed(2)} h</strong></span>
+            <span>Noch zu leisten: <strong>{Math.max(monthView.monthPlanned - monthView.monthWorked, 0).toFixed(2)} h</strong></span>
+            <span>Ueberstunden Monatsanfang: <strong>{monthMeta?.monthStartOvertimeHours.toFixed(2) ?? "0.00"} h</strong></span>
+            <span style={{ flexBasis: "100%", height: 0 }} />
+            <span>Jahresurlaub: <strong>{monthMeta?.annualVacationDays ?? 0} Tage</strong></span>
+            <span>Urlaub noch offen: <strong>{monthMeta?.availableVacationDays.toFixed(2) ?? "0.00"} Tage</strong></span>
+            <span>Urlaub in Zukunft verplant: <strong>{monthMeta?.plannedFutureVacationDays.toFixed(2) ?? "0.00"} Tage</strong></span>
           </>
         )}
       </div>

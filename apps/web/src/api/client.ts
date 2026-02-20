@@ -152,7 +152,14 @@ export const api = {
   login: (payload: { loginName: string; password: string }) =>
     request<Session>("/api/auth/login", { method: "POST", body: JSON.stringify(payload) }),
 
-  me: () => request<{ id: string; name: string; role: string }>("/api/employees/me"),
+  me: () =>
+    request<{
+      id: string;
+      name: string;
+      role: string;
+      annualVacationDays: number;
+      carryOverVacationDays: number;
+    }>("/api/employees/me"),
 
   clock: (payload: { type: "CLOCK_IN" | "CLOCK_OUT"; reasonCode?: string; reasonText?: string }) =>
     request("/api/time/clock", { method: "POST", body: JSON.stringify(payload) }),
