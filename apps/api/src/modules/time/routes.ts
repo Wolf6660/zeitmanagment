@@ -36,6 +36,15 @@ function parseTimeParts(time: string): { hour: number; minute: number } | null {
   return { hour: Number(m[1]), minute: Number(m[2]) };
 }
 
+function formatBerlinHHMM(date: Date): string {
+  return new Intl.DateTimeFormat("de-DE", {
+    timeZone: "Europe/Berlin",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).format(date);
+}
+
 type TimeRoundingConfig = {
   timeRoundingEnabled: boolean;
   timeRoundingMinutes: number;
@@ -1244,7 +1253,7 @@ timeRouter.get("/month/:userId", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SU
       isWeekend: weekend,
       specialWorkApprovalStatus: approvalStatus,
       hasManualCorrection: dayEntries.some((e) => e.isManualCorrection),
-      entries: dayEntries.map((e) => ({ id: e.id, type: e.type, time: e.occurredAt.toISOString().slice(11, 16), source: e.source, reasonText: e.reasonText }))
+      entries: dayEntries.map((e) => ({ id: e.id, type: e.type, time: formatBerlinHHMM(e.occurredAt), source: e.source, reasonText: e.reasonText }))
     });
   }
   res.json({ year, month, dailyHours, monthPlanned: Number(monthPlanned.toFixed(2)), monthWorked: Number(monthWorked.toFixed(2)), days });
@@ -1393,7 +1402,7 @@ async function loadMonthReportData(targetUserId: string, year: number, month: nu
     const lines: Array<{ clockIn: string; clockOut: string }> = [];
     let openIn = "";
     for (const e of dayEntries) {
-      const t = e.occurredAt.toISOString().slice(11, 16);
+      const t = formatBerlinHHMM(e.occurredAt);
       if (e.type === TimeEntryType.CLOCK_IN) {
         if (openIn) lines.push({ clockIn: openIn, clockOut: "" });
         openIn = t;
@@ -2332,8 +2341,8 @@ timeRouter.get("/special-work/pending", requireRole([Role.SUPERVISOR, Role.ADMIN
         const credit = creditsByUserDay.get(key) ?? 0;
         const netMinutes = Math.max(grossMinutes - (autoBreakApplies ? breakMinutes : 0) + credit, 0);
         return {
-          clockInTimes: dayEntries.filter((e) => e.type === TimeEntryType.CLOCK_IN).map((e) => e.occurredAt.toISOString().slice(11, 16)),
-          clockOutTimes: dayEntries.filter((e) => e.type === TimeEntryType.CLOCK_OUT).map((e) => e.occurredAt.toISOString().slice(11, 16)),
+          clockInTimes: dayEntries.filter((e) => e.type === TimeEntryType.CLOCK_IN).map((e) => formatBerlinHHMM(e.occurredAt)),
+          clockOutTimes: dayEntries.filter((e) => e.type === TimeEntryType.CLOCK_OUT).map((e) => formatBerlinHHMM(e.occurredAt)),
           workedHours: Number((netMinutes / 60).toFixed(2))
         };
       })(),
@@ -2410,8 +2419,8 @@ timeRouter.get("/special-work/all", requireRole([Role.SUPERVISOR, Role.ADMIN]), 
         createdAt: p.createdAt.toISOString(),
         decidedAt: p.decidedAt ? p.decidedAt.toISOString() : null,
         eventType: resolveSpecialEventType(p.note),
-        clockInTimes: dayEntries.filter((e) => e.type === TimeEntryType.CLOCK_IN).map((e) => e.occurredAt.toISOString().slice(11, 16)),
-        clockOutTimes: dayEntries.filter((e) => e.type === TimeEntryType.CLOCK_OUT).map((e) => e.occurredAt.toISOString().slice(11, 16)),
+        clockInTimes: dayEntries.filter((e) => e.type === TimeEntryType.CLOCK_IN).map((e) => formatBerlinHHMM(e.occurredAt)),
+        clockOutTimes: dayEntries.filter((e) => e.type === TimeEntryType.CLOCK_OUT).map((e) => formatBerlinHHMM(e.occurredAt)),
         workedHours: Number((netMinutes / 60).toFixed(2))
       };
     })
@@ -2488,8 +2497,8 @@ timeRouter.get("/special-work/my", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.
         createdAt: p.createdAt.toISOString(),
         decidedAt: p.decidedAt ? p.decidedAt.toISOString() : null,
         eventType: resolveSpecialEventType(p.note),
-        clockInTimes: dayEntries.filter((e) => e.type === TimeEntryType.CLOCK_IN).map((e) => e.occurredAt.toISOString().slice(11, 16)),
-        clockOutTimes: dayEntries.filter((e) => e.type === TimeEntryType.CLOCK_OUT).map((e) => e.occurredAt.toISOString().slice(11, 16)),
+        clockInTimes: dayEntries.filter((e) => e.type === TimeEntryType.CLOCK_IN).map((e) => formatBerlinHHMM(e.occurredAt)),
+        clockOutTimes: dayEntries.filter((e) => e.type === TimeEntryType.CLOCK_OUT).map((e) => formatBerlinHHMM(e.occurredAt)),
         workedHours: Number((netMinutes / 60).toFixed(2))
       };
     })

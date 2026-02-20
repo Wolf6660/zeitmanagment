@@ -2,6 +2,15 @@ import React, { useEffect, useState } from "react";
 import { api, getSession } from "../../api/client";
 import { StatusBadge } from "../../components/StatusBadge";
 
+function formatBerlinTime(iso: string): string {
+  return new Intl.DateTimeFormat("de-DE", {
+    timeZone: "Europe/Berlin",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).format(new Date(iso));
+}
+
 export function EmployeeHome() {
   const session = getSession();
   const [summary, setSummary] = useState<{ plannedHours: number; workedHours: number; overtimeHours: number; longShiftAlert: boolean; manualAdjustmentHours?: number } | null>(null);
@@ -199,7 +208,7 @@ export function EmployeeHome() {
                   padding: "4px 6px"
                 }}
                 >
-                {e.type === "CLOCK_IN" ? "Kommen" : "Gehen"} {e.occurredAt.slice(11, 16)}
+                {e.type === "CLOCK_IN" ? "Kommen" : "Gehen"} {formatBerlinTime(e.occurredAt)}
                 {e.reasonText ? ` - ${e.reasonText}` : ""}
               </div>
             ))}

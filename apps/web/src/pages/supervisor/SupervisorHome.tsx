@@ -13,6 +13,15 @@ function sourceLabel(source: string): string {
   return source;
 }
 
+function formatBerlinTime(iso: string): string {
+  return new Intl.DateTimeFormat("de-DE", {
+    timeZone: "Europe/Berlin",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).format(new Date(iso));
+}
+
 export function SupervisorHome() {
   const session = getSession();
   const [employees, setEmployees] = useState<Array<{ id: string; name: string; loginName?: string; role: string; annualVacationDays: number; carryOverVacationDays: number }>>([]);
@@ -170,7 +179,7 @@ export function SupervisorHome() {
                   padding: "4px 6px"
                 }}
               >
-                {e.type === "CLOCK_IN" ? "Kommen" : "Gehen"} {e.occurredAt.slice(11, 16)}
+                {e.type === "CLOCK_IN" ? "Kommen" : "Gehen"} {formatBerlinTime(e.occurredAt)}
                 {e.reasonText ? ` - ${e.reasonText}` : ""}
               </div>
             ))}
@@ -215,7 +224,7 @@ export function SupervisorHome() {
                   <td>{e.userName}</td>
                   <td>{e.loginName}</td>
                   <td>{e.type === "CLOCK_IN" ? "Kommen" : "Gehen"}</td>
-                  <td>{e.occurredAt.slice(11, 16)}</td>
+                  <td>{formatBerlinTime(e.occurredAt)}</td>
                   <td>{sourceLabel(e.source)}</td>
                   <td>{e.reasonText || "-"}</td>
                 </tr>
