@@ -1102,7 +1102,6 @@ timeRouter.post("/day-override-self", requireRole([Role.EMPLOYEE, Role.AZUBI, Ro
   try {
     const dayStart = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, 0, 0, 0));
     const dayEnd = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, 23, 59, 59, 999));
-    await prisma.timeEntry.deleteMany({ where: { userId: req.auth.userId, occurredAt: { gte: dayStart, lte: dayEnd } } });
     for (const e of parsed.data.events) {
       const t = parseTimeParts(e.time);
       if (!t) {
@@ -1110,7 +1109,22 @@ timeRouter.post("/day-override-self", requireRole([Role.EMPLOYEE, Role.AZUBI, Ro
         return;
       }
       const occurredAtRaw = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, t.hour, t.minute, 0));
+      if (selected.getTime() === todayUtc.getTime() && occurredAtRaw.getTime() > now.getTime()) {
+        res.status(403).json({ message: "Nachtrag in die Zukunft ist nicht erlaubt." });
+        return;
+      }
       const occurredAt = roundOccurredAtByConfig(occurredAtRaw, cfgNotes);
+      const duplicate = await prisma.timeEntry.findFirst({
+        where: {
+          userId: req.auth.userId,
+          type: e.type,
+          occurredAt
+        },
+        select: { id: true }
+      });
+      if (duplicate) {
+        continue;
+      }
       await prisma.timeEntry.create({
         data: {
           userId: req.auth.userId,

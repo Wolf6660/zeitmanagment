@@ -507,6 +507,20 @@ export function AdminHome() {
               </div>
             </label>
           </div>
+          <div className="row" style={{ gridColumn: "1 / -1" }}>
+            <button
+              onClick={async () => {
+                try {
+                  await api.updateConfig(config);
+                  setMsg("Regeln gespeichert.");
+                } catch (e) {
+                  setMsg((e as Error).message);
+                }
+              }}
+            >
+              Speichern
+            </button>
+          </div>
         </div>
       )}
 
