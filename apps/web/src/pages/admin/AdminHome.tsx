@@ -1573,6 +1573,30 @@ export function AdminHome() {
                           >
                             TestMail
                           </button>
+                          <button
+                            className="secondary"
+                            onClick={async () => {
+                              try {
+                                const p1 = window.prompt(`Neues Passwort fuer ${e.name} eingeben:`, "");
+                                if (!p1) return;
+                                const p2 = window.prompt("Passwort wiederholen:", "");
+                                if (p1 !== p2) {
+                                  setMsg("Passwoerter stimmen nicht ueberein.");
+                                  return;
+                                }
+                                if (!/^.{8,}$/.test(p1) || !/([0-9]|[^A-Za-z0-9])/.test(p1)) {
+                                  setMsg("Passwort muss mindestens 8 Zeichen und mindestens eine Zahl oder ein Sonderzeichen enthalten.");
+                                  return;
+                                }
+                                await api.resetEmployeePassword(e.id, { newPassword: p1 });
+                                setMsg(`Passwort fuer ${e.name} wurde zurueckgesetzt.`);
+                              } catch (err) {
+                                setMsg((err as Error).message);
+                              }
+                            }}
+                          >
+                            Passwort reset
+                          </button>
                         </div>
                       )}
                       {editing && (

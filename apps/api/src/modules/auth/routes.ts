@@ -44,7 +44,10 @@ authRouter.post("/login", async (req, res) => {
 
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1),
-  newPassword: z.string().min(8)
+  newPassword: z
+    .string()
+    .min(8, "Passwort muss mindestens 8 Zeichen lang sein.")
+    .regex(/^(?=.*([0-9]|[^A-Za-z0-9])).+$/, "Passwort braucht mindestens eine Zahl oder ein Sonderzeichen.")
 });
 
 authRouter.post("/change-password", requireAuth, async (req: AuthRequest, res) => {

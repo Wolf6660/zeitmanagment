@@ -14,6 +14,7 @@ import { MyRequestsPage } from "./pages/requests/MyRequestsPage";
 import { GuidesPage } from "./pages/guides/GuidesPage";
 import { SicknessPage } from "./pages/sickness/SicknessPage";
 import { SettingsHome } from "./pages/settings/SettingsHome";
+import { ChangePasswordPage } from "./pages/account/ChangePasswordPage";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const session = getSession();
@@ -141,6 +142,16 @@ export default function App() {
           <PrivateRoute>
             <AppLayout>
               <MyRequestsPage />
+            </AppLayout>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/app/change-password"
+        element={
+          <PrivateRoute>
+            <AppLayout>
+              <ChangePasswordPage />
             </AppLayout>
           </PrivateRoute>
         }

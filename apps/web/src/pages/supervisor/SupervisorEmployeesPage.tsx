@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { api } from "../../api/client";
+import { api, getSession } from "../../api/client";
 
 type Employee = {
   id: string;
@@ -16,6 +16,7 @@ type Employee = {
 };
 
 export function SupervisorEmployeesPage() {
+  const session = getSession();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [msg, setMsg] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -163,6 +164,7 @@ export function SupervisorEmployeesPage() {
           {employees.map((e) => {
             const isEdit = editingId === e.id;
             const canEdit = e.role === "EMPLOYEE" || e.role === "AZUBI";
+            const canResetPassword = canEdit || e.id === session?.user.id;
             return (
               <tr key={e.id}>
                 <td>{isEdit ? <input value={editing.name ?? e.name} onChange={(ev) => setEditing({ ...editing, name: ev.target.value })} /> : e.name}</td>
@@ -192,6 +194,36 @@ export function SupervisorEmployeesPage() {
                   {!isEdit && canEdit && (
                     <div className="row">
                       <button className="secondary" onClick={() => { setEditingId(e.id); setEditing(e); }}>Bearbeiten</button>
+                      {canResetPassword && (
+                        <button
+                          className="secondary"
+                          onClick={async () => {
+                            try {
+                              const p1 = window.prompt(`Neues Passwort fuer ${e.name} eingeben:`, "");
+                              if (!p1) return;
+                              const p2 = window.prompt("Passwort wiederholen:", "");
+                              if (p1 !== p2) {
+                                setMsg("Passwoerter stimmen nicht ueberein.");
+                                return;
+                              }
+                              if (!/^.{8,}$/.test(p1) || !/([0-9]|[^A-Za-z0-9])/.test(p1)) {
+                                setMsg("Passwort muss mindestens 8 Zeichen und mindestens eine Zahl oder ein Sonderzeichen enthalten.");
+                                return;
+                              }
+                              await api.resetEmployeePassword(e.id, { newPassword: p1 });
+                              setMsg(`Passwort fuer ${e.name} wurde zurueckgesetzt.`);
+                            } catch (err) {
+                              setMsg((err as Error).message);
+                            }
+                          }}
+                        >
+                          Passwort reset
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {!isEdit && !canEdit && canResetPassword && (
+                    <div className="row">
                       <button
                         className="secondary"
                         onClick={async () => {
@@ -218,7 +250,7 @@ export function SupervisorEmployeesPage() {
                       </button>
                     </div>
                   )}
-                  {!isEdit && !canEdit && <span>Nur Ansicht</span>}
+                  {!isEdit && !canEdit && !canResetPassword && <span>Nur Ansicht</span>}
                   {isEdit && (
                     <div className="row">
                       <button onClick={async () => {

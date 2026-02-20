@@ -270,14 +270,18 @@ employeesRouter.patch("/:id", requireRole([Role.SUPERVISOR, Role.ADMIN]), async 
       }
     });
 
-    await writeAuditLog({
-      actorUserId: req.auth?.userId,
-      actorLoginName: await resolveActorLoginName(req.auth?.userId),
-      action: "EMPLOYEE_UPDATED",
-      targetType: "User",
-      targetId: updated.id,
-      payload: parsed.data
-    });
+    try {
+      await writeAuditLog({
+        actorUserId: req.auth?.userId,
+        actorLoginName: await resolveActorLoginName(req.auth?.userId),
+        action: "EMPLOYEE_UPDATED",
+        targetType: "User",
+        targetId: updated.id,
+        payload: parsed.data
+      });
+    } catch {
+      // Update war erfolgreich; Logging-Fehler darf den Request nicht fehlschlagen lassen.
+    }
 
     res.json(updated);
   } catch {
@@ -298,20 +302,28 @@ employeesRouter.post("/:id/reset-password", requireRole([Role.SUPERVISOR, Role.A
     res.status(404).json({ message: "Mitarbeiter nicht gefunden." });
     return;
   }
-  if (req.auth?.role === Role.SUPERVISOR && target.role !== Role.EMPLOYEE && target.role !== Role.AZUBI) {
-    res.status(403).json({ message: "Vorgesetzte duerfen nur Mitarbeiter/AZUBI Passwoerter zuruecksetzen." });
-    return;
+  if (req.auth?.role === Role.SUPERVISOR) {
+    const isOwnAccount = req.auth.userId === target.id;
+    const isEmployeeOrAzubi = target.role === Role.EMPLOYEE || target.role === Role.AZUBI;
+    if (!isOwnAccount && !isEmployeeOrAzubi) {
+      res.status(403).json({ message: "Vorgesetzte duerfen nur eigenes Passwort oder Mitarbeiter/AZUBI Passwoerter zuruecksetzen." });
+      return;
+    }
   }
 
   const hash = await bcrypt.hash(parsed.data.newPassword, 12);
   await prisma.user.update({ where: { id: userId }, data: { passwordHash: hash } });
-  await writeAuditLog({
-    actorUserId: req.auth?.userId,
-    actorLoginName: await resolveActorLoginName(req.auth?.userId),
-    action: "EMPLOYEE_PASSWORD_RESET",
-    targetType: "User",
-    targetId: userId,
-    payload: { loginName: target.loginName }
-  });
+  try {
+    await writeAuditLog({
+      actorUserId: req.auth?.userId,
+      actorLoginName: await resolveActorLoginName(req.auth?.userId),
+      action: "EMPLOYEE_PASSWORD_RESET",
+      targetType: "User",
+      targetId: userId,
+      payload: { loginName: target.loginName }
+    });
+  } catch {
+    // Passwort wurde erfolgreich gesetzt; Logging-Fehler ignorieren.
+  }
   res.json({ ok: true });
 });

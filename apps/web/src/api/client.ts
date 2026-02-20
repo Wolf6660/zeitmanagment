@@ -152,6 +152,9 @@ export const api = {
   login: (payload: { loginName: string; password: string }) =>
     request<Session>("/api/auth/login", { method: "POST", body: JSON.stringify(payload) }),
 
+  changePassword: (payload: { currentPassword: string; newPassword: string }) =>
+    request<{ message: string }>("/api/auth/change-password", { method: "POST", body: JSON.stringify(payload) }),
+
   me: () =>
     request<{
       id: string;
