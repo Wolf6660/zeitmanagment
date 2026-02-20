@@ -31,16 +31,11 @@ function entryStyle(source?: string): React.CSSProperties {
 
 export function MonthEditorPage() {
   const now = new Date();
-  const [employees, setEmployees] = useState<Array<{ id: string; name: string; role?: string; annualVacationDays?: number }>>([]);
+  const [employees, setEmployees] = useState<Array<{ id: string; name: string; role?: string }>>([]);
   const [monthUserId, setMonthUserId] = useState("");
   const [monthYear, setMonthYear] = useState(now.getFullYear());
   const [monthNum, setMonthNum] = useState(now.getMonth() + 1);
   const [monthView, setMonthView] = useState<any>(null);
-  const [monthReportMeta, setMonthReportMeta] = useState<{
-    availableVacationDays: number;
-    plannedFutureVacationDays: number;
-    monthStartOvertimeHours: number;
-  } | null>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [overrideNote, setOverrideNote] = useState("");
   const [overrideEvents, setOverrideEvents] = useState<Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; time: string }>>([]);
@@ -56,16 +51,8 @@ export function MonthEditorPage() {
 
   async function loadMonth() {
     if (!monthUserId) return;
-    const [mv, report] = await Promise.all([
-      api.monthView(monthUserId, monthYear, monthNum),
-      api.monthReport(monthUserId, monthYear, monthNum)
-    ]);
+    const mv = await api.monthView(monthUserId, monthYear, monthNum);
     setMonthView(mv);
-    setMonthReportMeta({
-      availableVacationDays: report.vacation.availableDays ?? 0,
-      plannedFutureVacationDays: report.vacation.plannedFutureDays ?? 0,
-      monthStartOvertimeHours: report.overtime.monthStartHours ?? 0
-    });
     return mv;
   }
 
@@ -131,18 +118,6 @@ export function MonthEditorPage() {
         </button>
       </div>
       {actionMsg && <div className={actionMsg.includes("versendet") || actionMsg.includes("heruntergeladen") ? "success" : "error"} style={{ marginBottom: 10 }}>{actionMsg}</div>}
-      {monthView && (
-        <div className="row" style={{ marginBottom: 10 }}>
-          <span>Sollstunden Monat: <strong>{monthView.monthPlanned.toFixed(2)} h</strong></span>
-          <span>Geleistete Stunden: <strong>{monthView.monthWorked.toFixed(2)} h</strong></span>
-          <span>Noch zu leisten: <strong>{Math.max(monthView.monthPlanned - monthView.monthWorked, 0).toFixed(2)} h</strong></span>
-          <span>Ueberstunden Monatsanfang: <strong>{monthReportMeta?.monthStartOvertimeHours.toFixed(2) ?? "0.00"} h</strong></span>
-          <span style={{ flexBasis: "100%", height: 0 }} />
-          <span>Jahresurlaub: <strong>{employees.find((e) => e.id === monthUserId)?.annualVacationDays ?? 0} Tage</strong></span>
-          <span>Urlaub noch offen: <strong>{monthReportMeta?.availableVacationDays.toFixed(2) ?? "0.00"} Tage</strong></span>
-          <span>Urlaub in Zukunft verplant: <strong>{monthReportMeta?.plannedFutureVacationDays.toFixed(2) ?? "0.00"} Tage</strong></span>
-        </div>
-      )}
 
       {monthView && (
         <table>

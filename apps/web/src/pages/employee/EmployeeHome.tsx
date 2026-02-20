@@ -14,6 +14,12 @@ function formatBerlinTime(iso: string): string {
 export function EmployeeHome() {
   const session = getSession();
   const [summary, setSummary] = useState<{ plannedHours: number; workedHours: number; overtimeHours: number; longShiftAlert: boolean; manualAdjustmentHours?: number } | null>(null);
+  const [monthDetails, setMonthDetails] = useState<{
+    monthStartOvertimeHours: number;
+    annualVacationDays: number;
+    availableVacationDays: number;
+    plannedFutureVacationDays: number;
+  } | null>(null);
   const [reasonText, setReasonText] = useState("");
   const [message, setMessage] = useState("");
   const [todayEntries, setTodayEntries] = useState<Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; occurredAt: string; source: string; reasonText?: string }>>([]);
@@ -28,12 +34,21 @@ export function EmployeeHome() {
 
   async function reloadData() {
     if (!session) return;
-    const [s, events] = await Promise.all([
+    const now = new Date();
+    const [s, events, report, me] = await Promise.all([
       api.summary(session.user.id),
-      api.todayEntries(session.user.id)
+      api.todayEntries(session.user.id),
+      api.monthReport(session.user.id, now.getFullYear(), now.getMonth() + 1),
+      api.me()
     ]);
     setSummary(s);
     setTodayEntries(events);
+    setMonthDetails({
+      monthStartOvertimeHours: report.overtime.monthStartHours ?? 0,
+      annualVacationDays: me.annualVacationDays ?? 0,
+      availableVacationDays: report.vacation.availableDays ?? 0,
+      plannedFutureVacationDays: report.vacation.plannedFutureDays ?? 0
+    });
   }
 
   useEffect(() => {
@@ -227,9 +242,14 @@ export function EmployeeHome() {
         <h2>Monatsuebersicht Stunden</h2>
         {summary && (
           <div className="grid">
-            <div>Sollstunden: <strong>{summary.plannedHours.toFixed(2)}</strong></div>
+            <div>Monatliche Sollstunden: <strong>{summary.plannedHours.toFixed(2)}</strong></div>
             <div>Geleistete Stunden: <strong>{summary.workedHours.toFixed(2)}</strong></div>
-            <div>Ueberstunden: <strong style={{ color: "var(--overtime)" }}>{summary.overtimeHours.toFixed(2)}</strong></div>
+            <div>Noch zu leisten: <strong>{Math.max(summary.plannedHours - summary.workedHours, 0).toFixed(2)}</strong></div>
+            <div>Ueberstunden Monatsanfang: <strong style={{ color: "var(--overtime)" }}>{monthDetails?.monthStartOvertimeHours.toFixed(2) ?? "0.00"}</strong></div>
+            <div style={{ minHeight: 8 }} />
+            <div>Jahresurlaub: <strong>{monthDetails?.annualVacationDays ?? 0} Tage</strong></div>
+            <div>Urlaub noch offen: <strong>{monthDetails?.availableVacationDays.toFixed(2) ?? "0.00"} Tage</strong></div>
+            <div>Urlaub in Zukunft verplant: <strong>{monthDetails?.plannedFutureVacationDays.toFixed(2) ?? "0.00"} Tage</strong></div>
             {summary.longShiftAlert && <StatusBadge text=">12h erkannt" color="var(--warning)" />}
           </div>
         )}
