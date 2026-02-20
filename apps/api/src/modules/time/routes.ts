@@ -1698,6 +1698,39 @@ async function buildStyledMonthPdf(title: string, report: MonthReportData): Prom
     y -= rowHeight;
   }
 
+  // Monatssumme als letzte Tabellenzeile
+  if (y < 85) newPage();
+  const footerValues = [
+    "Monatssumme",
+    "",
+    "",
+    `${report.totals.plannedHours.toFixed(2)} h`,
+    `${report.totals.workedHours.toFixed(2)} h`,
+    "",
+    ""
+  ];
+  let fx = left;
+  for (let i = 0; i < footerValues.length; i += 1) {
+    page.drawRectangle({
+      x: fx,
+      y: y - rowHeight + 2,
+      width: columns[i],
+      height: rowHeight,
+      borderColor: rgb(0.72, 0.78, 0.88),
+      borderWidth: 0.85,
+      color: rgb(0.93, 0.95, 1)
+    });
+    page.drawText(footerValues[i], {
+      x: fx + 3,
+      y: y - 9,
+      size: 8.2,
+      font: i === 0 || i === 3 || i === 4 ? bold : font,
+      color: rgb(0.08, 0.08, 0.1)
+    });
+    fx += columns[i];
+  }
+  y -= rowHeight;
+
   // Fuer die Zusammenfassung unten immer zusaetzlich Platz reservieren
   // und den Block sichtbar unter die Tabelle schieben (ca. 3 Zeilen).
   const summaryPadding = 42;
@@ -1705,10 +1738,6 @@ async function buildStyledMonthPdf(title: string, report: MonthReportData): Prom
     newPage();
   }
   y -= summaryPadding;
-  page.drawText(`Monatssumme Soll: ${report.totals.plannedHours.toFixed(2)} h`, { x: left, y, size: 10, font: bold });
-  y -= 13;
-  page.drawText(`Monatssumme Ist: ${report.totals.workedHours.toFixed(2)} h`, { x: left, y, size: 10, font: bold });
-  y -= 16;
   page.drawText(`Verfuegbare Urlaubstage: ${report.vacation.availableDays.toFixed(2)}`, { x: left, y, size: 9.5, font });
   y -= 12;
   page.drawText(`Zukuenftig verplanter Urlaub: ${report.vacation.plannedFutureDays.toFixed(2)}`, { x: left, y, size: 9.5, font });
