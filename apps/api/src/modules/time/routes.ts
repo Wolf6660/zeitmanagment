@@ -1190,6 +1190,7 @@ type MonthReportRow = {
   note: string;
   isContinuation: boolean;
   isDayTotalRow: boolean;
+  tone: "DEFAULT" | "REJECTED" | "SUBMITTED" | "SICK" | "HOLIDAY" | "HOLIDAY_WORK";
 };
 
 type MonthReportData = {
@@ -1203,6 +1204,14 @@ type MonthReportData = {
   totals: { plannedHours: number; workedHours: number };
   vacation: { availableDays: number; plannedFutureDays: number };
   overtime: { monthStartHours: number; monthEndHours: number };
+  colors: {
+    approved: string;
+    rejected: string;
+    sick: string;
+    holiday: string;
+    holidayDay: string;
+    warning: string;
+  };
 };
 
 async function loadMonthReportData(targetUserId: string, year: number, month: number): Promise<MonthReportData | null> {
@@ -1341,7 +1350,18 @@ async function loadMonthReportData(targetUserId: string, year: number, month: nu
         pauseMinutes: isFirst ? pauseDeducted : null,
         note: isFirst ? dayNotes : "",
         isContinuation: !isFirst,
-        isDayTotalRow: isLast
+        isDayTotalRow: isLast,
+        tone: approvalStatus === ApprovalStatus.REJECTED
+          ? "REJECTED"
+          : approvalStatus === ApprovalStatus.SUBMITTED
+            ? "SUBMITTED"
+            : isSick
+              ? "SICK"
+              : (isHoliday || weekend)
+                ? worked > 0
+                  ? "HOLIDAY_WORK"
+                  : "HOLIDAY"
+                : "DEFAULT"
       });
     }
   }
@@ -1382,6 +1402,14 @@ async function loadMonthReportData(targetUserId: string, year: number, month: nu
     overtime: {
       monthStartHours: overtimeStartMonth,
       monthEndHours: overtimeEndMonth
+    },
+    colors: {
+      approved: config?.colorApproved || "#22C55E",
+      rejected: config?.colorRejected || "#EF4444",
+      sick: config?.colorSickLeave || "#3B82F6",
+      holiday: config?.colorHolidayOrWeekendWork || "#F97316",
+      holidayDay: config?.colorHolidayOrWeekend || "#FDE68A",
+      warning: config?.colorVacationWarning || "#F59E0B"
     }
   };
 }
@@ -1544,6 +1572,35 @@ function countWorkingDaysInRange(start: Date, end: Date, workingDays: Set<number
 }
 
 async function buildStyledMonthPdf(title: string, report: MonthReportData): Promise<Buffer> {
+  const hexToRgb = (hex: string): { r: number; g: number; b: number } => {
+    const clean = String(hex || "").trim().replace("#", "");
+    const h = clean.length === 3
+      ? clean.split("").map((c) => c + c).join("")
+      : clean;
+    if (!/^[0-9a-fA-F]{6}$/.test(h)) return { r: 255, g: 255, b: 255 };
+    return {
+      r: Number.parseInt(h.slice(0, 2), 16),
+      g: Number.parseInt(h.slice(2, 4), 16),
+      b: Number.parseInt(h.slice(4, 6), 16)
+    };
+  };
+  const mixWhite = (hex: string, alpha = 0.22): { r: number; g: number; b: number } => {
+    const c = hexToRgb(hex);
+    return {
+      r: Math.round(255 - (255 - c.r) * alpha),
+      g: Math.round(255 - (255 - c.g) * alpha),
+      b: Math.round(255 - (255 - c.b) * alpha)
+    };
+  };
+  const toneColor = (tone: MonthReportRow["tone"]): { r: number; g: number; b: number } | null => {
+    if (tone === "REJECTED") return mixWhite(report.colors.rejected, 0.22);
+    if (tone === "SUBMITTED") return mixWhite(report.colors.warning, 0.18);
+    if (tone === "SICK") return mixWhite(report.colors.sick, 0.18);
+    if (tone === "HOLIDAY_WORK") return mixWhite(report.colors.holiday, 0.22);
+    if (tone === "HOLIDAY") return mixWhite(report.colors.holidayDay, 0.28);
+    return null;
+  };
+
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
@@ -1583,6 +1640,7 @@ async function buildStyledMonthPdf(title: string, report: MonthReportData): Prom
 
   for (const r of report.rows) {
     if (y < 85) newPage();
+    const rowBg = toneColor(r.tone);
     const values = [
       r.date || "",
       r.clockIn || "",
@@ -1594,7 +1652,15 @@ async function buildStyledMonthPdf(title: string, report: MonthReportData): Prom
     ];
     let x = left;
     for (let i = 0; i < values.length; i += 1) {
-      page.drawRectangle({ x, y: y - rowHeight + 2, width: columns[i], height: rowHeight, borderColor: rgb(0.84, 0.87, 0.93), borderWidth: 0.7 });
+      page.drawRectangle({
+        x,
+        y: y - rowHeight + 2,
+        width: columns[i],
+        height: rowHeight,
+        borderColor: rgb(0.84, 0.87, 0.93),
+        borderWidth: 0.7,
+        color: rowBg ? rgb(rowBg.r / 255, rowBg.g / 255, rowBg.b / 255) : undefined
+      });
       page.drawText(values[i], { x: x + 3, y: y - 9, size: 8, font, color: rgb(0.08, 0.08, 0.1) });
       x += columns[i];
     }

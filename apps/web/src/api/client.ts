@@ -54,6 +54,7 @@ export type MonthReportRow = {
   note: string;
   isContinuation: boolean;
   isDayTotalRow: boolean;
+  tone: "DEFAULT" | "REJECTED" | "SUBMITTED" | "SICK" | "HOLIDAY" | "HOLIDAY_WORK";
 };
 
 export type MonthReport = {
@@ -67,6 +68,14 @@ export type MonthReport = {
   totals: { plannedHours: number; workedHours: number };
   vacation: { availableDays: number; plannedFutureDays: number };
   overtime: { monthStartHours: number; monthEndHours: number };
+  colors: {
+    approved: string;
+    rejected: string;
+    sick: string;
+    holiday: string;
+    holidayDay: string;
+    warning: string;
+  };
 };
 
 export function getSession(): Session | null {
@@ -280,6 +289,9 @@ export const api = {
       isActive?: boolean;
     }
   ) => request(`/api/employees/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+
+  resetEmployeePassword: (id: string, payload: { newPassword: string }) =>
+    request<{ ok: boolean }>(`/api/employees/${id}/reset-password`, { method: "POST", body: JSON.stringify(payload) }),
 
   pendingLeaves: () =>
     request<

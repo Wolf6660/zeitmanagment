@@ -185,6 +185,13 @@ const updateEmployeeSchema = z.object({
   isActive: z.boolean().optional()
 });
 
+const supervisorResetPasswordSchema = z.object({
+  newPassword: z
+    .string()
+    .min(8, "Passwort muss mindestens 8 Zeichen lang sein.")
+    .regex(/^(?=.*([0-9]|[^A-Za-z0-9])).+$/, "Passwort braucht mindestens eine Zahl oder ein Sonderzeichen.")
+});
+
 employeesRouter.patch("/:id", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
   const parsed = updateEmployeeSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -257,4 +264,35 @@ employeesRouter.patch("/:id", requireRole([Role.SUPERVISOR, Role.ADMIN]), async 
   } catch {
     res.status(409).json({ message: "Mitarbeiter konnte nicht aktualisiert werden." });
   }
+});
+
+employeesRouter.post("/:id/reset-password", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+  const parsed = supervisorResetPasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: "Ungueltige Eingaben." });
+    return;
+  }
+
+  const userId = String(req.params.id);
+  const target = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, role: true, loginName: true } });
+  if (!target) {
+    res.status(404).json({ message: "Mitarbeiter nicht gefunden." });
+    return;
+  }
+  if (req.auth?.role === Role.SUPERVISOR && target.role !== Role.EMPLOYEE && target.role !== Role.AZUBI) {
+    res.status(403).json({ message: "Vorgesetzte duerfen nur Mitarbeiter/AZUBI Passwoerter zuruecksetzen." });
+    return;
+  }
+
+  const hash = await bcrypt.hash(parsed.data.newPassword, 12);
+  await prisma.user.update({ where: { id: userId }, data: { passwordHash: hash } });
+  await writeAuditLog({
+    actorUserId: req.auth?.userId,
+    actorLoginName: await resolveActorLoginName(req.auth?.userId),
+    action: "EMPLOYEE_PASSWORD_RESET",
+    targetType: "User",
+    targetId: userId,
+    payload: { loginName: target.loginName }
+  });
+  res.json({ ok: true });
 });

@@ -21,6 +21,19 @@ function fmtPause(minutes: number | null): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
+function mixWhite(hex: string, alpha: number): string {
+  const clean = String(hex || "").trim().replace("#", "");
+  const full = clean.length === 3 ? clean.split("").map((c) => c + c).join("") : clean;
+  if (!/^[0-9a-fA-F]{6}$/.test(full)) return "#ffffff";
+  const r = Number.parseInt(full.slice(0, 2), 16);
+  const g = Number.parseInt(full.slice(2, 4), 16);
+  const b = Number.parseInt(full.slice(4, 6), 16);
+  const mr = Math.round(255 - (255 - r) * alpha);
+  const mg = Math.round(255 - (255 - g) * alpha);
+  const mb = Math.round(255 - (255 - b) * alpha);
+  return `rgb(${mr}, ${mg}, ${mb})`;
+}
+
 export function printMonthReport(report: MonthReport, w?: Window | null): void {
   const target = w || window.open("", "_blank");
   if (!target) throw new Error("Popup blockiert. Bitte Popups fuer diese Seite erlauben.");
@@ -32,14 +45,25 @@ export function printMonthReport(report: MonthReport, w?: Window | null): void {
   const rowsHtml = report.rows.map((r) => {
     const rowClass = r.isContinuation ? "cont" : "";
     const worked = r.isDayTotalRow && r.workedHours !== null ? `${r.workedHours.toFixed(2)} h` : fmtHours(r.workedHours);
+    const bg = r.tone === "REJECTED"
+      ? mixWhite(report.colors.rejected, 0.22)
+      : r.tone === "SUBMITTED"
+        ? mixWhite(report.colors.warning, 0.18)
+        : r.tone === "SICK"
+          ? mixWhite(report.colors.sick, 0.18)
+          : r.tone === "HOLIDAY_WORK"
+            ? mixWhite(report.colors.holiday, 0.22)
+            : r.tone === "HOLIDAY"
+              ? mixWhite(report.colors.holidayDay, 0.28)
+              : "transparent";
     return `<tr class="${rowClass}">
-      <td>${esc(r.date || "")}</td>
-      <td>${esc(r.clockIn || "")}</td>
-      <td>${esc(r.clockOut || "")}</td>
-      <td>${fmtHours(r.plannedHours)}</td>
-      <td>${esc(worked)}</td>
-      <td>${esc(fmtPause(r.pauseMinutes))}</td>
-      <td>${esc(r.note || "")}</td>
+      <td style="background:${bg}">${esc(r.date || "")}</td>
+      <td style="background:${bg}">${esc(r.clockIn || "")}</td>
+      <td style="background:${bg}">${esc(r.clockOut || "")}</td>
+      <td style="background:${bg}">${fmtHours(r.plannedHours)}</td>
+      <td style="background:${bg}">${esc(worked)}</td>
+      <td style="background:${bg}">${esc(fmtPause(r.pauseMinutes))}</td>
+      <td style="background:${bg}">${esc(r.note || "")}</td>
     </tr>`;
   }).join("");
 
