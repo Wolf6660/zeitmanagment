@@ -14,6 +14,9 @@ export async function ensureBootstrapData(): Promise<void> {
       defaultDailyHours: 8,
       autoBreakMinutes: 30,
       autoBreakAfterHours: 6,
+      timeRoundingEnabled: false,
+      timeRoundingMinutes: 5,
+      timeRoundingMode: "NEAREST",
       webPort: 3000,
       apiPort: env.API_PORT,
       terminalPort: env.TERMINAL_PORT

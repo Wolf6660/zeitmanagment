@@ -170,7 +170,7 @@ export function SupervisorHome() {
                   padding: "4px 6px"
                 }}
               >
-                {e.type === "CLOCK_IN" ? "Kommen" : "Gehen"} {new Date(e.occurredAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
+                {e.type === "CLOCK_IN" ? "Kommen" : "Gehen"} {e.occurredAt.slice(11, 16)}
                 {e.reasonText ? ` - ${e.reasonText}` : ""}
               </div>
             ))}
@@ -215,7 +215,7 @@ export function SupervisorHome() {
                   <td>{e.userName}</td>
                   <td>{e.loginName}</td>
                   <td>{e.type === "CLOCK_IN" ? "Kommen" : "Gehen"}</td>
-                  <td>{new Date(e.occurredAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}</td>
+                  <td>{e.occurredAt.slice(11, 16)}</td>
                   <td>{sourceLabel(e.source)}</td>
                   <td>{e.reasonText || "-"}</td>
                 </tr>

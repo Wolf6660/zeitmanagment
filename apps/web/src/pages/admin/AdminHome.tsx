@@ -14,6 +14,9 @@ type AdminConfig = {
   selfCorrectionMaxDays?: number;
   autoBreakMinutes: number;
   autoBreakAfterHours: number;
+  timeRoundingEnabled?: boolean;
+  timeRoundingMinutes?: number;
+  timeRoundingMode?: "NEAREST" | "UP";
   requireApprovalForCrossMidnight?: boolean;
   requireReasonWebClock?: boolean;
   requireNoteSelfCorrection?: boolean;
@@ -374,6 +377,28 @@ export function AdminHome() {
           <label>
             Pause automatisch ab (Stunden)
             <input type="number" value={config.autoBreakAfterHours} onChange={(e) => setConfig({ ...config, autoBreakAfterHours: Number(e.target.value) })} />
+          </label>
+          <label>
+            Zeitrundung aktiv
+            <select value={String(config.timeRoundingEnabled ?? false)} onChange={(e) => setConfig({ ...config, timeRoundingEnabled: e.target.value === "true" })}>
+              <option value="false">Deaktiviert</option>
+              <option value="true">Aktiv</option>
+            </select>
+          </label>
+          <label>
+            Rundungsintervall (Minuten)
+            <select value={String(config.timeRoundingMinutes ?? 5)} onChange={(e) => setConfig({ ...config, timeRoundingMinutes: Number(e.target.value) })}>
+              <option value="5">5</option>
+              <option value="10">10</option>
+              <option value="15">15</option>
+            </select>
+          </label>
+          <label>
+            Rundungsmodus
+            <select value={config.timeRoundingMode ?? "NEAREST"} onChange={(e) => setConfig({ ...config, timeRoundingMode: e.target.value as "NEAREST" | "UP" })}>
+              <option value="NEAREST">Kaufmaennisch (ab halber Stufe aufrunden)</option>
+              <option value="UP">Immer aufrunden</option>
+            </select>
           </label>
           <label>
             Rueckwirkender Nachtrag (Tage)

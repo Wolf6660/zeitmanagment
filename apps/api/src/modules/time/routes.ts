@@ -36,6 +36,33 @@ function parseTimeParts(time: string): { hour: number; minute: number } | null {
   return { hour: Number(m[1]), minute: Number(m[2]) };
 }
 
+type TimeRoundingConfig = {
+  timeRoundingEnabled: boolean;
+  timeRoundingMinutes: number;
+  timeRoundingMode: string;
+};
+
+function roundOccurredAtByConfig(input: Date, cfg?: TimeRoundingConfig | null): Date {
+  if (!cfg?.timeRoundingEnabled) return new Date(input.getTime());
+  const step = [5, 10, 15].includes(cfg.timeRoundingMinutes) ? cfg.timeRoundingMinutes : 5;
+  const mode = cfg.timeRoundingMode === "UP" ? "UP" : "NEAREST";
+  const totalMinutes =
+    input.getUTCHours() * 60 +
+    input.getUTCMinutes() +
+    input.getUTCSeconds() / 60 +
+    input.getUTCMilliseconds() / 60000;
+  const base = Math.floor(totalMinutes / step) * step;
+  const remainder = totalMinutes - base;
+  let roundedMinutes = base;
+  if (mode === "UP") {
+    roundedMinutes = remainder > 0 ? base + step : base;
+  } else {
+    roundedMinutes = remainder >= step / 2 ? base + step : base;
+  }
+  const dayStartMs = Date.UTC(input.getUTCFullYear(), input.getUTCMonth(), input.getUTCDate(), 0, 0, 0, 0);
+  return new Date(dayStartMs + Math.round(roundedMinutes * 60000));
+}
+
 function parseWorkingDaySet(value?: string | null): Set<number> {
   const raw = (value || "MON,TUE,WED,THU,FRI").split(",").map((x) => x.trim().toUpperCase());
   const map: Record<string, number> = { SUN: 0, MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6 };
@@ -139,7 +166,10 @@ timeRouter.post("/clock", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SUPERVISO
     res.status(400).json({ message: "Ungueltige Eingaben. Grund ist Pflicht." });
     return;
   }
-  const cfg = await prisma.systemConfig.findUnique({ where: { id: 1 }, select: { requireReasonWebClock: true } });
+  const cfg = await prisma.systemConfig.findUnique({
+    where: { id: 1 },
+    select: { requireReasonWebClock: true, timeRoundingEnabled: true, timeRoundingMinutes: true, timeRoundingMode: true }
+  });
   if ((cfg?.requireReasonWebClock ?? true) && !String(parsed.data.reasonText || "").trim()) {
     res.status(400).json({ message: "Grund ist Pflicht." });
     return;
@@ -150,6 +180,7 @@ timeRouter.post("/clock", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SUPERVISO
     return;
   }
 
+  const roundedAt = roundOccurredAtByConfig(new Date(), cfg);
   const entry = await prisma.timeEntry.create({
     data: {
       userId: req.auth.userId,
@@ -157,7 +188,7 @@ timeRouter.post("/clock", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SUPERVISO
       source: TimeEntrySource.WEB,
       reasonCode: parsed.data.reasonCode,
       reasonText: parsed.data.reasonText,
-      occurredAt: new Date()
+      occurredAt: roundedAt
     }
   });
 
@@ -190,7 +221,10 @@ timeRouter.post("/self-correction", requireRole([Role.EMPLOYEE, Role.AZUBI, Role
     res.status(400).json({ message: "Ungueltige Eingaben. Notiz ist Pflicht." });
     return;
   }
-  const cfg = await prisma.systemConfig.findUnique({ where: { id: 1 }, select: { requireNoteSelfCorrection: true } });
+  const cfg = await prisma.systemConfig.findUnique({
+    where: { id: 1 },
+    select: { requireNoteSelfCorrection: true, timeRoundingEnabled: true, timeRoundingMinutes: true, timeRoundingMode: true }
+  });
   if ((cfg?.requireNoteSelfCorrection ?? true) && !parsed.data.correctionComment.trim()) {
     res.status(400).json({ message: "Notiz ist Pflicht." });
     return;
@@ -200,7 +234,12 @@ timeRouter.post("/self-correction", requireRole([Role.EMPLOYEE, Role.AZUBI, Role
     res.status(403).json({ message: "Zeiterfassung ist fuer diesen Mitarbeiter deaktiviert." });
     return;
   }
+  if (parsed.data.occurredAt.getTime() > Date.now()) {
+    res.status(403).json({ message: "Nachtrag in die Zukunft ist nicht erlaubt." });
+    return;
+  }
 
+  const roundedAt = roundOccurredAtByConfig(parsed.data.occurredAt, cfg);
   const entry = await prisma.timeEntry.create({
     data: {
       userId: req.auth.userId,
@@ -209,7 +248,7 @@ timeRouter.post("/self-correction", requireRole([Role.EMPLOYEE, Role.AZUBI, Role
       isManualCorrection: true,
       correctionComment: parsed.data.correctionComment,
       reasonText: parsed.data.correctionComment,
-      occurredAt: parsed.data.occurredAt,
+      occurredAt: roundedAt,
       createdById: req.auth.userId
     }
   });
@@ -243,7 +282,10 @@ timeRouter.post("/correction", requireRole([Role.SUPERVISOR, Role.ADMIN]), async
     res.status(400).json({ message: "Ungueltige Eingaben oder Kommentar zu kurz." });
     return;
   }
-  const cfg = await prisma.systemConfig.findUnique({ where: { id: 1 }, select: { requireNoteSupervisorCorrection: true } });
+  const cfg = await prisma.systemConfig.findUnique({
+    where: { id: 1 },
+    select: { requireNoteSupervisorCorrection: true, timeRoundingEnabled: true, timeRoundingMinutes: true, timeRoundingMode: true }
+  });
   if ((cfg?.requireNoteSupervisorCorrection ?? true) && !parsed.data.correctionComment.trim()) {
     res.status(400).json({ message: "Notiz ist Pflicht." });
     return;
@@ -254,6 +296,7 @@ timeRouter.post("/correction", requireRole([Role.SUPERVISOR, Role.ADMIN]), async
     return;
   }
 
+  const roundedAt = roundOccurredAtByConfig(parsed.data.occurredAt, cfg);
   const entry = await prisma.timeEntry.create({
     data: {
       userId: parsed.data.userId,
@@ -263,7 +306,7 @@ timeRouter.post("/correction", requireRole([Role.SUPERVISOR, Role.ADMIN]), async
       correctionComment: parsed.data.correctionComment,
       reasonCode: parsed.data.reasonCode,
       reasonText: parsed.data.reasonText,
-      occurredAt: parsed.data.occurredAt,
+      occurredAt: roundedAt,
       createdById: req.auth.userId
     }
   });
@@ -848,7 +891,10 @@ timeRouter.post("/day-override", requireRole([Role.SUPERVISOR, Role.ADMIN]), asy
     res.status(401).json({ message: "Nicht authentifiziert." });
     return;
   }
-  const cfg = await prisma.systemConfig.findUnique({ where: { id: 1 }, select: { requireNoteSupervisorCorrection: true } });
+  const cfg = await prisma.systemConfig.findUnique({
+    where: { id: 1 },
+    select: { requireNoteSupervisorCorrection: true, timeRoundingEnabled: true, timeRoundingMinutes: true, timeRoundingMode: true }
+  });
   if ((cfg?.requireNoteSupervisorCorrection ?? true) && !parsed.data.note.trim()) {
     res.status(400).json({ message: "Notiz ist Pflicht." });
     return;
@@ -875,7 +921,8 @@ timeRouter.post("/day-override", requireRole([Role.SUPERVISOR, Role.ADMIN]), asy
         res.status(400).json({ message: "Zeit ist ungueltig (HH:MM)." });
         return;
       }
-      const occurredAt = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, t.hour, t.minute, 0));
+      const occurredAtRaw = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, t.hour, t.minute, 0));
+      const occurredAt = roundOccurredAtByConfig(occurredAtRaw, cfg);
       const row = await prisma.timeEntry.create({
         data: {
           userId: parsed.data.userId,
@@ -1014,7 +1061,16 @@ timeRouter.post("/day-override-self", requireRole([Role.EMPLOYEE, Role.AZUBI, Ro
     res.status(401).json({ message: "Nicht authentifiziert." });
     return;
   }
-  const cfgNotes = await prisma.systemConfig.findUnique({ where: { id: 1 }, select: { requireNoteSelfCorrection: true } });
+  const cfgNotes = await prisma.systemConfig.findUnique({
+    where: { id: 1 },
+    select: {
+      requireNoteSelfCorrection: true,
+      selfCorrectionMaxDays: true,
+      timeRoundingEnabled: true,
+      timeRoundingMinutes: true,
+      timeRoundingMode: true
+    }
+  });
   if ((cfgNotes?.requireNoteSelfCorrection ?? true) && !parsed.data.note.trim()) {
     res.status(400).json({ message: "Notiz ist Pflicht." });
     return;
@@ -1030,8 +1086,7 @@ timeRouter.post("/day-override-self", requireRole([Role.EMPLOYEE, Role.AZUBI, Ro
     return;
   }
 
-  const cfg = await prisma.systemConfig.findUnique({ where: { id: 1 }, select: { selfCorrectionMaxDays: true } });
-  const maxDays = cfg?.selfCorrectionMaxDays ?? 3;
+  const maxDays = cfgNotes?.selfCorrectionMaxDays ?? 3;
   const now = new Date();
   const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0));
   const selected = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, 0, 0, 0));
@@ -1054,7 +1109,8 @@ timeRouter.post("/day-override-self", requireRole([Role.EMPLOYEE, Role.AZUBI, Ro
         res.status(400).json({ message: "Zeit ist ungueltig (HH:MM)." });
         return;
       }
-      const occurredAt = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, t.hour, t.minute, 0));
+      const occurredAtRaw = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, t.hour, t.minute, 0));
+      const occurredAt = roundOccurredAtByConfig(occurredAtRaw, cfgNotes);
       await prisma.timeEntry.create({
         data: {
           userId: req.auth.userId,
@@ -1920,10 +1976,9 @@ timeRouter.get("/today/:userId", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SU
     return;
   }
 
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date();
-  end.setHours(23, 59, 59, 999);
+  const now = new Date();
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
 
   const entries = await prisma.timeEntry.findMany({
     where: {
@@ -1944,10 +1999,9 @@ timeRouter.get("/today/:userId", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SU
 });
 
 timeRouter.get("/today-overview", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (_req: AuthRequest, res) => {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date();
-  end.setHours(23, 59, 59, 999);
+  const now = new Date();
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
 
   const entries = await prisma.timeEntry.findMany({
     where: { occurredAt: { gte: start, lte: end } },
@@ -2046,8 +2100,10 @@ timeRouter.post("/bulk-entry", requireRole([Role.ADMIN]), async (req: AuthReques
       continue;
     }
 
-    const inAt = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), inParts.hour, inParts.minute, 0));
-    const outAt = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), outParts.hour, outParts.minute, 0));
+    const inAtRaw = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), inParts.hour, inParts.minute, 0));
+    const outAtRaw = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), outParts.hour, outParts.minute, 0));
+    const inAt = roundOccurredAtByConfig(inAtRaw, config);
+    const outAt = roundOccurredAtByConfig(outAtRaw, config);
     const correctionComment = `Stapelerfassung: ${parsed.data.note}`;
     createRows.push(
       {

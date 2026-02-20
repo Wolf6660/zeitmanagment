@@ -198,8 +198,8 @@ export function EmployeeHome() {
                   borderRadius: 8,
                   padding: "4px 6px"
                 }}
-              >
-                {e.type === "CLOCK_IN" ? "Kommen" : "Gehen"} {new Date(e.occurredAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
+                >
+                {e.type === "CLOCK_IN" ? "Kommen" : "Gehen"} {e.occurredAt.slice(11, 16)}
                 {e.reasonText ? ` - ${e.reasonText}` : ""}
               </div>
             ))}

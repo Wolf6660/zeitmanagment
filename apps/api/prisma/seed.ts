@@ -14,6 +14,9 @@ async function main() {
       selfCorrectionMaxDays: 3,
       autoBreakMinutes: 30,
       autoBreakAfterHours: 6,
+      timeRoundingEnabled: false,
+      timeRoundingMinutes: 5,
+      timeRoundingMode: "NEAREST",
       webPort: 3000,
       apiPort: 4000,
       terminalPort: 4010

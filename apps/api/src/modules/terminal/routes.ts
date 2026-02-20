@@ -44,6 +44,33 @@ function formatBerlinTime(date: Date): string {
   return `${hh}:${mm}`;
 }
 
+type TimeRoundingConfig = {
+  timeRoundingEnabled: boolean;
+  timeRoundingMinutes: number;
+  timeRoundingMode: string;
+};
+
+function roundOccurredAtByConfig(input: Date, cfg?: TimeRoundingConfig | null): Date {
+  if (!cfg?.timeRoundingEnabled) return new Date(input.getTime());
+  const step = [5, 10, 15].includes(cfg.timeRoundingMinutes) ? cfg.timeRoundingMinutes : 5;
+  const mode = cfg.timeRoundingMode === "UP" ? "UP" : "NEAREST";
+  const totalMinutes =
+    input.getUTCHours() * 60 +
+    input.getUTCMinutes() +
+    input.getUTCSeconds() / 60 +
+    input.getUTCMilliseconds() / 60000;
+  const base = Math.floor(totalMinutes / step) * step;
+  const remainder = totalMinutes - base;
+  let roundedMinutes = base;
+  if (mode === "UP") {
+    roundedMinutes = remainder > 0 ? base + step : base;
+  } else {
+    roundedMinutes = remainder >= step / 2 ? base + step : base;
+  }
+  const dayStartMs = Date.UTC(input.getUTCFullYear(), input.getUTCMonth(), input.getUTCDate(), 0, 0, 0, 0);
+  return new Date(dayStartMs + Math.round(roundedMinutes * 60000));
+}
+
 async function upsertCrossMidnightApprovalFromTerminal(userId: string, clockOutAt: Date): Promise<void> {
   const cfg = await prisma.systemConfig.findUnique({
     where: { id: 1 },
@@ -177,7 +204,11 @@ terminalRouter.post("/next-type", async (req, res) => {
     res.status(403).json({ message: "Zeiterfassung ist fuer diesen Mitarbeiter deaktiviert." });
     return;
   }
-  const now = new Date();
+  const cfg = await prisma.systemConfig.findUnique({
+    where: { id: 1 },
+    select: { timeRoundingEnabled: true, timeRoundingMinutes: true, timeRoundingMode: true }
+  });
+  const now = roundOccurredAtByConfig(new Date(), cfg);
   const lastEntry = await prisma.timeEntry.findFirst({
     where: { userId: user.id, occurredAt: { lte: now } },
     orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
@@ -185,7 +216,7 @@ terminalRouter.post("/next-type", async (req, res) => {
   });
   const nextType = lastEntry?.type === TimeEntryType.CLOCK_IN ? TimeEntryType.CLOCK_OUT : TimeEntryType.CLOCK_IN;
   const blockedDuplicate = !!(lastEntry && lastEntry.source === TimeEntrySource.RFID && Date.now() - lastEntry.occurredAt.getTime() < 30_000);
-  const displayTime = formatBerlinTime(new Date());
+  const displayTime = formatBerlinTime(now);
   res.json({ nextType, blockedDuplicate, employeeName: user.name, displayTime });
 });
 
@@ -256,7 +287,11 @@ terminalRouter.post("/punch", async (req, res) => {
     return;
   }
 
-  const now = new Date();
+  const cfg = await prisma.systemConfig.findUnique({
+    where: { id: 1 },
+    select: { timeRoundingEnabled: true, timeRoundingMinutes: true, timeRoundingMode: true }
+  });
+  const now = roundOccurredAtByConfig(new Date(), cfg);
   const lockKey = `rfid:${user.id}`;
   const txResult = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT GET_LOCK(${lockKey}, 5)`;

@@ -359,6 +359,9 @@ export const api = {
       selfCorrectionMaxDays?: number;
       autoBreakMinutes: number;
       autoBreakAfterHours: number;
+      timeRoundingEnabled?: boolean;
+      timeRoundingMinutes?: number;
+      timeRoundingMode?: "NEAREST" | "UP";
       requireApprovalForCrossMidnight?: boolean;
       requireReasonWebClock?: boolean;
       requireNoteSelfCorrection?: boolean;
