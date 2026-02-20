@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { api, getSession } from "../../api/client";
-import { printMonthReport } from "./printReport";
 
 export function EmployeeMonthPage() {
   const session = getSession();
@@ -37,17 +36,18 @@ export function EmployeeMonthPage() {
         <button
           className="secondary"
           onClick={async () => {
-            const printWin = window.open("", "_blank");
             try {
-              if (!printWin) { setActionMsg("Popup blockiert. Bitte Popups erlauben."); return; }
-              printWin.document.open();
-              printWin.document.write("<html><body style='font-family:sans-serif;padding:16px'>Stundenzettel wird geladen...</body></html>");
-              printWin.document.close();
-              const report = await api.monthReport(session.user.id, monthYear, monthNum);
-              printMonthReport(report, printWin);
-              setActionMsg("Stundenzettel wurde geoeffnet.");
+              const blob = await api.monthReportPdf(session.user.id, monthYear, monthNum);
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `stundenzettel-${session.user.loginName}-${monthYear}-${String(monthNum).padStart(2, "0")}.pdf`;
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+              URL.revokeObjectURL(url);
+              setActionMsg("Stundenzettel wurde heruntergeladen.");
             } catch (e) {
-              if (printWin && !printWin.closed) printWin.close();
               setActionMsg((e as Error).message);
             }
           }}
@@ -74,7 +74,7 @@ export function EmployeeMonthPage() {
           </>
         )}
       </div>
-      {actionMsg && <div className={actionMsg.includes("versendet") || actionMsg.includes("geoeffnet") ? "success" : "error"} style={{ marginBottom: 10 }}>{actionMsg}</div>}
+      {actionMsg && <div className={actionMsg.includes("versendet") || actionMsg.includes("heruntergeladen") ? "success" : "error"} style={{ marginBottom: 10 }}>{actionMsg}</div>}
       {monthView && (
         <table>
           <thead><tr><th>Datum</th><th>Soll</th><th>Ist</th><th>Buchungen</th><th>Notizen</th></tr></thead>

@@ -5,6 +5,14 @@ function kindLabel(kind: string): string {
   return kind === "VACATION" ? "Urlaub" : "Ueberstunden";
 }
 
+function sourceLabel(source: string): string {
+  if (source === "WEB") return "Web";
+  if (source === "RFID_TERMINAL") return "RFID-Terminal";
+  if (source === "MANUAL_CORRECTION") return "Manueller Nachtrag";
+  if (source === "SUPERVISOR_CORRECTION") return "Korrektur Vorgesetzter";
+  return source;
+}
+
 export function SupervisorHome() {
   const session = getSession();
   const [employees, setEmployees] = useState<Array<{ id: string; name: string; loginName?: string; role: string; annualVacationDays: number; carryOverVacationDays: number }>>([]);
@@ -208,7 +216,7 @@ export function SupervisorHome() {
                   <td>{e.loginName}</td>
                   <td>{e.type === "CLOCK_IN" ? "Kommen" : "Gehen"}</td>
                   <td>{new Date(e.occurredAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}</td>
-                  <td>{e.source}</td>
+                  <td>{sourceLabel(e.source)}</td>
                   <td>{e.reasonText || "-"}</td>
                 </tr>
               ))}

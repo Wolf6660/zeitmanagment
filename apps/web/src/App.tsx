@@ -13,6 +13,7 @@ import { RequestsPage } from "./pages/requests/RequestsPage";
 import { MyRequestsPage } from "./pages/requests/MyRequestsPage";
 import { GuidesPage } from "./pages/guides/GuidesPage";
 import { SicknessPage } from "./pages/sickness/SicknessPage";
+import { SettingsHome } from "./pages/settings/SettingsHome";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const session = getSession();
@@ -90,6 +91,16 @@ export default function App() {
           <SupervisorOrAdminRoute>
             <AppLayout>
               <HolidaysPage />
+            </AppLayout>
+          </SupervisorOrAdminRoute>
+        }
+      />
+      <Route
+        path="/app/settings"
+        element={
+          <SupervisorOrAdminRoute>
+            <AppLayout>
+              <SettingsHome />
             </AppLayout>
           </SupervisorOrAdminRoute>
         }

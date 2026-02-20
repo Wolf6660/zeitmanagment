@@ -1438,6 +1438,37 @@ timeRouter.get("/month-report/:userId", requireRole([Role.EMPLOYEE, Role.AZUBI, 
   res.json(report);
 });
 
+timeRouter.get("/month-report/:userId/pdf", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+  if (!req.auth) {
+    res.status(401).json({ message: "Nicht authentifiziert." });
+    return;
+  }
+  const targetUserId = String(req.params.userId);
+  if ((req.auth.role === Role.EMPLOYEE || req.auth.role === Role.AZUBI) && req.auth.userId !== targetUserId) {
+    res.status(403).json({ message: "Keine Berechtigung." });
+    return;
+  }
+  const year = Number(req.query.year);
+  const month = Number(req.query.month);
+  if (!year || !month || month < 1 || month > 12) {
+    res.status(400).json({ message: "Jahr/Monat ungueltig." });
+    return;
+  }
+
+  const report = await loadMonthReportData(targetUserId, year, month);
+  if (!report) {
+    res.status(404).json({ message: "Mitarbeiter nicht gefunden." });
+    return;
+  }
+
+  const pdfTitle = `Stundenzettel ${String(month).padStart(2, "0")}/${year} - ${report.employeeName}`;
+  const pdfBuffer = await buildStyledMonthPdf(pdfTitle, report);
+  const fileName = `stundenzettel-${report.employeeName.replace(/\s+/g, "-").toLowerCase()}-${year}-${String(month).padStart(2, "0")}.pdf`;
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+  res.send(pdfBuffer);
+});
+
 const monthMailSchema = z.object({
   userId: z.string().min(1),
   year: z.number().int().min(2000).max(2100),

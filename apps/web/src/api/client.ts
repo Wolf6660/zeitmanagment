@@ -126,6 +126,26 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return (await res.json()) as T;
 }
 
+async function requestBlob(path: string, init: RequestInit = {}): Promise<Blob> {
+  const session = getSession();
+  const headers = new Headers(init.headers);
+  if (session?.token) {
+    headers.set("Authorization", `Bearer ${session.token}`);
+  }
+  const res = await fetch(`${API_URL}${path}`, { ...init, headers });
+  if (!res.ok) {
+    let message = `Anfrage fehlgeschlagen (${res.status}).`;
+    try {
+      const body = await res.json();
+      if (body?.message) message = body.message;
+    } catch {
+      // ignore
+    }
+    throw new Error(message);
+  }
+  return res.blob();
+}
+
 export const api = {
   publicConfig: () => request<PublicConfig>("/api/public/config"),
 
@@ -175,6 +195,9 @@ export const api = {
 
   monthReport: (userId: string, year: number, month: number) =>
     request<MonthReport>(`/api/time/month-report/${userId}?year=${year}&month=${month}`),
+
+  monthReportPdf: (userId: string, year: number, month: number) =>
+    requestBlob(`/api/time/month-report/${userId}/pdf?year=${year}&month=${month}`),
 
   sendMonthReportMail: (payload: { userId: string; year: number; month: number; recipient?: "SELF" | "EMPLOYEE" }) =>
     request<{ ok: boolean; sentTo: string }>("/api/time/month/send-mail", {
