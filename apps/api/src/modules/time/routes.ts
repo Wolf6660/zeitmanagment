@@ -61,6 +61,13 @@ async function hasDirectDuplicateSequence(userId: string, type: TimeEntryType, o
   return prev?.type === type || next?.type === type;
 }
 
+function hasDuplicateConsecutiveTypes(events: Array<{ type: TimeEntryType }>): boolean {
+  for (let i = 1; i < events.length; i += 1) {
+    if (events[i - 1].type === events[i].type) return true;
+  }
+  return false;
+}
+
 type TimeRoundingConfig = {
   timeRoundingEnabled: boolean;
   timeRoundingMinutes: number;
@@ -953,6 +960,10 @@ timeRouter.post("/day-override", requireRole([Role.SUPERVISOR, Role.ADMIN]), asy
     await prisma.timeEntry.deleteMany({ where: { userId: parsed.data.userId, occurredAt: { gte: dayStart, lte: dayEnd } } });
     const created = [];
     const sortedEvents = [...parsed.data.events].sort((a, b) => a.time.localeCompare(b.time));
+    if (hasDuplicateConsecutiveTypes(sortedEvents)) {
+      res.status(400).json({ message: "Doppelte Folge-Buchung ist nicht erlaubt." });
+      return;
+    }
     for (const e of sortedEvents) {
       const t = parseTimeParts(e.time);
       if (!t) {
@@ -961,10 +972,6 @@ timeRouter.post("/day-override", requireRole([Role.SUPERVISOR, Role.ADMIN]), asy
       }
       const occurredAtRaw = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, t.hour, t.minute, 0));
       const occurredAt = roundOccurredAtByConfig(occurredAtRaw, cfg);
-      if (await hasDirectDuplicateSequence(parsed.data.userId, e.type, occurredAt)) {
-        res.status(400).json({ message: "Doppelte Folge-Buchung ist nicht erlaubt." });
-        return;
-      }
       const row = await prisma.timeEntry.create({
         data: {
           userId: parsed.data.userId,
@@ -1143,7 +1150,17 @@ timeRouter.post("/day-override-self", requireRole([Role.EMPLOYEE, Role.AZUBI, Ro
   }
   try {
     const dayStart = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, 0, 0, 0));
+    const dayEnd = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, 23, 59, 59, 999));
     const sortedEvents = [...parsed.data.events].sort((a, b) => a.time.localeCompare(b.time));
+    if (hasDuplicateConsecutiveTypes(sortedEvents)) {
+      res.status(400).json({ message: "Doppelte Folge-Buchung ist nicht erlaubt." });
+      return;
+    }
+    const existingDayEntries = await prisma.timeEntry.findMany({
+      where: { userId: req.auth.userId, occurredAt: { gte: dayStart, lte: dayEnd } },
+      select: { type: true, occurredAt: true }
+    });
+    const toCreate: Array<{ type: TimeEntryType; occurredAt: Date; }> = [];
     for (const e of sortedEvents) {
       const t = parseTimeParts(e.time);
       if (!t) {
@@ -1167,19 +1184,26 @@ timeRouter.post("/day-override-self", requireRole([Role.EMPLOYEE, Role.AZUBI, Ro
       if (duplicate) {
         continue;
       }
-      if (await hasDirectDuplicateSequence(req.auth.userId, e.type, occurredAt)) {
-        res.status(400).json({ message: "Doppelte Folge-Buchung ist nicht erlaubt." });
-        return;
-      }
+      toCreate.push({ type: e.type, occurredAt });
+    }
+    const combined = [
+      ...existingDayEntries.map((x) => ({ type: x.type, occurredAt: x.occurredAt })),
+      ...toCreate
+    ].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
+    if (hasDuplicateConsecutiveTypes(combined)) {
+      res.status(400).json({ message: "Doppelte Folge-Buchung ist nicht erlaubt." });
+      return;
+    }
+    for (const row of toCreate) {
       await prisma.timeEntry.create({
         data: {
           userId: req.auth.userId,
-          type: e.type,
+          type: row.type,
           source: TimeEntrySource.MANUAL_CORRECTION,
           isManualCorrection: true,
           correctionComment: parsed.data.note,
           reasonText: parsed.data.note,
-          occurredAt,
+          occurredAt: row.occurredAt,
           createdById: req.auth.userId
         }
       });
@@ -1271,10 +1295,15 @@ timeRouter.get("/month/:userId", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SU
     const dayCredit = creditByDay.get(key) ?? 0;
     const netMinutes = Math.max(grossMin - (autoBreakApplies ? breakMinutes : 0) + dayCredit, 0);
     const approvalStatus = approvalByDay.get(key) ?? null;
-    const requiresApproval = isHoliday || weekend || ((config?.requireApprovalForCrossMidnight ?? true) && grossByDay.crossMidnightStartDays.has(key));
+    const crossMidnightApprovalKeys = grossByDay.crossMidnightApprovalKeysByDay.get(key) ?? new Set<string>();
+    const requiresCrossMidnightApproval = (config?.requireApprovalForCrossMidnight ?? true) && crossMidnightApprovalKeys.size > 0;
+    const crossMidnightApproved = !requiresCrossMidnightApproval || Array.from(crossMidnightApprovalKeys).every((k) => approvalByDay.get(k) === ApprovalStatus.APPROVED);
     const schoolDay = dayEntries.some((e) => isSchoolEntry({ reasonText: e.reasonText, correctionComment: e.correctionComment }));
     const workedRaw = schoolDay ? 8 : Number((netMinutes / 60).toFixed(2));
-    const workedEffective = requiresApproval && approvalStatus !== ApprovalStatus.APPROVED ? 0 : workedRaw;
+    const workedEffective = (
+      ((isHoliday || weekend) && approvalStatus !== ApprovalStatus.APPROVED) ||
+      !crossMidnightApproved
+    ) ? 0 : workedRaw;
     const worked = user?.timeTrackingEnabled === false
       ? Number(planned.toFixed(2))
       : Number((sickHours > 0 ? sickHours : workedEffective).toFixed(2));
@@ -1419,10 +1448,15 @@ async function loadMonthReportData(targetUserId: string, year: number, month: nu
     const dayCredit = creditByDay.get(key) ?? 0;
     const netMinutes = Math.max(grossMin - (autoBreakApplies ? breakMinutes : 0) + dayCredit, 0);
     const approvalStatus = approvalByDay.get(key) ?? null;
-    const requiresApproval = isHoliday || weekend || ((config?.requireApprovalForCrossMidnight ?? true) && grossByDay.crossMidnightStartDays.has(key));
+    const crossMidnightApprovalKeys = grossByDay.crossMidnightApprovalKeysByDay.get(key) ?? new Set<string>();
+    const requiresCrossMidnightApproval = (config?.requireApprovalForCrossMidnight ?? true) && crossMidnightApprovalKeys.size > 0;
+    const crossMidnightApproved = !requiresCrossMidnightApproval || Array.from(crossMidnightApprovalKeys).every((k) => approvalByDay.get(k) === ApprovalStatus.APPROVED);
     const schoolDay = dayEntries.some((e) => isSchoolEntry({ reasonText: e.reasonText, correctionComment: e.correctionComment }));
     const workedRaw = schoolDay ? 8 : Number((netMinutes / 60).toFixed(2));
-    const workedEffective = requiresApproval && approvalStatus !== ApprovalStatus.APPROVED ? 0 : workedRaw;
+    const workedEffective = (
+      ((isHoliday || weekend) && approvalStatus !== ApprovalStatus.APPROVED) ||
+      !crossMidnightApproved
+    ) ? 0 : workedRaw;
     const worked = user.timeTrackingEnabled === false
       ? Number(planned.toFixed(2))
       : Number((sickHours > 0 ? sickHours : workedEffective).toFixed(2));
@@ -1669,12 +1703,22 @@ function calculateWorkedMinutes(entries: { type: TimeEntryType; occurredAt: Date
 
 function buildGrossMinutesByStartDay(entries: { type: TimeEntryType; occurredAt: Date }[]): {
   minutesByDay: Map<string, number>;
-  crossMidnightStartDays: Set<string>;
+  crossMidnightApprovalKeysByDay: Map<string, Set<string>>;
 } {
   const sorted = [...entries].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
   const minutesByDay = new Map<string, number>();
-  const crossMidnightStartDays = new Set<string>();
+  const crossMidnightApprovalKeysByDay = new Map<string, Set<string>>();
   let openClockIn: Date | null = null;
+  const addMinutes = (k: string, minutes: number) => {
+    if (minutes <= 0) return;
+    minutesByDay.set(k, (minutesByDay.get(k) ?? 0) + minutes);
+  };
+  const addApprovalKey = (k: string, approvalKey: string) => {
+    const set = crossMidnightApprovalKeysByDay.get(k) ?? new Set<string>();
+    set.add(approvalKey);
+    crossMidnightApprovalKeysByDay.set(k, set);
+  };
+
   for (const e of sorted) {
     if (e.type === TimeEntryType.CLOCK_IN) {
       openClockIn = e.occurredAt;
@@ -1684,15 +1728,28 @@ function buildGrossMinutesByStartDay(entries: { type: TimeEntryType; occurredAt:
       const diffMs = e.occurredAt.getTime() - openClockIn.getTime();
       if (diffMs > 0) {
         const startKey = dayKey(openClockIn);
-        minutesByDay.set(startKey, (minutesByDay.get(startKey) ?? 0) + Math.floor(diffMs / 60000));
-        if (dayKey(e.occurredAt) !== startKey) {
-          crossMidnightStartDays.add(startKey);
+        const endKey = dayKey(e.occurredAt);
+        if (startKey === endKey) {
+          addMinutes(startKey, Math.floor(diffMs / 60000));
+        } else {
+          // Split overnight shifts into exact per-day chunks.
+          let cursor = new Date(openClockIn.getTime());
+          const end = new Date(e.occurredAt.getTime());
+          while (cursor < end) {
+            const nextDayStart = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth(), cursor.getUTCDate() + 1, 0, 0, 0, 0));
+            const segmentEnd = nextDayStart < end ? nextDayStart : end;
+            const segmentMinutes = Math.floor((segmentEnd.getTime() - cursor.getTime()) / 60000);
+            const segmentKey = dayKey(cursor);
+            addMinutes(segmentKey, segmentMinutes);
+            addApprovalKey(segmentKey, startKey);
+            cursor = segmentEnd;
+          }
         }
       }
       openClockIn = null;
     }
   }
-  return { minutesByDay, crossMidnightStartDays };
+  return { minutesByDay, crossMidnightApprovalKeysByDay };
 }
 
 function isSchoolEntry(entry: { reasonText?: string | null; correctionComment?: string | null }): boolean {
@@ -1956,12 +2013,14 @@ timeRouter.get("/summary/:userId", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.
     const isSick = !weekend && !isHoliday && sickLeaves.some((s) => isDateWithinRange(date, s.startDate, s.endDate));
     const isSchoolDay = schoolDaySet.has(key);
     const approvalStatus = approvalByDay.get(key) ?? null;
-    const requiresApproval = isHoliday || weekend || ((config?.requireApprovalForCrossMidnight ?? true) && grossByDay.crossMidnightStartDays.has(key));
+    const crossMidnightApprovalKeys = grossByDay.crossMidnightApprovalKeysByDay.get(key) ?? new Set<string>();
+    const requiresCrossMidnightApproval = (config?.requireApprovalForCrossMidnight ?? true) && crossMidnightApprovalKeys.size > 0;
+    const crossMidnightApproved = !requiresCrossMidnightApproval || Array.from(crossMidnightApprovalKeys).every((k) => approvalByDay.get(k) === ApprovalStatus.APPROVED);
     if (isSchoolDay) {
       workedTotal += 8;
     } else if (isSick) {
       workedTotal += dailyHours;
-    } else if (!requiresApproval || approvalStatus === ApprovalStatus.APPROVED) {
+    } else if ((!isHoliday && !weekend && crossMidnightApproved) || ((isHoliday || weekend) && approvalStatus === ApprovalStatus.APPROVED && crossMidnightApproved)) {
       workedTotal += netMinutes / 60;
     }
 
@@ -2665,7 +2724,9 @@ timeRouter.get("/supervisor-overview", requireRole([Role.SUPERVISOR, Role.ADMIN]
 
       const isHoliday = holidaySet.has(k);
       const weekend = isWeekend(d);
-      const requiresApproval = isHoliday || weekend || ((config?.requireApprovalForCrossMidnight ?? true) && grossByDay.crossMidnightStartDays.has(k));
+      const crossMidnightApprovalKeys = grossByDay.crossMidnightApprovalKeysByDay.get(k) ?? new Set<string>();
+      const requiresCrossMidnightApproval = (config?.requireApprovalForCrossMidnight ?? true) && crossMidnightApprovalKeys.size > 0;
+      const crossMidnightApproved = !requiresCrossMidnightApproval || Array.from(crossMidnightApprovalKeys).every((startKey) => approvalByUserDay.get(`${u.id}:${startKey}`) === ApprovalStatus.APPROVED);
       const approvalStatus = approvalByUserDay.get(`${u.id}:${k}`) ?? null;
       const sickForDay = (sickByUser.get(u.id) ?? []).some((s) => isDateWithinRange(d, s.startDate, s.endDate));
       const sickHoursForDay = planned > 0 && sickForDay ? planned : 0;
@@ -2673,7 +2734,7 @@ timeRouter.get("/supervisor-overview", requireRole([Role.SUPERVISOR, Role.ADMIN]
         workedCurrentMonthHours += 8;
       } else if (sickHoursForDay > 0) {
         workedCurrentMonthHours += sickHoursForDay;
-      } else if (!requiresApproval || approvalStatus === ApprovalStatus.APPROVED) {
+      } else if ((!isHoliday && !weekend && crossMidnightApproved) || ((isHoliday || weekend) && approvalStatus === ApprovalStatus.APPROVED && crossMidnightApproved)) {
         workedCurrentMonthHours += netMinutes / 60;
       } else {
         workedCurrentMonthHours += 0;
