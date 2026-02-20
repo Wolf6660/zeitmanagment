@@ -1,13 +1,21 @@
 import React, { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { api, clearSession, getSession } from "../api/client";
 import type { PublicConfig } from "../styles/theme";
 import { applyTheme } from "../styles/theme";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const session = getSession();
   const [brand, setBrand] = useState<Pick<PublicConfig, "companyName" | "systemName" | "companyLogoUrl"> | null>(null);
+  const showSettingsSubmenu = Boolean(
+    (session?.user.role === "ADMIN" || session?.user.role === "SUPERVISOR")
+      && (location.pathname === "/app/settings"
+        || location.pathname === "/app/holidays"
+        || location.pathname === "/app/requests"
+        || location.pathname === "/app/team")
+  );
 
   useEffect(() => {
     api.publicConfig()
@@ -68,6 +76,15 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </button>
           </div>
         </div>
+        {showSettingsSubmenu && (
+          <div className="card" style={{ marginTop: 10, padding: 10 }}>
+            <div className="nav" style={{ margin: 0 }}>
+              <Link to="/app/holidays"><button>Feiertage</button></Link>
+              <Link to="/app/requests"><button>Antraege</button></Link>
+              <Link to="/app/team"><button>Mitarbeiter</button></Link>
+            </div>
+          </div>
+        )}
       </div>
       {children}
     </div>

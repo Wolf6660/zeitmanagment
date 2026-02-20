@@ -1699,8 +1699,12 @@ async function buildStyledMonthPdf(title: string, report: MonthReportData): Prom
   }
 
   // Fuer die Zusammenfassung unten immer zusaetzlich Platz reservieren
-  // (mindestens etwa 3 Zeilen mehr Luft).
-  if (y < 134) newPage();
+  // und den Block sichtbar unter die Tabelle schieben (ca. 3 Zeilen).
+  const summaryPadding = 42;
+  if (y < 134 + summaryPadding) {
+    newPage();
+  }
+  y -= summaryPadding;
   page.drawText(`Monatssumme Soll: ${report.totals.plannedHours.toFixed(2)} h`, { x: left, y, size: 10, font: bold });
   y -= 13;
   page.drawText(`Monatssumme Ist: ${report.totals.workedHours.toFixed(2)} h`, { x: left, y, size: 10, font: bold });
