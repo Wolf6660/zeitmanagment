@@ -1,4 +1,4 @@
-import { Role } from "@prisma/client";
+import { Prisma, Role } from "@prisma/client";
 import bcrypt from "bcrypt";
 import { Router } from "express";
 import { z } from "zod";
@@ -155,18 +155,37 @@ employeesRouter.post("/", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req
       }
     });
 
-    await writeAuditLog({
-      actorUserId: req.auth?.userId,
-      actorLoginName: await resolveActorLoginName(req.auth?.userId),
-      action: "EMPLOYEE_CREATED",
-      targetType: "User",
-      targetId: user.id,
-      payload: { ...parsed.data, password: "***" }
-    });
+    try {
+      await writeAuditLog({
+        actorUserId: req.auth?.userId,
+        actorLoginName: await resolveActorLoginName(req.auth?.userId),
+        action: "EMPLOYEE_CREATED",
+        targetType: "User",
+        targetId: user.id,
+        payload: { ...parsed.data, password: "***" }
+      });
+    } catch {
+      // Benutzer wurde erfolgreich angelegt; Logging-Fehler soll den Request nicht fehlschlagen lassen.
+    }
 
     res.status(201).json(user);
-  } catch {
-    res.status(409).json({ message: "Mitarbeiter konnte nicht angelegt werden (Loginname/E-Mail evtl. bereits vorhanden)." });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      res.status(409).json({ message: "Mitarbeiter konnte nicht angelegt werden (Loginname/E-Mail evtl. bereits vorhanden)." });
+      return;
+    }
+    try {
+      await writeAuditLog({
+        actorUserId: req.auth?.userId,
+        actorLoginName: await resolveActorLoginName(req.auth?.userId),
+        action: "EMPLOYEE_CREATE_FAILED",
+        targetType: "User",
+        payload: { loginName: parsed.data.loginName, email: parsed.data.email ?? null, error: String((e as Error)?.message || e) }
+      });
+    } catch {
+      // Logging-Fehler im Fehlerpfad ignorieren.
+    }
+    res.status(500).json({ message: "Mitarbeiter konnte nicht angelegt werden." });
   }
 });
 
