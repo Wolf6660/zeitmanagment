@@ -6,6 +6,7 @@ export type PublicConfig = {
   colorApproved: string;
   colorRejected: string;
   colorManualCorrection: string;
+  colorBulkEntry: string;
   colorBreakCredit: string;
   colorSickLeave: string;
   colorHolidayOrWeekend: string;
@@ -13,18 +14,32 @@ export type PublicConfig = {
   colorVacationWarning: string;
   colorWebEntry: string;
   colorOvertime: string;
+  colorApprovedEnabled?: boolean;
+  colorRejectedEnabled?: boolean;
+  colorManualCorrectionEnabled?: boolean;
+  colorBulkEntryEnabled?: boolean;
+  colorBreakCreditEnabled?: boolean;
+  colorSickLeaveEnabled?: boolean;
+  colorHolidayOrWeekendEnabled?: boolean;
+  colorHolidayOrWeekendWorkEnabled?: boolean;
+  colorVacationWarningEnabled?: boolean;
+  colorWebEntryEnabled?: boolean;
+  colorOvertimeEnabled?: boolean;
 };
 
 export function applyTheme(config: PublicConfig): void {
   const root = document.documentElement;
-  root.style.setProperty("--approved", config.colorApproved);
-  root.style.setProperty("--rejected", config.colorRejected);
-  root.style.setProperty("--manual", config.colorManualCorrection);
-  root.style.setProperty("--break-credit", config.colorBreakCredit);
-  root.style.setProperty("--sick", config.colorSickLeave);
-  root.style.setProperty("--holiday-day", config.colorHolidayOrWeekend);
-  root.style.setProperty("--holiday", config.colorHolidayOrWeekendWork);
-  root.style.setProperty("--warning", config.colorVacationWarning);
-  root.style.setProperty("--web-entry", config.colorWebEntry);
-  root.style.setProperty("--overtime", config.colorOvertime);
+  const bgColor = (enabled: boolean | undefined, color: string) => (enabled ?? true ? color : "#ffffff");
+  const textColor = (enabled: boolean | undefined, color: string, fallback = "#111827") => (enabled ?? true ? color : fallback);
+  root.style.setProperty("--approved", bgColor(config.colorApprovedEnabled, config.colorApproved));
+  root.style.setProperty("--rejected", bgColor(config.colorRejectedEnabled, config.colorRejected));
+  root.style.setProperty("--manual", bgColor(config.colorManualCorrectionEnabled, config.colorManualCorrection));
+  root.style.setProperty("--bulk-entry", bgColor(config.colorBulkEntryEnabled, config.colorBulkEntry));
+  root.style.setProperty("--break-credit", bgColor(config.colorBreakCreditEnabled, config.colorBreakCredit));
+  root.style.setProperty("--sick", bgColor(config.colorSickLeaveEnabled, config.colorSickLeave));
+  root.style.setProperty("--holiday-day", bgColor(config.colorHolidayOrWeekendEnabled, config.colorHolidayOrWeekend));
+  root.style.setProperty("--holiday", bgColor(config.colorHolidayOrWeekendWorkEnabled, config.colorHolidayOrWeekendWork));
+  root.style.setProperty("--warning", bgColor(config.colorVacationWarningEnabled, config.colorVacationWarning));
+  root.style.setProperty("--web-entry", bgColor(config.colorWebEntryEnabled, config.colorWebEntry));
+  root.style.setProperty("--overtime", textColor(config.colorOvertimeEnabled, config.colorOvertime));
 }

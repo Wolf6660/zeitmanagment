@@ -17,6 +17,7 @@ export async function ensureBootstrapData(): Promise<void> {
       timeRoundingEnabled: false,
       timeRoundingMinutes: 5,
       timeRoundingMode: "NEAREST",
+      colorBulkEntry: "#334155",
       webPort: 3000,
       apiPort: env.API_PORT,
       terminalPort: env.TERMINAL_PORT

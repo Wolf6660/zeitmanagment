@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../../api/client";
 
-function dayRowBackground(d: { specialWorkApprovalStatus?: "SUBMITTED" | "APPROVED" | "REJECTED" | null; isSick?: boolean; isHoliday: boolean; isWeekend: boolean; workedHours: number; hasManualCorrection?: boolean }): string {
+function dayRowBackground(d: { specialWorkApprovalStatus?: "SUBMITTED" | "APPROVED" | "REJECTED" | null; isSick?: boolean; isHoliday: boolean; isWeekend: boolean; workedHours: number; hasManualCorrection?: boolean; hasBulkEntry?: boolean }): string {
   if (d.specialWorkApprovalStatus === "REJECTED") return "color-mix(in srgb, var(--rejected) 22%, white)";
   if (d.specialWorkApprovalStatus === "SUBMITTED") return "color-mix(in srgb, var(--warning) 18%, white)";
   if (d.specialWorkApprovalStatus === "APPROVED") return "color-mix(in srgb, var(--approved) 18%, white)";
@@ -11,16 +11,20 @@ function dayRowBackground(d: { specialWorkApprovalStatus?: "SUBMITTED" | "APPROV
       ? "color-mix(in srgb, var(--holiday) 22%, white)"
       : "color-mix(in srgb, var(--holiday-day) 28%, white)";
   }
+  if (d.hasBulkEntry) return "color-mix(in srgb, var(--bulk-entry) 14%, white)";
   if (d.hasManualCorrection) return "color-mix(in srgb, var(--manual) 14%, white)";
   return "transparent";
 }
 
 function entryStyle(source?: string): React.CSSProperties {
   if (source === "WEB") {
-    return { marginRight: 8, color: "var(--web-entry)", background: "color-mix(in srgb, var(--web-entry) 20%, white)", borderRadius: 6, padding: "2px 6px" };
+    return { marginRight: 8, background: "color-mix(in srgb, var(--web-entry) 20%, white)", borderRadius: 6, padding: "2px 6px" };
+  }
+  if (source === "BULK_ENTRY") {
+    return { marginRight: 8, background: "color-mix(in srgb, var(--bulk-entry) 20%, white)", borderRadius: 6, padding: "2px 6px" };
   }
   if (source === "MANUAL_CORRECTION" || source === "SUPERVISOR_CORRECTION") {
-    return { marginRight: 8, color: "var(--manual)", background: "color-mix(in srgb, var(--manual) 16%, white)", borderRadius: 6, padding: "2px 6px" };
+    return { marginRight: 8, background: "color-mix(in srgb, var(--manual) 16%, white)", borderRadius: 6, padding: "2px 6px" };
   }
   return { marginRight: 8 };
 }

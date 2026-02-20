@@ -9,6 +9,7 @@ function sourceLabel(source: string): string {
   if (source === "WEB") return "Web";
   if (source === "RFID_TERMINAL") return "RFID-Terminal";
   if (source === "MANUAL_CORRECTION") return "Manueller Nachtrag";
+  if (source === "BULK_ENTRY") return "Stapelerfassung";
   if (source === "SUPERVISOR_CORRECTION") return "Korrektur Vorgesetzter";
   return source;
 }
@@ -173,8 +174,14 @@ export function SupervisorHome() {
               <div
                 key={e.id}
                 style={{
-                  color: e.source === "WEB" ? "var(--web-entry)" : "inherit",
-                  background: e.source === "WEB" ? "color-mix(in srgb, var(--web-entry) 20%, white)" : "transparent",
+                  background:
+                    e.source === "WEB"
+                      ? "color-mix(in srgb, var(--web-entry) 20%, white)"
+                      : e.source === "BULK_ENTRY"
+                        ? "color-mix(in srgb, var(--bulk-entry) 20%, white)"
+                        : e.source === "MANUAL_CORRECTION"
+                          ? "color-mix(in srgb, var(--manual) 16%, white)"
+                          : "transparent",
                   borderRadius: 8,
                   padding: "4px 6px"
                 }}
@@ -220,7 +227,19 @@ export function SupervisorHome() {
             </thead>
             <tbody>
               {todayOverview.map((e) => (
-                <tr key={e.id} style={{ background: e.source === "WEB" ? "color-mix(in srgb, var(--web-entry) 25%, white)" : "transparent" }}>
+                <tr
+                  key={e.id}
+                  style={{
+                    background:
+                      e.source === "WEB"
+                        ? "color-mix(in srgb, var(--web-entry) 25%, white)"
+                        : e.source === "BULK_ENTRY"
+                          ? "color-mix(in srgb, var(--bulk-entry) 25%, white)"
+                          : e.source === "MANUAL_CORRECTION"
+                            ? "color-mix(in srgb, var(--manual) 16%, white)"
+                            : "transparent"
+                  }}
+                >
                   <td>{e.userName}</td>
                   <td>{e.loginName}</td>
                   <td>{e.type === "CLOCK_IN" ? "Kommen" : "Gehen"}</td>

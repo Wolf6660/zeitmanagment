@@ -17,6 +17,7 @@ async function main() {
       timeRoundingEnabled: false,
       timeRoundingMinutes: 5,
       timeRoundingMode: "NEAREST",
+      colorBulkEntry: "#334155",
       webPort: 3000,
       apiPort: 4000,
       terminalPort: 4010

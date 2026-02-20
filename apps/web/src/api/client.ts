@@ -189,6 +189,7 @@ export const api = {
         isHoliday: boolean;
         isWeekend: boolean;
         hasManualCorrection: boolean;
+        hasBulkEntry?: boolean;
         entries: Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; time: string; source: string; reasonText?: string }>;
       }>;
     }>(`/api/time/month/${userId}?year=${year}&month=${month}`),
@@ -375,6 +376,7 @@ export const api = {
       colorApproved: string;
       colorRejected: string;
       colorManualCorrection: string;
+      colorBulkEntry: string;
       colorBreakCredit: string;
       colorSickLeave: string;
       colorHolidayOrWeekend: string;
@@ -382,6 +384,17 @@ export const api = {
       colorVacationWarning: string;
       colorWebEntry: string;
       colorOvertime: string;
+      colorApprovedEnabled?: boolean;
+      colorRejectedEnabled?: boolean;
+      colorManualCorrectionEnabled?: boolean;
+      colorBulkEntryEnabled?: boolean;
+      colorBreakCreditEnabled?: boolean;
+      colorSickLeaveEnabled?: boolean;
+      colorHolidayOrWeekendEnabled?: boolean;
+      colorHolidayOrWeekendWorkEnabled?: boolean;
+      colorVacationWarningEnabled?: boolean;
+      colorWebEntryEnabled?: boolean;
+      colorOvertimeEnabled?: boolean;
       smtpEnabled?: boolean;
       smtpHost?: string | null;
       smtpPort?: number;

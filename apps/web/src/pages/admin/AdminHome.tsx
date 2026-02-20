@@ -30,6 +30,7 @@ type AdminConfig = {
   colorApproved: string;
   colorRejected: string;
   colorManualCorrection: string;
+  colorBulkEntry: string;
   colorBreakCredit: string;
   colorSickLeave: string;
   colorHolidayOrWeekend: string;
@@ -37,6 +38,17 @@ type AdminConfig = {
   colorVacationWarning: string;
   colorWebEntry: string;
   colorOvertime: string;
+  colorApprovedEnabled?: boolean;
+  colorRejectedEnabled?: boolean;
+  colorManualCorrectionEnabled?: boolean;
+  colorBulkEntryEnabled?: boolean;
+  colorBreakCreditEnabled?: boolean;
+  colorSickLeaveEnabled?: boolean;
+  colorHolidayOrWeekendEnabled?: boolean;
+  colorHolidayOrWeekendWorkEnabled?: boolean;
+  colorVacationWarningEnabled?: boolean;
+  colorWebEntryEnabled?: boolean;
+  colorOvertimeEnabled?: boolean;
   smtpEnabled?: boolean;
   smtpHost?: string | null;
   smtpPort?: number;
@@ -100,17 +112,18 @@ type Employee = {
   rfidTagActive?: boolean;
 };
 
-const COLOR_FIELDS: Array<{ key: keyof AdminConfig; label: string }> = [
-  { key: "colorApproved", label: "Genehmigt" },
-  { key: "colorRejected", label: "Abgelehnt" },
-  { key: "colorManualCorrection", label: "Manuelle Korrektur" },
-  { key: "colorWebEntry", label: "Web-Einstempeln" },
-  { key: "colorBreakCredit", label: "Pausengutschrift" },
-  { key: "colorSickLeave", label: "Krankheit" },
-  { key: "colorHolidayOrWeekend", label: "Wochenende / Feiertag" },
-  { key: "colorHolidayOrWeekendWork", label: "Arbeit Feiertag/Wochenende" },
-  { key: "colorVacationWarning", label: "Urlaub" },
-  { key: "colorOvertime", label: "Ueberstunden" }
+const COLOR_FIELDS: Array<{ key: keyof AdminConfig; enabledKey: keyof AdminConfig; label: string }> = [
+  { key: "colorApproved", enabledKey: "colorApprovedEnabled", label: "Genehmigt" },
+  { key: "colorRejected", enabledKey: "colorRejectedEnabled", label: "Abgelehnt" },
+  { key: "colorManualCorrection", enabledKey: "colorManualCorrectionEnabled", label: "Manueller Nachtrag" },
+  { key: "colorBulkEntry", enabledKey: "colorBulkEntryEnabled", label: "Stapelerfassung" },
+  { key: "colorWebEntry", enabledKey: "colorWebEntryEnabled", label: "Web-Einstempeln" },
+  { key: "colorBreakCredit", enabledKey: "colorBreakCreditEnabled", label: "Pausengutschrift" },
+  { key: "colorSickLeave", enabledKey: "colorSickLeaveEnabled", label: "Krankheit" },
+  { key: "colorHolidayOrWeekend", enabledKey: "colorHolidayOrWeekendEnabled", label: "Wochenende / Feiertag" },
+  { key: "colorHolidayOrWeekendWork", enabledKey: "colorHolidayOrWeekendWorkEnabled", label: "Arbeit Feiertag/Wochenende" },
+  { key: "colorVacationWarning", enabledKey: "colorVacationWarningEnabled", label: "Urlaub" },
+  { key: "colorOvertime", enabledKey: "colorOvertimeEnabled", label: "Ueberstunden" }
 ];
 
 function toBoolLiteral(v: unknown): string {
@@ -865,18 +878,35 @@ export function AdminHome() {
         <div className="grid admin-section">
           {COLOR_FIELDS.map((field) => (
             <div key={field.key} className="row" style={{ justifyContent: "space-between" }}>
+              {(() => {
+                const enabled = (config[field.enabledKey] as boolean | undefined) ?? true;
+                return (
+                  <>
               <span
                 style={{
-                  background: (config[field.key] as string) || "#000000",
+                  background: enabled ? ((config[field.key] as string) || "#000000") : "#ffffff",
                   color: "#111827",
                   borderRadius: 8,
                   padding: "8px 10px",
                   minWidth: 280,
-                  fontWeight: 600
+                  fontWeight: 600,
+                  border: enabled ? "1px solid var(--border)" : "1px dashed var(--border)"
                 }}
               >
-                {field.label}
+                {field.label} {enabled ? "" : "(deaktiviert)"}
               </span>
+              <select
+                value={String(enabled)}
+                onChange={(e) => {
+                  const updated = { ...config, [field.enabledKey]: e.target.value === "true" } as AdminConfig;
+                  setConfig(updated);
+                  applyTheme(updated as PublicConfig);
+                }}
+                style={{ width: 130 }}
+              >
+                <option value="true">Aktiv</option>
+                <option value="false">Deaktiviert</option>
+              </select>
               <input
                 type="color"
                 value={(config[field.key] as string) || "#000000"}
@@ -887,6 +917,9 @@ export function AdminHome() {
                 }}
                 style={{ width: 72, height: 42, padding: 4 }}
               />
+                  </>
+                );
+              })()}
             </div>
           ))}
           <div className="row" style={{ gridColumn: "1 / -1" }}>

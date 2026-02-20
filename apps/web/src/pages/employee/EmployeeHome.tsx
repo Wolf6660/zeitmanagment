@@ -202,8 +202,14 @@ export function EmployeeHome() {
               <div
                 key={e.id}
                 style={{
-                  color: e.source === "MANUAL_CORRECTION" ? "var(--manual)" : e.source === "WEB" ? "var(--web-entry)" : "inherit",
-                  background: e.source === "WEB" ? "color-mix(in srgb, var(--web-entry) 20%, white)" : "transparent",
+                  background:
+                    e.source === "WEB"
+                      ? "color-mix(in srgb, var(--web-entry) 20%, white)"
+                      : e.source === "BULK_ENTRY"
+                        ? "color-mix(in srgb, var(--bulk-entry) 20%, white)"
+                        : e.source === "MANUAL_CORRECTION"
+                          ? "color-mix(in srgb, var(--manual) 16%, white)"
+                          : "transparent",
                   borderRadius: 8,
                   padding: "4px 6px"
                 }}

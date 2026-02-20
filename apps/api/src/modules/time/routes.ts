@@ -1289,7 +1289,8 @@ timeRouter.get("/month/:userId", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SU
       isHoliday,
       isWeekend: weekend,
       specialWorkApprovalStatus: approvalStatus,
-      hasManualCorrection: dayEntries.some((e) => e.isManualCorrection),
+      hasManualCorrection: dayEntries.some((e) => e.isManualCorrection && e.source !== TimeEntrySource.BULK_ENTRY),
+      hasBulkEntry: dayEntries.some((e) => e.source === TimeEntrySource.BULK_ENTRY),
       entries: dayEntries.map((e) => ({ id: e.id, type: e.type, time: formatBerlinHHMM(e.occurredAt), source: e.source, reasonText: e.reasonText }))
     });
   }
@@ -2169,7 +2170,7 @@ timeRouter.post("/bulk-entry", requireRole([Role.ADMIN]), async (req: AuthReques
       {
         userId: parsed.data.userId,
         type: TimeEntryType.CLOCK_IN,
-        source: TimeEntrySource.MANUAL_CORRECTION,
+        source: TimeEntrySource.BULK_ENTRY,
         isManualCorrection: true,
         correctionComment,
         reasonText: correctionComment,
@@ -2179,7 +2180,7 @@ timeRouter.post("/bulk-entry", requireRole([Role.ADMIN]), async (req: AuthReques
       {
         userId: parsed.data.userId,
         type: TimeEntryType.CLOCK_OUT,
-        source: TimeEntrySource.MANUAL_CORRECTION,
+        source: TimeEntrySource.BULK_ENTRY,
         isManualCorrection: true,
         correctionComment,
         reasonText: correctionComment,

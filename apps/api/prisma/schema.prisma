@@ -23,6 +23,7 @@ enum TimeEntrySource {
   WEB
   RFID
   MANUAL_CORRECTION
+  BULK_ENTRY
 }
 
 enum LeaveKind {
@@ -298,6 +299,7 @@ model SystemConfig {
   colorApproved                     String   @default("#22C55E")
   colorRejected                     String   @default("#EF4444")
   colorManualCorrection             String   @default("#DC2626")
+  colorBulkEntry                    String   @default("#334155")
   colorBreakCredit                  String   @default("#EC4899")
   colorSickLeave                    String   @default("#3B82F6")
   colorHolidayOrWeekend             String   @default("#FDE68A")
@@ -305,6 +307,17 @@ model SystemConfig {
   colorVacationWarning              String   @default("#F59E0B")
   colorWebEntry                     String   @default("#7DD3FC")
   colorOvertime                     String   @default("#0EA5E9")
+  colorApprovedEnabled              Boolean  @default(true)
+  colorRejectedEnabled              Boolean  @default(true)
+  colorManualCorrectionEnabled      Boolean  @default(true)
+  colorBulkEntryEnabled             Boolean  @default(true)
+  colorBreakCreditEnabled           Boolean  @default(true)
+  colorSickLeaveEnabled             Boolean  @default(true)
+  colorHolidayOrWeekendEnabled      Boolean  @default(true)
+  colorHolidayOrWeekendWorkEnabled  Boolean  @default(true)
+  colorVacationWarningEnabled       Boolean  @default(true)
+  colorWebEntryEnabled              Boolean  @default(true)
+  colorOvertimeEnabled              Boolean  @default(true)
 
   smtpEnabled                       Boolean  @default(false)
   smtpHost                          String?
