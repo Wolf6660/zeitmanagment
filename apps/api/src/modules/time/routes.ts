@@ -45,6 +45,28 @@ function formatBerlinHHMM(date: Date): string {
   }).format(date);
 }
 
+function lastSundayOfMonthUtc(year: number, monthIndex: number): Date {
+  const d = new Date(Date.UTC(year, monthIndex + 1, 0, 0, 0, 0, 0));
+  const dow = d.getUTCDay();
+  d.setUTCDate(d.getUTCDate() - dow);
+  return d;
+}
+
+function isBerlinDstAtUtc(date: Date): boolean {
+  const y = date.getUTCFullYear();
+  const startDay = lastSundayOfMonthUtc(y, 2);
+  const endDay = lastSundayOfMonthUtc(y, 9);
+  const start = new Date(Date.UTC(y, 2, startDay.getUTCDate(), 1, 0, 0));
+  const end = new Date(Date.UTC(y, 9, endDay.getUTCDate(), 1, 0, 0));
+  return date >= start && date < end;
+}
+
+function berlinLocalToUtc(parts: { year: number; month: number; day: number }, hour: number, minute: number): Date {
+  const guessStd = new Date(Date.UTC(parts.year, parts.month - 1, parts.day, hour - 1, minute, 0, 0));
+  const offset = isBerlinDstAtUtc(guessStd) ? 2 : 1;
+  return new Date(Date.UTC(parts.year, parts.month - 1, parts.day, hour - offset, minute, 0, 0));
+}
+
 async function hasDirectDuplicateSequence(userId: string, type: TimeEntryType, occurredAt: Date): Promise<boolean> {
   const [prev, next] = await Promise.all([
     prisma.timeEntry.findFirst({
@@ -970,7 +992,7 @@ timeRouter.post("/day-override", requireRole([Role.SUPERVISOR, Role.ADMIN]), asy
         res.status(400).json({ message: "Zeit ist ungueltig (HH:MM)." });
         return;
       }
-      const occurredAtRaw = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, t.hour, t.minute, 0));
+      const occurredAtRaw = berlinLocalToUtc(dateParts, t.hour, t.minute);
       const occurredAt = roundOccurredAtByConfig(occurredAtRaw, cfg);
       const row = await prisma.timeEntry.create({
         data: {
@@ -1072,7 +1094,7 @@ timeRouter.post("/azubi/school-day", requireRole([Role.AZUBI]), async (req: Auth
         isManualCorrection: true,
         correctionComment: "Berufsschule",
         reasonText: "Berufsschule",
-        occurredAt: new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, 8, 0, 0)),
+        occurredAt: berlinLocalToUtc(dateParts, 8, 0),
         createdById: req.auth.userId
       },
       {
@@ -1082,7 +1104,7 @@ timeRouter.post("/azubi/school-day", requireRole([Role.AZUBI]), async (req: Auth
         isManualCorrection: true,
         correctionComment: "Berufsschule",
         reasonText: "Berufsschule",
-        occurredAt: new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, 16, 0, 0)),
+        occurredAt: berlinLocalToUtc(dateParts, 16, 0),
         createdById: req.auth.userId
       }
     ]
@@ -1167,7 +1189,7 @@ timeRouter.post("/day-override-self", requireRole([Role.EMPLOYEE, Role.AZUBI, Ro
         res.status(400).json({ message: "Zeit ist ungueltig (HH:MM)." });
         return;
       }
-      const occurredAtRaw = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, t.hour, t.minute, 0));
+      const occurredAtRaw = berlinLocalToUtc(dateParts, t.hour, t.minute);
       if (selected.getTime() === todayUtc.getTime() && occurredAtRaw.getTime() > now.getTime()) {
         res.status(403).json({ message: "Nachtrag in die Zukunft ist nicht erlaubt." });
         return;
@@ -2220,8 +2242,8 @@ timeRouter.post("/bulk-entry", requireRole([Role.ADMIN]), async (req: AuthReques
       continue;
     }
 
-    const inAtRaw = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), inParts.hour, inParts.minute, 0));
-    const outAtRaw = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), outParts.hour, outParts.minute, 0));
+    const inAtRaw = berlinLocalToUtc({ year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() }, inParts.hour, inParts.minute);
+    const outAtRaw = berlinLocalToUtc({ year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() }, outParts.hour, outParts.minute);
     const inAt = roundOccurredAtByConfig(inAtRaw, config);
     const outAt = roundOccurredAtByConfig(outAtRaw, config);
     const correctionComment = `Stapelerfassung: ${parsed.data.note}`;
