@@ -13,6 +13,7 @@ export function MonthEditorPage() {
   const [overrideNote, setOverrideNote] = useState("");
   const [overrideEvents, setOverrideEvents] = useState<Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; time: string }>>([]);
   const [msg, setMsg] = useState("");
+  const [actionMsg, setActionMsg] = useState("");
   const [saving, setSaving] = useState(false);
 
   async function loadEmployees() {
@@ -55,16 +56,17 @@ export function MonthEditorPage() {
           onClick={async () => {
             const printWin = window.open("", "_blank");
             try {
-              if (!monthUserId) { setMsg("Bitte Mitarbeiter auswaehlen."); return; }
-              if (!printWin) { setMsg("Popup blockiert. Bitte Popups erlauben."); return; }
+              if (!monthUserId) { setActionMsg("Bitte Mitarbeiter auswaehlen."); return; }
+              if (!printWin) { setActionMsg("Popup blockiert. Bitte Popups erlauben."); return; }
               printWin.document.open();
               printWin.document.write("<html><body style='font-family:sans-serif;padding:16px'>Stundenzettel wird geladen...</body></html>");
               printWin.document.close();
               const report = await api.monthReport(monthUserId, monthYear, monthNum);
               printMonthReport(report, printWin);
+              setActionMsg("Stundenzettel wurde geoeffnet.");
             } catch (e) {
               if (printWin && !printWin.closed) printWin.close();
-              setMsg((e as Error).message);
+              setActionMsg((e as Error).message);
             }
           }}
         >
@@ -75,17 +77,18 @@ export function MonthEditorPage() {
           type="button"
           onClick={async () => {
             try {
-              if (!monthUserId) { setMsg("Bitte Mitarbeiter auswaehlen."); return; }
+              if (!monthUserId) { setActionMsg("Bitte Mitarbeiter auswaehlen."); return; }
               await api.sendMonthReportMail({ userId: monthUserId, year: monthYear, month: monthNum, recipient: "SELF" });
-              setMsg("Monatsbericht per E-Mail versendet.");
+              setActionMsg("Monatsbericht wurde per E-Mail versendet.");
             } catch (e) {
-              setMsg((e as Error).message);
+              setActionMsg((e as Error).message);
             }
           }}
         >
           Per Mail senden
         </button>
       </div>
+      {actionMsg && <div className={actionMsg.includes("versendet") || actionMsg.includes("geoeffnet") ? "success" : "error"} style={{ marginBottom: 10 }}>{actionMsg}</div>}
 
       {monthView && (
         <table>

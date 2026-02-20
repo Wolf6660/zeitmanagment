@@ -13,6 +13,7 @@ export function EmployeeMonthPage() {
     days: Array<{ date: string; plannedHours: number; workedHours: number; sickHours?: number; isSick?: boolean; isHoliday: boolean; isWeekend: boolean; specialWorkApprovalStatus?: "SUBMITTED" | "APPROVED" | "REJECTED" | null; entries: Array<{ id: string; type: "CLOCK_IN" | "CLOCK_OUT"; time: string; source?: string; reasonText?: string }> }>;
   } | null>(null);
   const [msg, setMsg] = useState("");
+  const [actionMsg, setActionMsg] = useState("");
 
   async function load() {
     if (!session) return;
@@ -38,15 +39,16 @@ export function EmployeeMonthPage() {
           onClick={async () => {
             const printWin = window.open("", "_blank");
             try {
-              if (!printWin) { setMsg("Popup blockiert. Bitte Popups erlauben."); return; }
+              if (!printWin) { setActionMsg("Popup blockiert. Bitte Popups erlauben."); return; }
               printWin.document.open();
               printWin.document.write("<html><body style='font-family:sans-serif;padding:16px'>Stundenzettel wird geladen...</body></html>");
               printWin.document.close();
               const report = await api.monthReport(session.user.id, monthYear, monthNum);
               printMonthReport(report, printWin);
+              setActionMsg("Stundenzettel wurde geoeffnet.");
             } catch (e) {
               if (printWin && !printWin.closed) printWin.close();
-              setMsg((e as Error).message);
+              setActionMsg((e as Error).message);
             }
           }}
         >
@@ -57,9 +59,9 @@ export function EmployeeMonthPage() {
           onClick={async () => {
             try {
               await api.sendMonthReportMail({ userId: session.user.id, year: monthYear, month: monthNum, recipient: "SELF" });
-              setMsg("Monatsbericht per E-Mail versendet.");
+              setActionMsg("Monatsbericht wurde per E-Mail versendet.");
             } catch (e) {
-              setMsg((e as Error).message);
+              setActionMsg((e as Error).message);
             }
           }}
         >
@@ -72,6 +74,7 @@ export function EmployeeMonthPage() {
           </>
         )}
       </div>
+      {actionMsg && <div className={actionMsg.includes("versendet") || actionMsg.includes("geoeffnet") ? "success" : "error"} style={{ marginBottom: 10 }}>{actionMsg}</div>}
       {monthView && (
         <table>
           <thead><tr><th>Datum</th><th>Soll</th><th>Ist</th><th>Buchungen</th><th>Notizen</th></tr></thead>

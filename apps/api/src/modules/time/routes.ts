@@ -1180,35 +1180,43 @@ timeRouter.get("/month/:userId", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SU
   res.json({ year, month, dailyHours, monthPlanned: Number(monthPlanned.toFixed(2)), monthWorked: Number(monthWorked.toFixed(2)), days });
 });
 
-timeRouter.get("/month-report/:userId", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
-  if (!req.auth) {
-    res.status(401).json({ message: "Nicht authentifiziert." });
-    return;
-  }
-  const targetUserId = String(req.params.userId);
-  if ((req.auth.role === Role.EMPLOYEE || req.auth.role === Role.AZUBI) && req.auth.userId !== targetUserId) {
-    res.status(403).json({ message: "Keine Berechtigung." });
-    return;
-  }
-  const year = Number(req.query.year);
-  const month = Number(req.query.month);
-  if (!year || !month || month < 1 || month > 12) {
-    res.status(400).json({ message: "Jahr/Monat ungueltig." });
-    return;
-  }
+type MonthReportRow = {
+  date: string;
+  clockIn: string;
+  clockOut: string;
+  plannedHours: number | null;
+  workedHours: number | null;
+  pauseMinutes: number | null;
+  note: string;
+  isContinuation: boolean;
+  isDayTotalRow: boolean;
+};
 
+type MonthReportData = {
+  year: number;
+  month: number;
+  monthLabel: string;
+  companyName: string;
+  companyLogoUrl: string | null;
+  employeeName: string;
+  rows: MonthReportRow[];
+  totals: { plannedHours: number; workedHours: number };
+  vacation: { availableDays: number; plannedFutureDays: number };
+  overtime: { monthStartHours: number; monthEndHours: number };
+};
+
+async function loadMonthReportData(targetUserId: string, year: number, month: number): Promise<MonthReportData | null> {
   const monthStart = new Date(Date.UTC(year, month - 1, 1));
   const monthEnd = new Date(Date.UTC(year, month, 0, 23, 59, 59));
   const yearStart = new Date(Date.UTC(year, 0, 1));
   const yearEnd = new Date(Date.UTC(year, 11, 31, 23, 59, 59));
   const nextDayAfterMonthEnd = new Date(Date.UTC(year, month, 1, 0, 0, 0));
 
-  const [config, user, holidays, entries, approvals, sickLeaves, credits, vacationApprovedInYear, futureVacationApproved, overtimeAdjustmentsInMonth, holidaysInYear] = await Promise.all([
+  const [config, user, holidays, entries, approvals, sickLeaves, credits, vacationApprovedInYear, futureVacationApproved, holidaysInYear] = await Promise.all([
     prisma.systemConfig.findUnique({ where: { id: 1 } }),
     prisma.user.findUnique({
       where: { id: targetUserId },
       select: {
-        id: true,
         name: true,
         annualVacationDays: true,
         carryOverVacationDays: true,
@@ -1239,17 +1247,10 @@ timeRouter.get("/month-report/:userId", requireRole([Role.EMPLOYEE, Role.AZUBI, 
         startDate: { gte: nextDayAfterMonthEnd, lte: yearEnd }
       }
     }),
-    prisma.overtimeAdjustment.findMany({
-      where: { userId: targetUserId, date: { gte: monthStart, lte: monthEnd } },
-      select: { hours: true }
-    }),
     prisma.holiday.findMany({ where: { date: { gte: yearStart, lte: yearEnd } }, select: { date: true } })
   ]);
 
-  if (!user) {
-    res.status(404).json({ message: "Mitarbeiter nicht gefunden." });
-    return;
-  }
+  if (!user) return null;
 
   const dailyHours = user.dailyWorkHours ?? config?.defaultDailyHours ?? 8;
   const workingDays = parseWorkingDaySet(config?.defaultWeeklyWorkingDays);
@@ -1274,20 +1275,9 @@ timeRouter.get("/month-report/:userId", requireRole([Role.EMPLOYEE, Role.AZUBI, 
 
   const monthNameRaw = monthStart.toLocaleDateString("de-DE", { month: "long", year: "numeric", timeZone: "UTC" });
   const monthLabel = monthNameRaw.charAt(0).toUpperCase() + monthNameRaw.slice(1);
-
   let monthPlanned = 0;
   let monthWorked = 0;
-  const rows: Array<{
-    date: string;
-    clockIn: string;
-    clockOut: string;
-    plannedHours: number | null;
-    workedHours: number | null;
-    pauseMinutes: number | null;
-    note: string;
-    isContinuation: boolean;
-    isDayTotalRow: boolean;
-  }> = [];
+  const rows: MonthReportRow[] = [];
 
   for (let d = 1; d <= monthEnd.getUTCDate(); d += 1) {
     const date = new Date(Date.UTC(year, month - 1, d));
@@ -1310,7 +1300,6 @@ timeRouter.get("/month-report/:userId", requireRole([Role.EMPLOYEE, Role.AZUBI, 
     const worked = user.timeTrackingEnabled === false
       ? Number(planned.toFixed(2))
       : Number((sickHours > 0 ? sickHours : workedEffective).toFixed(2));
-
     monthPlanned += planned;
     monthWorked += worked;
 
@@ -1329,18 +1318,15 @@ timeRouter.get("/month-report/:userId", requireRole([Role.EMPLOYEE, Role.AZUBI, 
       if (e.type === TimeEntryType.CLOCK_IN) {
         if (openIn) lines.push({ clockIn: openIn, clockOut: "" });
         openIn = t;
+      } else if (openIn) {
+        lines.push({ clockIn: openIn, clockOut: t });
+        openIn = "";
       } else {
-        if (openIn) {
-          lines.push({ clockIn: openIn, clockOut: t });
-          openIn = "";
-        } else {
-          lines.push({ clockIn: "", clockOut: t });
-        }
+        lines.push({ clockIn: "", clockOut: t });
       }
     }
     if (openIn) lines.push({ clockIn: openIn, clockOut: "" });
     if (lines.length === 0) lines.push({ clockIn: "", clockOut: "" });
-
     const pauseDeducted = Math.max((autoBreakApplies ? breakMinutes : 0) - dayCredit, 0);
 
     for (let i = 0; i < lines.length; i += 1) {
@@ -1365,22 +1351,19 @@ timeRouter.get("/month-report/:userId", requireRole([Role.EMPLOYEE, Role.AZUBI, 
     const end = new Date(Math.min(v.endDate.getTime(), yearEnd.getTime()));
     return sum + countWorkingDaysInRange(start, end, workingDays, holidayYearSet);
   }, 0);
-
   const futurePlannedVacationDays = futureVacationApproved.reduce((sum, v) => {
     const start = new Date(Math.max(v.startDate.getTime(), nextDayAfterMonthEnd.getTime()));
     const end = new Date(Math.min(v.endDate.getTime(), yearEnd.getTime()));
     return sum + countWorkingDaysInRange(start, end, workingDays, holidayYearSet);
   }, 0);
-
   const availableVacationDays = user.timeTrackingEnabled === false
     ? 999999
     : Number((user.carryOverVacationDays + user.annualVacationDays - approvedVacationDaysInYear).toFixed(2));
 
   const overtimeStartMonth = Number((user.overtimeBalanceHours ?? 0).toFixed(2));
-  const overtimeManualDelta = overtimeAdjustmentsInMonth.reduce((sum, a) => sum + a.hours, 0);
-  const overtimeEndMonth = Number((overtimeStartMonth + (monthWorked - monthPlanned) + overtimeManualDelta).toFixed(2));
+  const overtimeEndMonth = Number((overtimeStartMonth + (monthWorked - monthPlanned)).toFixed(2));
 
-  res.json({
+  return {
     year,
     month,
     monthLabel,
@@ -1400,7 +1383,31 @@ timeRouter.get("/month-report/:userId", requireRole([Role.EMPLOYEE, Role.AZUBI, 
       monthStartHours: overtimeStartMonth,
       monthEndHours: overtimeEndMonth
     }
-  });
+  };
+}
+
+timeRouter.get("/month-report/:userId", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+  if (!req.auth) {
+    res.status(401).json({ message: "Nicht authentifiziert." });
+    return;
+  }
+  const targetUserId = String(req.params.userId);
+  if ((req.auth.role === Role.EMPLOYEE || req.auth.role === Role.AZUBI) && req.auth.userId !== targetUserId) {
+    res.status(403).json({ message: "Keine Berechtigung." });
+    return;
+  }
+  const year = Number(req.query.year);
+  const month = Number(req.query.month);
+  if (!year || !month || month < 1 || month > 12) {
+    res.status(400).json({ message: "Jahr/Monat ungueltig." });
+    return;
+  }
+  const report = await loadMonthReportData(targetUserId, year, month);
+  if (!report) {
+    res.status(404).json({ message: "Mitarbeiter nicht gefunden." });
+    return;
+  }
+  res.json(report);
 });
 
 const monthMailSchema = z.object({
@@ -1427,21 +1434,13 @@ timeRouter.post("/month/send-mail", requireRole([Role.EMPLOYEE, Role.AZUBI, Role
     return;
   }
 
-  const monthStart = new Date(Date.UTC(year, month - 1, 1));
-  const monthEnd = new Date(Date.UTC(year, month, 0, 23, 59, 59));
-
-  const [config, targetUser, actorUser, holidays, entries, approvals, sickLeaves, credits] = await Promise.all([
-    prisma.systemConfig.findUnique({ where: { id: 1 } }),
-    prisma.user.findUnique({ where: { id: userId }, select: { id: true, name: true, email: true, dailyWorkHours: true, timeTrackingEnabled: true } }),
+  const [targetUser, actorUser, report] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId }, select: { id: true, name: true, email: true } }),
     prisma.user.findUnique({ where: { id: req.auth.userId }, select: { id: true, name: true, email: true } }),
-    prisma.holiday.findMany({ where: { date: { gte: monthStart, lte: monthEnd } } }),
-    prisma.timeEntry.findMany({ where: { userId, occurredAt: { gte: monthStart, lte: monthEnd } }, orderBy: { occurredAt: "asc" } }),
-    prisma.specialWorkApproval.findMany({ where: { userId, date: { gte: monthStart, lte: monthEnd } } }),
-    prisma.sickLeave.findMany({ where: { userId, startDate: { lte: monthEnd }, endDate: { gte: monthStart } } }),
-    prisma.breakCredit.findMany({ where: { userId, date: { gte: monthStart, lte: monthEnd } } })
+    loadMonthReportData(userId, year, month)
   ]);
 
-  if (!targetUser) {
+  if (!targetUser || !report) {
     res.status(404).json({ message: "Mitarbeiter nicht gefunden." });
     return;
   }
@@ -1452,70 +1451,13 @@ timeRouter.post("/month/send-mail", requireRole([Role.EMPLOYEE, Role.AZUBI, Role
     return;
   }
 
-  const dailyHours = targetUser.dailyWorkHours ?? config?.defaultDailyHours ?? 8;
-  const workingDays = parseWorkingDaySet(config?.defaultWeeklyWorkingDays);
-  const holidaySet = new Set(holidays.map((h) => dayKey(h.date)));
-  const approvalByDay = new Map(approvals.map((a) => [dayKey(a.date), a.status]));
-  const creditByDay = new Map<string, number>();
-  for (const c of credits) {
-    const key = dayKey(c.date);
-    creditByDay.set(key, (creditByDay.get(key) ?? 0) + c.minutes);
-  }
-  const breakMinutes = config?.autoBreakMinutes ?? 30;
-  const breakAfterHours = config?.autoBreakAfterHours ?? 6;
-  const grossByDay = buildGrossMinutesByStartDay(entries.map((e) => ({ type: e.type, occurredAt: e.occurredAt })));
-  const byDay = new Map<string, typeof entries>();
-  for (const e of entries) {
-    const key = dayKey(e.occurredAt);
-    const list = byDay.get(key) ?? [];
-    list.push(e);
-    byDay.set(key, list);
-  }
-
-  let monthPlanned = 0;
-  let monthWorked = 0;
-  const lines: string[] = [];
-  lines.push(`Monatsbericht ${String(month).padStart(2, "0")}/${year}`);
-  lines.push(`Mitarbeiter: ${targetUser.name}`);
-  lines.push("");
-  lines.push("Datum | Soll | Ist | Buchungen");
-  lines.push("----------------------------------------------");
-  for (let d = 1; d <= monthEnd.getUTCDate(); d += 1) {
-    const date = new Date(Date.UTC(year, month - 1, d));
-    const key = dayKey(date);
-    const dayEntries = (byDay.get(key) ?? []).sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
-    const isHoliday = holidaySet.has(key);
-    const weekend = isWeekend(date);
-    const planned = workingDays.has(date.getUTCDay()) && !isHoliday ? dailyHours : 0;
-    const isSick = planned > 0 && sickLeaves.some((s) => isDateWithinRange(date, s.startDate, s.endDate));
-    const sickHours = isSick ? planned : 0;
-    const grossMin = grossByDay.minutesByDay.get(key) ?? 0;
-    const autoBreakApplies = grossMin >= breakAfterHours * 60;
-    const dayCredit = creditByDay.get(key) ?? 0;
-    const netMinutes = Math.max(grossMin - (autoBreakApplies ? breakMinutes : 0) + dayCredit, 0);
-    const approvalStatus = approvalByDay.get(key) ?? null;
-    const requiresApproval = isHoliday || weekend || ((config?.requireApprovalForCrossMidnight ?? true) && grossByDay.crossMidnightStartDays.has(key));
-    const schoolDay = dayEntries.some((e) => isSchoolEntry({ reasonText: e.reasonText, correctionComment: e.correctionComment }));
-    const workedRaw = schoolDay ? 8 : Number((netMinutes / 60).toFixed(2));
-    const workedEffective = requiresApproval && approvalStatus !== ApprovalStatus.APPROVED ? 0 : workedRaw;
-    const worked = targetUser.timeTrackingEnabled === false
-      ? Number(planned.toFixed(2))
-      : Number((sickHours > 0 ? sickHours : workedEffective).toFixed(2));
-    monthPlanned += planned;
-    monthWorked += worked;
-    const bookings = dayEntries.map((e) => `${e.type === "CLOCK_IN" ? "K" : "G"} ${e.occurredAt.toISOString().slice(11, 16)}`).join(", ");
-    lines.push(`${key} | ${planned.toFixed(2)} | ${worked.toFixed(2)} | ${bookings || "-"}`);
-  }
-  lines.push("----------------------------------------------");
-  lines.push(`Monat Sollstunden: ${monthPlanned.toFixed(2)} h`);
-  lines.push(`Monat Iststunden: ${monthWorked.toFixed(2)} h`);
-  const pdfTitle = `Stundenzettel ${String(month).padStart(2, "0")}/${year} - ${targetUser.name}`;
-  const pdfBuffer = await buildSimpleReportPdf(pdfTitle, lines);
+  const pdfTitle = `Stundenzettel ${String(month).padStart(2, "0")}/${year} - ${report.employeeName}`;
+  const pdfBuffer = await buildStyledMonthPdf(pdfTitle, report);
 
   await sendMailStrict({
     to: recipientMail,
     subject: `Monatsbericht ${String(month).padStart(2, "0")}/${year} - ${targetUser.name}`,
-    text: `Im Anhang finden Sie den Stundenzettel als PDF.\n\nMitarbeiter: ${targetUser.name}\nMonat: ${String(month).padStart(2, "0")}/${year}`,
+    text: `Im Anhang finden Sie den Stundenzettel als PDF.\n\nMitarbeiter: ${report.employeeName}\nMonat: ${report.monthLabel}`,
     attachments: [
       {
         filename: `stundenzettel-${targetUser.name.replace(/\s+/g, "-").toLowerCase()}-${year}-${String(month).padStart(2, "0")}.pdf`,
@@ -1601,27 +1543,100 @@ function countWorkingDaysInRange(start: Date, end: Date, workingDays: Set<number
   return out;
 }
 
-async function buildSimpleReportPdf(title: string, lines: string[]): Promise<Buffer> {
+async function buildStyledMonthPdf(title: string, report: MonthReportData): Promise<Buffer> {
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   let page = pdf.addPage([595.28, 841.89]); // A4
-  let y = page.getHeight() - 44;
-  const left = 40;
-  const lineHeight = 14;
+  let y = page.getHeight() - 36;
+  const left = 28;
+  const contentWidth = 539;
+  const rowHeight = 14;
+  const columns = [66, 55, 55, 72, 66, 46, 179]; // sum 539
+  const drawHeader = () => {
+    page.drawText(report.companyName || "Musterfirma", { x: left, y, size: 15, font: bold, color: rgb(0.06, 0.12, 0.22) });
+    y -= 18;
+    page.drawText(`Mitarbeiter: ${report.employeeName}`, { x: left, y, size: 10, font });
+    y -= 13;
+    page.drawText(`Monat: ${report.monthLabel}`, { x: left, y, size: 10, font });
+    y -= 16;
+    page.drawText(title, { x: left, y, size: 10, font: bold });
+    y -= 14;
+
+    const headers = ["Datum", "Kommen", "Gehen", "Soll", "Ist", "Pause", "Notiz"];
+    let x = left;
+    for (let i = 0; i < headers.length; i += 1) {
+      page.drawRectangle({ x, y: y - rowHeight + 2, width: columns[i], height: rowHeight, borderColor: rgb(0.8, 0.84, 0.9), borderWidth: 0.8, color: rgb(0.95, 0.97, 1) });
+      page.drawText(headers[i], { x: x + 3, y: y - 9, size: 8.2, font: bold });
+      x += columns[i];
+    }
+    y -= rowHeight;
+  };
 
   const newPage = () => {
     page = pdf.addPage([595.28, 841.89]);
-    y = page.getHeight() - 44;
+    y = page.getHeight() - 36;
+    drawHeader();
   };
 
-  page.drawText(title, { x: left, y, size: 14, font: bold, color: rgb(0.06, 0.12, 0.22) });
-  y -= 22;
+  drawHeader();
 
-  for (const line of lines) {
-    if (y < 50) newPage();
-    page.drawText(line, { x: left, y, size: 10, font, color: rgb(0.08, 0.08, 0.1) });
-    y -= lineHeight;
+  for (const r of report.rows) {
+    if (y < 85) newPage();
+    const values = [
+      r.date || "",
+      r.clockIn || "",
+      r.clockOut || "",
+      r.plannedHours !== null ? `${r.plannedHours.toFixed(2)} h` : "",
+      r.workedHours !== null ? `${r.workedHours.toFixed(2)} h` : "",
+      r.pauseMinutes !== null ? `${Math.floor(r.pauseMinutes / 60)}:${String(Math.round(r.pauseMinutes % 60)).padStart(2, "0")}` : "",
+      (r.note || "").slice(0, 70)
+    ];
+    let x = left;
+    for (let i = 0; i < values.length; i += 1) {
+      page.drawRectangle({ x, y: y - rowHeight + 2, width: columns[i], height: rowHeight, borderColor: rgb(0.84, 0.87, 0.93), borderWidth: 0.7 });
+      page.drawText(values[i], { x: x + 3, y: y - 9, size: 8, font, color: rgb(0.08, 0.08, 0.1) });
+      x += columns[i];
+    }
+    y -= rowHeight;
+  }
+
+  if (y < 92) newPage();
+  page.drawText(`Monatssumme Soll: ${report.totals.plannedHours.toFixed(2)} h`, { x: left, y, size: 10, font: bold });
+  y -= 13;
+  page.drawText(`Monatssumme Ist: ${report.totals.workedHours.toFixed(2)} h`, { x: left, y, size: 10, font: bold });
+  y -= 16;
+  page.drawText(`Verfuegbare Urlaubstage: ${report.vacation.availableDays.toFixed(2)}`, { x: left, y, size: 9.5, font });
+  y -= 12;
+  page.drawText(`Zukuenftig verplanter Urlaub: ${report.vacation.plannedFutureDays.toFixed(2)}`, { x: left, y, size: 9.5, font });
+  y -= 12;
+  page.drawText(`Ueberstundenkonto Monatsanfang: ${report.overtime.monthStartHours.toFixed(2)} h`, { x: left, y, size: 9.5, font });
+  y -= 12;
+  page.drawText(`Ueberstundenkonto Monatsende: ${report.overtime.monthEndHours.toFixed(2)} h`, { x: left, y, size: 9.5, font });
+
+  if (report.companyLogoUrl) {
+    try {
+      const absoluteLogoUrl = /^(https?:|data:)/i.test(report.companyLogoUrl)
+        ? report.companyLogoUrl
+        : `${process.env.WEB_ORIGIN || ""}${report.companyLogoUrl}`;
+      if (absoluteLogoUrl) {
+        const resp = await fetch(absoluteLogoUrl);
+        if (resp.ok) {
+          const bytes = await resp.arrayBuffer();
+          const ct = String(resp.headers.get("content-type") || "");
+          const img = ct.includes("png") ? await pdf.embedPng(bytes) : await pdf.embedJpg(bytes);
+          const scaled = img.scale(0.2);
+          page.drawImage(img, {
+            x: left + contentWidth - scaled.width,
+            y: page.getHeight() - 58,
+            width: scaled.width,
+            height: scaled.height
+          });
+        }
+      }
+    } catch {
+      // Logo optional.
+    }
   }
 
   const bytes = await pdf.save();
@@ -1644,7 +1659,7 @@ timeRouter.get("/summary/:userId", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59));
 
-  const [config, user, holidays, entries, credits, sickLeaves, leaveRequests, overtimeAdjustments, approvals] = await Promise.all([
+  const [config, user, holidays, entries, credits, sickLeaves, leaveRequests, approvals] = await Promise.all([
     prisma.systemConfig.findUnique({ where: { id: 1 } }),
     prisma.user.findUnique({ where: { id: targetUserId }, select: { dailyWorkHours: true, overtimeBalanceHours: true, timeTrackingEnabled: true } }),
     prisma.holiday.findMany({ where: { date: { gte: monthStart, lte: monthEnd } } }),
@@ -1652,7 +1667,6 @@ timeRouter.get("/summary/:userId", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.
     prisma.breakCredit.findMany({ where: { userId: targetUserId, date: { gte: monthStart, lte: monthEnd } } }),
     prisma.sickLeave.findMany({ where: { userId: targetUserId, startDate: { lte: monthEnd }, endDate: { gte: monthStart } } }),
     prisma.leaveRequest.findMany({ where: { userId: targetUserId, status: "APPROVED", startDate: { lte: monthEnd }, endDate: { gte: monthStart } } }),
-    prisma.overtimeAdjustment.findMany({ where: { userId: targetUserId, date: { gte: monthStart, lte: monthEnd } } }),
     prisma.specialWorkApproval.findMany({ where: { userId: targetUserId, date: { gte: monthStart, lte: monthEnd } } })
   ]);
 
@@ -1726,7 +1740,6 @@ timeRouter.get("/summary/:userId", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.
     return sum + hours;
   }, 0);
 
-  const manualAdjustmentHours = overtimeAdjustments.reduce((sum, a) => sum + a.hours, 0);
   const totalIncludingAbsence = workedTotal + approvalDays * dailyHours + sickHours;
   if (user?.timeTrackingEnabled === false) {
     res.json({
@@ -1734,13 +1747,13 @@ timeRouter.get("/summary/:userId", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.
       plannedHours: Number(expectedTotal.toFixed(2)),
       workedHours: Number(expectedTotal.toFixed(2)),
       overtimeHours: Number((user?.overtimeBalanceHours ?? 0).toFixed(2)),
-      manualAdjustmentHours: Number(manualAdjustmentHours.toFixed(2)),
+      manualAdjustmentHours: 0,
       longShiftAlert: false
     });
     return;
   }
 
-  const overtime = (user?.overtimeBalanceHours ?? 0) + (totalIncludingAbsence - expectedTotal + manualAdjustmentHours);
+  const overtime = (user?.overtimeBalanceHours ?? 0) + (totalIncludingAbsence - expectedTotal);
 
   const longStreakAlert = entries.length >= 2
     ? entries
@@ -1758,7 +1771,7 @@ timeRouter.get("/summary/:userId", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.
     plannedHours: Number(expectedTotal.toFixed(2)),
     workedHours: Number(workedTotal.toFixed(2)),
     overtimeHours: Number(overtime.toFixed(2)),
-    manualAdjustmentHours: Number(manualAdjustmentHours.toFixed(2)),
+    manualAdjustmentHours: 0,
     longShiftAlert: longStreakAlert
   });
 });
@@ -2426,7 +2439,7 @@ timeRouter.get("/supervisor-overview", requireRole([Role.SUPERVISOR, Role.ADMIN]
       userId: u.id,
       istHours: Number(workedCurrentMonthHours.toFixed(2)),
       sollHours: Number(requiredCurrentMonthHours.toFixed(2)),
-      overtimeHours: Number((u.overtimeBalanceHours ?? 0).toFixed(2))
+      overtimeHours: Number(((u.overtimeBalanceHours ?? 0) + (workedCurrentMonthHours - requiredCurrentMonthHours)).toFixed(2))
     };
   });
 
