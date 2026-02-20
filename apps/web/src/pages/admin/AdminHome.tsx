@@ -361,6 +361,20 @@ export function AdminHome() {
               }
             }}>Logo hochladen</button>
           </label>
+          <div className="row" style={{ gridColumn: "1 / -1" }}>
+            <button
+              onClick={async () => {
+                try {
+                  await api.updateConfig(config);
+                  setMsg("Firmenstammdaten gespeichert.");
+                } catch (e) {
+                  setMsg((e as Error).message);
+                }
+              }}
+            >
+              Speichern
+            </button>
+          </div>
         </div>
       )}
 
@@ -875,6 +889,20 @@ export function AdminHome() {
               />
             </div>
           ))}
+          <div className="row" style={{ gridColumn: "1 / -1" }}>
+            <button
+              onClick={async () => {
+                try {
+                  await api.updateConfig(config);
+                  setMsg("Farben gespeichert.");
+                } catch (e) {
+                  setMsg((e as Error).message);
+                }
+              }}
+            >
+              Speichern
+            </button>
+          </div>
         </div>
       )}
 
@@ -1031,6 +1059,20 @@ export function AdminHome() {
               <option value="false">Deaktiviert</option>
             </select>
           </label>
+          <div className="row" style={{ gridColumn: "1 / -1" }}>
+            <button
+              onClick={async () => {
+                try {
+                  await api.updateConfig(config);
+                  setMsg("E-Mail-Einstellungen gespeichert.");
+                } catch (e) {
+                  setMsg((e as Error).message);
+                }
+              }}
+            >
+              Speichern
+            </button>
+          </div>
         </div>
       )}
 

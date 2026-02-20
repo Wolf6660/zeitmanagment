@@ -448,27 +448,27 @@ timeRouter.post("/break-credit/request", requireRole([Role.EMPLOYEE, Role.AZUBI,
   ]);
 
   if (leaveOnDay?.kind === LeaveKind.VACATION) {
-    res.status(400).json({ message: "Pausengutschrift nicht moeglich: an diesem Tag ist Urlaub eingetragen." });
+    res.status(400).json({ message: "Pausengutschrift nicht möglich: an diesem Tag ist Urlaub eingetragen." });
     return;
   }
   if (leaveOnDay?.kind === LeaveKind.OVERTIME) {
-    res.status(400).json({ message: "Pausengutschrift nicht moeglich: an diesem Tag ist Ueberstundenfrei eingetragen." });
+    res.status(400).json({ message: "Pausengutschrift nicht möglich: an diesem Tag ist Überstundenfrei eingetragen." });
     return;
   }
   const schoolOnDay = dayEntries.some((e) => isSchoolEntry({ reasonText: e.reasonText, correctionComment: e.correctionComment }));
   if (schoolOnDay) {
-    res.status(400).json({ message: "Pausengutschrift nicht moeglich: an diesem Tag ist Berufsschule eingetragen." });
+    res.status(400).json({ message: "Pausengutschrift nicht möglich: an diesem Tag ist Berufsschule eingetragen." });
     return;
   }
   const grossByDay = buildGrossMinutesByStartDay(dayEntries.map((e) => ({ type: e.type, occurredAt: e.occurredAt })));
   const grossMinutes = grossByDay.minutesByDay.get(dayKey(dayStart)) ?? 0;
   if (grossMinutes <= 0) {
-    res.status(400).json({ message: "Pausengutschrift nicht moeglich: an diesem Tag wurde keine Arbeitszeit erfasst." });
+    res.status(400).json({ message: "Pausengutschrift nicht möglich: an diesem Tag wurde keine Arbeitszeit erfasst." });
     return;
   }
   const autoBreakAfterHours = config?.autoBreakAfterHours ?? 6;
   if (grossMinutes < autoBreakAfterHours * 60) {
-    res.status(400).json({ message: `Pausengutschrift nicht moeglich: automatische Pause greift erst ab ${autoBreakAfterHours} Stunden Arbeitszeit.` });
+    res.status(400).json({ message: `Pausengutschrift nicht möglich: automatische Pause greift erst ab ${autoBreakAfterHours} Stunden Arbeitszeit.` });
     return;
   }
 
