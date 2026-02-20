@@ -45,6 +45,22 @@ function formatBerlinHHMM(date: Date): string {
   }).format(date);
 }
 
+async function hasDirectDuplicateSequence(userId: string, type: TimeEntryType, occurredAt: Date): Promise<boolean> {
+  const [prev, next] = await Promise.all([
+    prisma.timeEntry.findFirst({
+      where: { userId, occurredAt: { lte: occurredAt } },
+      orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
+      select: { type: true }
+    }),
+    prisma.timeEntry.findFirst({
+      where: { userId, occurredAt: { gte: occurredAt } },
+      orderBy: [{ occurredAt: "asc" }, { createdAt: "asc" }],
+      select: { type: true }
+    })
+  ]);
+  return prev?.type === type || next?.type === type;
+}
+
 type TimeRoundingConfig = {
   timeRoundingEnabled: boolean;
   timeRoundingMinutes: number;
@@ -190,6 +206,10 @@ timeRouter.post("/clock", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SUPERVISO
   }
 
   const roundedAt = roundOccurredAtByConfig(new Date(), cfg);
+  if (await hasDirectDuplicateSequence(req.auth.userId, parsed.data.type, roundedAt)) {
+    res.status(400).json({ message: "Doppelte Folge-Buchung ist nicht erlaubt." });
+    return;
+  }
   const entry = await prisma.timeEntry.create({
     data: {
       userId: req.auth.userId,
@@ -249,6 +269,10 @@ timeRouter.post("/self-correction", requireRole([Role.EMPLOYEE, Role.AZUBI, Role
   }
 
   const roundedAt = roundOccurredAtByConfig(parsed.data.occurredAt, cfg);
+  if (await hasDirectDuplicateSequence(req.auth.userId, parsed.data.type, roundedAt)) {
+    res.status(400).json({ message: "Doppelte Folge-Buchung ist nicht erlaubt." });
+    return;
+  }
   const entry = await prisma.timeEntry.create({
     data: {
       userId: req.auth.userId,
@@ -306,6 +330,10 @@ timeRouter.post("/correction", requireRole([Role.SUPERVISOR, Role.ADMIN]), async
   }
 
   const roundedAt = roundOccurredAtByConfig(parsed.data.occurredAt, cfg);
+  if (await hasDirectDuplicateSequence(parsed.data.userId, parsed.data.type, roundedAt)) {
+    res.status(400).json({ message: "Doppelte Folge-Buchung ist nicht erlaubt." });
+    return;
+  }
   const entry = await prisma.timeEntry.create({
     data: {
       userId: parsed.data.userId,
@@ -924,7 +952,8 @@ timeRouter.post("/day-override", requireRole([Role.SUPERVISOR, Role.ADMIN]), asy
     const dayEnd = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, 23, 59, 59, 999));
     await prisma.timeEntry.deleteMany({ where: { userId: parsed.data.userId, occurredAt: { gte: dayStart, lte: dayEnd } } });
     const created = [];
-    for (const e of parsed.data.events) {
+    const sortedEvents = [...parsed.data.events].sort((a, b) => a.time.localeCompare(b.time));
+    for (const e of sortedEvents) {
       const t = parseTimeParts(e.time);
       if (!t) {
         res.status(400).json({ message: "Zeit ist ungueltig (HH:MM)." });
@@ -932,6 +961,10 @@ timeRouter.post("/day-override", requireRole([Role.SUPERVISOR, Role.ADMIN]), asy
       }
       const occurredAtRaw = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, t.hour, t.minute, 0));
       const occurredAt = roundOccurredAtByConfig(occurredAtRaw, cfg);
+      if (await hasDirectDuplicateSequence(parsed.data.userId, e.type, occurredAt)) {
+        res.status(400).json({ message: "Doppelte Folge-Buchung ist nicht erlaubt." });
+        return;
+      }
       const row = await prisma.timeEntry.create({
         data: {
           userId: parsed.data.userId,
@@ -1110,8 +1143,8 @@ timeRouter.post("/day-override-self", requireRole([Role.EMPLOYEE, Role.AZUBI, Ro
   }
   try {
     const dayStart = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, 0, 0, 0));
-    const dayEnd = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, 23, 59, 59, 999));
-    for (const e of parsed.data.events) {
+    const sortedEvents = [...parsed.data.events].sort((a, b) => a.time.localeCompare(b.time));
+    for (const e of sortedEvents) {
       const t = parseTimeParts(e.time);
       if (!t) {
         res.status(400).json({ message: "Zeit ist ungueltig (HH:MM)." });
@@ -1133,6 +1166,10 @@ timeRouter.post("/day-override-self", requireRole([Role.EMPLOYEE, Role.AZUBI, Ro
       });
       if (duplicate) {
         continue;
+      }
+      if (await hasDirectDuplicateSequence(req.auth.userId, e.type, occurredAt)) {
+        res.status(400).json({ message: "Doppelte Folge-Buchung ist nicht erlaubt." });
+        return;
       }
       await prisma.timeEntry.create({
         data: {
