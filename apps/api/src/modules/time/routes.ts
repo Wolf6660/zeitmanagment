@@ -234,13 +234,14 @@ timeRouter.post("/clock", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SUPERVISO
     return;
   }
 
+  const userId = req.auth.userId;
   const roundedAt = roundOccurredAtByConfig(new Date(), cfg);
-  const lockKey = `clock:${req.auth.userId}`;
+  const lockKey = `clock:${userId}`;
   const txResult = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT GET_LOCK(${lockKey}, 5)`;
     try {
       const lastEntry = await tx.timeEntry.findFirst({
-        where: { userId: req.auth.userId },
+        where: { userId },
         orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
         select: { type: true }
       });
@@ -249,7 +250,7 @@ timeRouter.post("/clock", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SUPERVISO
       }
       const created = await tx.timeEntry.create({
         data: {
-          userId: req.auth.userId,
+          userId,
           type: parsed.data.type,
           source: TimeEntrySource.WEB,
           reasonCode: parsed.data.reasonCode,
