@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { DropdownField } from "../components/DropdownField";
 import type { ApiClient } from "../services/api";
 import type { EmployeeRow, LeaveKind, LeaveRequestRow, SessionUser } from "../types/app";
 import { colors } from "../theme/colors";
@@ -108,20 +109,12 @@ export function RequestsScreen({ api, user }: Props) {
     if (!isLead) return null;
     return (
       <View style={styles.employeeWrap}>
-        <Text style={styles.label}>Mitarbeiter</Text>
-        <FlatList
-          horizontal
-          data={activeRows}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={{ gap: 6 }}
-          renderItem={({ item }) => (
-            <Pressable
-              style={[styles.employeeChip, selectedUserId === item.id && styles.employeeChipActive]}
-              onPress={() => setSelectedUserId(item.id)}
-            >
-              <Text style={styles.employeeChipText}>{item.name}</Text>
-            </Pressable>
-          )}
+        <DropdownField
+          label="Mitarbeiter"
+          options={activeRows.map((r) => ({ label: `${r.name} (${r.loginName})`, value: r.id }))}
+          value={selectedUserId}
+          onChange={setSelectedUserId}
+          placeholder="Mitarbeiter waehlen"
         />
         {!!selectedEmployee && <Text style={styles.employeeHint}>Ausgewaehlt: {selectedEmployee.name}</Text>}
       </View>
@@ -252,10 +245,6 @@ const styles = StyleSheet.create({
   menuButtonTitle: { color: colors.text, fontWeight: "700", textAlign: "center" },
   menuButtonText: { color: colors.muted, fontSize: 12, textAlign: "center" },
   employeeWrap: { gap: 6 },
-  label: { color: colors.text, fontWeight: "600" },
-  employeeChip: { borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: "#fff" },
-  employeeChipActive: { borderColor: "#10B981", backgroundColor: "#D1FAE5" },
-  employeeChipText: { color: colors.text, fontWeight: "600" },
   employeeHint: { color: colors.muted, fontSize: 12 },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: "#fff", paddingHorizontal: 10, paddingVertical: 9 },
   actionRow: { flexDirection: "row", gap: 8 },

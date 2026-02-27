@@ -1,5 +1,6 @@
 import { Router } from "express";
 import bcrypt from "bcrypt";
+import crypto from "node:crypto";
 import { z } from "zod";
 import { prisma } from "../../db/prisma.js";
 import { AuthRequest, requireAuth, signToken } from "../../utils/auth.js";
@@ -80,6 +81,10 @@ const resetSchema = z.object({
   newPassword: z.string().min(8)
 });
 
+const qrLoginSchema = z.object({
+  token: z.string().min(16)
+});
+
 authRouter.post("/reset-password", async (req, res) => {
   const parsed = resetSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -97,4 +102,39 @@ authRouter.post("/reset-password", async (req, res) => {
   await prisma.user.update({ where: { id: user.id }, data: { passwordHash: hash } });
 
   res.json({ message: "Passwort zurueckgesetzt." });
+});
+
+authRouter.post("/login-qr", async (req, res) => {
+  const parsed = qrLoginSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: "Ungueltige Eingaben." });
+    return;
+  }
+  const tokenHash = crypto.createHash("sha256").update(parsed.data.token).digest("hex");
+  const now = new Date();
+  const user = await prisma.user.findFirst({
+    where: {
+      mobileQrTokenHash: tokenHash,
+      mobileQrEnabled: true,
+      OR: [{ mobileQrExpiresAt: null }, { mobileQrExpiresAt: { gt: now } }]
+    }
+  });
+  if (!user || !user.isActive || !user.webLoginEnabled) {
+    res.status(401).json({ message: "QR-Login fehlgeschlagen." });
+    return;
+  }
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { mobileQrLastUsedAt: now }
+  });
+  const token = signToken({ userId: user.id, role: user.role });
+  res.json({
+    token,
+    user: {
+      id: user.id,
+      name: user.name,
+      role: user.role,
+      loginName: user.loginName
+    }
+  });
 });

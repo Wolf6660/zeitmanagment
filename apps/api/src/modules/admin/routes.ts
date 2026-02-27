@@ -1063,6 +1063,15 @@ const logoUploadSchema = z.object({
   contentBase64: z.string().min(10)
 });
 
+const mobileQrGenerateSchema = z.object({
+  userId: z.string().min(1),
+  expiresInDays: z.number().int().min(1).max(3650).optional()
+});
+
+const mobileQrRevokeSchema = z.object({
+  userId: z.string().min(1)
+});
+
 adminRouter.post("/logo-upload", async (req: AuthRequest, res) => {
   const parsed = logoUploadSchema.safeParse(req.body);
   if (!parsed.success || !req.auth) {
@@ -1096,4 +1105,96 @@ adminRouter.post("/logo-upload", async (req: AuthRequest, res) => {
     payload: { logoUrl }
   });
   res.json({ logoUrl });
+});
+
+adminRouter.post("/mobile-qr/generate", async (req: AuthRequest, res) => {
+  const parsed = mobileQrGenerateSchema.safeParse(req.body);
+  if (!parsed.success || !req.auth) {
+    res.status(400).json({ message: "Ungueltige Eingaben." });
+    return;
+  }
+  const user = await prisma.user.findUnique({
+    where: { id: parsed.data.userId },
+    select: { id: true, name: true, loginName: true, role: true, isActive: true, webLoginEnabled: true }
+  });
+  if (!user) {
+    res.status(404).json({ message: "Mitarbeiter nicht gefunden." });
+    return;
+  }
+  if (!user.isActive) {
+    res.status(400).json({ message: "Mitarbeiter ist deaktiviert." });
+    return;
+  }
+  if (!user.webLoginEnabled) {
+    res.status(400).json({ message: "Weblogin ist fuer diesen Mitarbeiter deaktiviert." });
+    return;
+  }
+  const expiresInDays = parsed.data.expiresInDays ?? 180;
+  const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
+  const token = crypto.randomBytes(24).toString("base64url");
+  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      mobileQrTokenHash: tokenHash,
+      mobileQrEnabled: true,
+      mobileQrExpiresAt: expiresAt
+    }
+  });
+  const apiBase = env.WEB_ORIGIN === "*" ? "" : env.WEB_ORIGIN;
+  const payload = JSON.stringify({
+    kind: "ZEITMANAGMENT_MOBILE_LOGIN",
+    apiBase,
+    token,
+    loginName: user.loginName
+  });
+  await writeAuditLog({
+    actorUserId: req.auth.userId,
+    actorLoginName: await resolveActorLoginName(req.auth.userId),
+    action: "MOBILE_QR_GENERATED",
+    targetType: "User",
+    targetId: user.id,
+    payload: { loginName: user.loginName, expiresAt: expiresAt.toISOString() }
+  });
+  res.json({
+    userId: user.id,
+    loginName: user.loginName,
+    employeeName: user.name,
+    expiresAt: expiresAt.toISOString(),
+    token,
+    payload
+  });
+});
+
+adminRouter.post("/mobile-qr/revoke", async (req: AuthRequest, res) => {
+  const parsed = mobileQrRevokeSchema.safeParse(req.body);
+  if (!parsed.success || !req.auth) {
+    res.status(400).json({ message: "Ungueltige Eingaben." });
+    return;
+  }
+  const user = await prisma.user.findUnique({
+    where: { id: parsed.data.userId },
+    select: { id: true, loginName: true }
+  });
+  if (!user) {
+    res.status(404).json({ message: "Mitarbeiter nicht gefunden." });
+    return;
+  }
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      mobileQrTokenHash: null,
+      mobileQrEnabled: false,
+      mobileQrExpiresAt: null
+    }
+  });
+  await writeAuditLog({
+    actorUserId: req.auth.userId,
+    actorLoginName: await resolveActorLoginName(req.auth.userId),
+    action: "MOBILE_QR_REVOKED",
+    targetType: "User",
+    targetId: user.id,
+    payload: { loginName: user.loginName }
+  });
+  res.json({ ok: true });
 });

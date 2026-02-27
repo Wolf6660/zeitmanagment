@@ -68,6 +68,10 @@ model User {
   overtimeBalanceHours      Float    @default(0)
   rfidTag                   String?  @unique
   rfidTagActive             Boolean  @default(true)
+  mobileQrTokenHash         String?  @unique
+  mobileQrEnabled           Boolean  @default(false)
+  mobileQrExpiresAt         DateTime?
+  mobileQrLastUsedAt        DateTime?
 
   timeEntries               TimeEntry[]         @relation("EmployeeTimeEntries")
   leaveRequests             LeaveRequest[]      @relation("EmployeeLeaveRequests")

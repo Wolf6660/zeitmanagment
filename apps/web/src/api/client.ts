@@ -289,6 +289,8 @@ export const api = {
         timeTrackingEnabled: boolean;
         rfidTag?: string | null;
         rfidTagActive?: boolean;
+        mobileQrEnabled?: boolean;
+        mobileQrExpiresAt?: string | null;
       }>
     >("/api/employees"),
 
@@ -604,6 +606,15 @@ export const api = {
 
   uploadLogo: (payload: { filename: string; contentBase64: string }) =>
     request<{ logoUrl: string }>("/api/admin/logo-upload", { method: "POST", body: JSON.stringify(payload) }),
+
+  generateMobileQr: (payload: { userId: string; expiresInDays?: number }) =>
+    request<{ userId: string; loginName: string; employeeName: string; expiresAt: string; token: string; payload: string }>(
+      "/api/admin/mobile-qr/generate",
+      { method: "POST", body: JSON.stringify(payload) }
+    ),
+
+  revokeMobileQr: (payload: { userId: string }) =>
+    request<{ ok: boolean }>("/api/admin/mobile-qr/revoke", { method: "POST", body: JSON.stringify(payload) }),
 
   adminSystemReset: (payload: { mode: "FULL" | "TIMES_ONLY" | "EMPLOYEES_AND_TIMES_KEEP_SETTINGS"; companyNameConfirmation: string }) =>
     request<{ ok: boolean; mode: string; deleted?: Record<string, number>; message?: string }>("/api/admin/system-reset", {

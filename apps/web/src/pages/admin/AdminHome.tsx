@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import QRCode from "qrcode";
 import { api } from "../../api/client";
 import { getSession } from "../../api/client";
 import type { PublicConfig } from "../../styles/theme";
@@ -110,6 +111,8 @@ type Employee = {
   dailyWorkHours?: number | null;
   rfidTag?: string | null;
   rfidTagActive?: boolean;
+  mobileQrEnabled?: boolean;
+  mobileQrExpiresAt?: string | null;
 };
 
 const COLOR_FIELDS: Array<{ key: keyof AdminConfig; enabledKey: keyof AdminConfig; label: string }> = [
@@ -228,6 +231,16 @@ export function AdminHome() {
   const [editingAssignedTargetUserId, setEditingAssignedTargetUserId] = useState<string>("");
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [msg, setMsg] = useState("");
+  const [mobileQrDays, setMobileQrDays] = useState(180);
+  const [mobileQrPreview, setMobileQrPreview] = useState<{
+    userId: string;
+    employeeName: string;
+    loginName: string;
+    expiresAt: string;
+    token: string;
+    payload: string;
+    qrDataUrl: string;
+  } | null>(null);
   const [resetConfirmName, setResetConfirmName] = useState("");
   const [backupImportFile, setBackupImportFile] = useState<File | null>(null);
   const [backupImportConfirmName, setBackupImportConfirmName] = useState("");
@@ -1291,6 +1304,50 @@ export function AdminHome() {
 
       {section === "employees" && (
         <div className="grid admin-section">
+          {mobileQrPreview && (
+            <div className="card admin-section-card" style={{ padding: 12 }}>
+              <h4>Mobile QR Login</h4>
+              <div><strong>Mitarbeiter:</strong> {mobileQrPreview.employeeName} ({mobileQrPreview.loginName})</div>
+              <div><strong>Gueltig bis:</strong> {new Date(mobileQrPreview.expiresAt).toLocaleString("de-DE")}</div>
+              <div className="row" style={{ alignItems: "flex-start", marginTop: 8 }}>
+                <img src={mobileQrPreview.qrDataUrl} alt="Mobile Login QR" style={{ width: 220, height: 220, border: "1px solid var(--border)", borderRadius: 8, background: "#fff", padding: 6 }} />
+                <div className="grid" style={{ minWidth: 320, flex: 1 }}>
+                  <label>
+                    QR Payload
+                    <textarea readOnly value={mobileQrPreview.payload} />
+                  </label>
+                  <label>
+                    Token
+                    <input readOnly value={mobileQrPreview.token} />
+                  </label>
+                  <div className="row">
+                    <button
+                      className="secondary"
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(mobileQrPreview.payload);
+                          setMsg("QR Payload in Zwischenablage kopiert.");
+                        } catch {
+                          setMsg("Konnte nicht in Zwischenablage kopieren.");
+                        }
+                      }}
+                    >
+                      Payload kopieren
+                    </button>
+                    <button
+                      className="secondary"
+                      type="button"
+                      onClick={() => setMobileQrPreview(null)}
+                    >
+                      Schliessen
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="card admin-section-card admin-uniform" style={{ padding: 12 }}>
             <h4>Neuen Mitarbeiter anlegen</h4>
             <div className="grid admin-uniform">
@@ -1408,6 +1465,19 @@ export function AdminHome() {
           </div>
 
           <div className="card admin-section-card admin-table-wrap">
+            <div className="row" style={{ padding: "8px 8px 0 8px" }}>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                Mobile QR Gueltigkeit (Tage)
+                <input
+                  type="number"
+                  min={1}
+                  max={3650}
+                  value={mobileQrDays}
+                  onChange={(e) => setMobileQrDays(Math.min(3650, Math.max(1, Number(e.target.value) || 180)))}
+                  style={{ width: 110 }}
+                />
+              </label>
+            </div>
             <table>
               <thead>
                 <tr>
@@ -1419,6 +1489,7 @@ export function AdminHome() {
                   <th>Resturlaub</th>
                   <th>Soll/Tag</th>
                   <th>RFID</th>
+                  <th>Mobile QR</th>
                   <th>Mailversand</th>
                   <th>Weblogin</th>
                   <th>Zeiterfassung</th>
@@ -1491,6 +1562,10 @@ export function AdminHome() {
                       ) : (
                         e.rfidTag || "-"
                       )}
+                    </td>
+                    <td>
+                      {e.mobileQrEnabled
+                        ? `Aktiv bis ${e.mobileQrExpiresAt ? new Date(e.mobileQrExpiresAt).toLocaleDateString("de-DE") : "-"}` : "Deaktiviert"}
                     </td>
                     <td>
                       {editing ? (
@@ -1597,6 +1672,55 @@ export function AdminHome() {
                           >
                             Passwort reset
                           </button>
+                          <button
+                            className="secondary"
+                            onClick={async () => {
+                              try {
+                                const generated = await api.generateMobileQr({
+                                  userId: e.id,
+                                  expiresInDays: mobileQrDays
+                                });
+                                const qrDataUrl = await QRCode.toDataURL(generated.payload, {
+                                  margin: 1,
+                                  width: 512
+                                });
+                                setMobileQrPreview({
+                                  userId: e.id,
+                                  employeeName: generated.employeeName,
+                                  loginName: generated.loginName,
+                                  expiresAt: generated.expiresAt,
+                                  token: generated.token,
+                                  payload: generated.payload,
+                                  qrDataUrl
+                                });
+                                setMsg(`Mobile QR fuer ${e.name} erstellt.`);
+                                setEmployees((await api.employees()) as Employee[]);
+                              } catch (err) {
+                                setMsg((err as Error).message);
+                              }
+                            }}
+                          >
+                            Mobile QR erstellen
+                          </button>
+                          {e.mobileQrEnabled && (
+                            <button
+                              className="secondary"
+                              onClick={async () => {
+                                try {
+                                  const ok = window.confirm(`Mobile QR fuer ${e.name} wirklich deaktivieren?`);
+                                  if (!ok) return;
+                                  await api.revokeMobileQr({ userId: e.id });
+                                  setMsg(`Mobile QR fuer ${e.name} deaktiviert.`);
+                                  setEmployees((await api.employees()) as Employee[]);
+                                  if (mobileQrPreview?.userId === e.id) setMobileQrPreview(null);
+                                } catch (err) {
+                                  setMsg((err as Error).message);
+                                }
+                              }}
+                            >
+                              Mobile QR deaktivieren
+                            </button>
+                          )}
                         </div>
                       )}
                       {editing && (

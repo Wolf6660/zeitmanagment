@@ -33,6 +33,8 @@ employeesRouter.get("/me", async (req: AuthRequest, res) => {
       timeTrackingEnabled: true,
       rfidTag: true,
       rfidTagActive: true,
+      mobileQrEnabled: true,
+      mobileQrExpiresAt: true,
       isActive: true
     }
   });
@@ -63,7 +65,9 @@ employeesRouter.get("/", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (_req
       timeTrackingEnabled: true,
       loginName: true,
       rfidTag: true,
-      rfidTagActive: true
+      rfidTagActive: true,
+      mobileQrEnabled: true,
+      mobileQrExpiresAt: true
     }
   });
 
@@ -151,7 +155,9 @@ employeesRouter.post("/", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req
         webLoginEnabled: true,
         timeTrackingEnabled: true,
         rfidTag: true,
-        rfidTagActive: true
+        rfidTagActive: true,
+        mobileQrEnabled: true,
+        mobileQrExpiresAt: true
       }
     });
 
@@ -266,7 +272,9 @@ employeesRouter.patch("/:id", requireRole([Role.SUPERVISOR, Role.ADMIN]), async 
         webLoginEnabled: true,
         timeTrackingEnabled: true,
         rfidTag: true,
-        rfidTagActive: true
+        rfidTagActive: true,
+        mobileQrEnabled: true,
+        mobileQrExpiresAt: true
       }
     });
 

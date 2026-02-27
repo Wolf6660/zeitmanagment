@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { DropdownField } from "../components/DropdownField";
 import type { ApiClient } from "../services/api";
 import type { ClockType, EmployeeRow, SessionUser } from "../types/app";
 import { colors } from "../theme/colors";
@@ -248,23 +249,16 @@ export function MonthScreen({ api, user }: Props) {
       {isLead && (
         <View style={styles.card}>
           <Text style={styles.section}>Mitarbeiter waehlen</Text>
-          <FlatList
-            horizontal
-            data={employees}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={{ gap: 6 }}
-            renderItem={({ item }) => (
-              <Pressable
-                style={[styles.employeeChip, selectedUserId === item.id && styles.employeeChipActive]}
-                onPress={() => {
-                  setSelectedUserId(item.id);
-                  setStatus(null);
-                  void loadMonth(item.id);
-                }}
-              >
-                <Text style={styles.employeeChipText}>{item.name}</Text>
-              </Pressable>
-            )}
+          <DropdownField
+            label="Mitarbeiter"
+            options={employees.map((r) => ({ label: `${r.name} (${r.loginName})`, value: r.id }))}
+            value={selectedUserId}
+            onChange={(id) => {
+              setSelectedUserId(id);
+              setStatus(null);
+              void loadMonth(id);
+            }}
+            placeholder="Mitarbeiter waehlen"
           />
           {!!selectedEmployee && <Text style={styles.employeeHint}>Aktiv: {selectedEmployee.name}</Text>}
         </View>
@@ -327,9 +321,6 @@ const styles = StyleSheet.create({
   section: { fontWeight: "700", color: colors.text },
   card: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 12, gap: 8 },
   metric: { fontWeight: "700", color: colors.text },
-  employeeChip: { borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: "#fff" },
-  employeeChipActive: { borderColor: "#10B981", backgroundColor: "#D1FAE5" },
-  employeeChipText: { color: colors.text, fontWeight: "600" },
   employeeHint: { color: colors.muted, fontSize: 12 },
   row: {
     backgroundColor: colors.card,
