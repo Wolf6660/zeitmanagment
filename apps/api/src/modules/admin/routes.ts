@@ -1078,7 +1078,7 @@ adminRouter.post("/logo-upload", async (req: AuthRequest, res) => {
     res.status(400).json({ message: "Nur PNG/JPG erlaubt." });
     return;
   }
-  const uploadDir = path.resolve(process.cwd(), "uploads");
+  const uploadDir = path.resolve(env.UPLOAD_DIR);
   if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
   const targetPath = path.join(uploadDir, `logo.${ext}`);
   const rawBase64 = parsed.data.contentBase64.includes(",")

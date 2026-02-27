@@ -17,6 +17,7 @@ const schema = z.object({
   DATABASE_URL: z.string().min(1),
   JWT_SECRET: z.string().min(16),
   WEB_ORIGIN: z.preprocess(emptyToUndefined, z.string()).default("*"),
+  UPLOAD_DIR: z.preprocess(emptyToUndefined, z.string()).default("/app/data/uploads"),
   ADMIN_LOGIN_NAME: z.preprocess(emptyToUndefined, z.string().min(3)).default("admin"),
   ADMIN_PASSWORD: z.preprocess(emptyToUndefined, z.string().min(8)).default("Admin1234!"),
   ADMIN_NAME: z.preprocess(emptyToUndefined, z.string().min(1)).default("System Admin"),

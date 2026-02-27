@@ -32,6 +32,7 @@ services:
       API_PORT: 4000
       TERMINAL_PORT: 4010
       WEB_ORIGIN: http://localhost:${WEB_PORT}
+      UPLOAD_DIR: /app/data/uploads
       JWT_SECRET: ${JWT_SECRET}
       DATABASE_URL: mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE}
       ADMIN_LOGIN_NAME: ${ADMIN_LOGIN_NAME:-admin}
@@ -46,6 +47,7 @@ services:
       - "${TERMINAL_PORT}:4010"
     volumes:
       - ./backups:/app/backups
+      - ./uploads:/app/data/uploads
 
   web:
     build:

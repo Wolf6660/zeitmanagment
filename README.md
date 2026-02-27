@@ -77,6 +77,7 @@ Beispiel-Logins nach Seed:
    - `ADMIN_PASSWORD`
    - `ADMIN_NAME`
    - `ADMIN_EMAIL`
+   - Optional Upload-Verzeichnis (Logo-Dateien, persistent): `UPLOAD_DIR=/app/data/uploads`
 3. Start:
    - `docker compose up --build -d`
 4. Aufruf:
@@ -88,6 +89,10 @@ Hinweis zu Ports:
 - Die effektiven Docker-Ports kommen aus `.env` (`WEB_PORT`, `API_PORT`, `TERMINAL_PORT`, `MYSQL_PORT`).
 - Die Portwerte im Admin-Webinterface sind Sollwerte in der Datenbank und aendern Docker nicht automatisch.
 - Nach Port-Aenderungen in `.env`: `docker compose up -d --build` erneut ausfuehren.
+
+Hinweis Logo-Persistenz:
+- Das hochgeladene Firmenlogo wird im gemounteten Ordner `./uploads` gespeichert.
+- Dieser Ordner bleibt bei `docker compose up -d --build` erhalten.
 
 Hinweis Admin-Bootstrap:
 - Beim API-Start wird ein Admin aus den `.env`-Werten automatisch angelegt/aktualisiert.

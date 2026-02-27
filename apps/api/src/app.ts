@@ -17,7 +17,7 @@ import { getAdminEmails, sendEventMail } from "./utils/mail.js";
 export function createApp() {
   const app = express();
   const allowAnyOrigin = env.WEB_ORIGIN === "*";
-  const uploadDir = path.resolve(process.cwd(), "uploads");
+  const uploadDir = path.resolve(env.UPLOAD_DIR);
   if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
   }
