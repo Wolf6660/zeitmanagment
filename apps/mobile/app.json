@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "Zeitmanagment",
+    "slug": "zeitmanagment-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "de.zeitmanagment.mobile"
+    },
+    "android": {
+      "package": "de.zeitmanagment.mobile"
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-camera"
+    ]
+  }
+}

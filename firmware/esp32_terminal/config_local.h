@@ -1,8 +1,8 @@
 #pragma once
 
 // Automatisch aus ESP32 Provisioning erzeugt
-#define LOCAL_WIFI_SSID "IoT"
-#define LOCAL_WIFI_PASSWORD "!desischmeiWlanduNudeldunger\""
+#define LOCAL_WIFI_SSID "Metallbau-Kopf"
+#define LOCAL_WIFI_PASSWORD "6848966283551128"
 #define LOCAL_SERVER_ENDPOINT "https://zeiterfassung.dyndns-bellheim.de/api/terminal/punch"
 #define LOCAL_USE_TLS true
 #define LOCAL_TERMINAL_KEY "1f2c1770fa442a646d417bce5901fab5d685617426dbffee"

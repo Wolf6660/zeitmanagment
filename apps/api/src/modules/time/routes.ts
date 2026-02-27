@@ -235,20 +235,38 @@ timeRouter.post("/clock", requireRole([Role.EMPLOYEE, Role.AZUBI, Role.SUPERVISO
   }
 
   const roundedAt = roundOccurredAtByConfig(new Date(), cfg);
-  if (await hasDirectDuplicateSequence(req.auth.userId, parsed.data.type, roundedAt)) {
+  const lockKey = `clock:${req.auth.userId}`;
+  const txResult = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT GET_LOCK(${lockKey}, 5)`;
+    try {
+      const lastEntry = await tx.timeEntry.findFirst({
+        where: { userId: req.auth.userId },
+        orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
+        select: { type: true }
+      });
+      if (lastEntry?.type === parsed.data.type) {
+        return { duplicate: true as const };
+      }
+      const created = await tx.timeEntry.create({
+        data: {
+          userId: req.auth.userId,
+          type: parsed.data.type,
+          source: TimeEntrySource.WEB,
+          reasonCode: parsed.data.reasonCode,
+          reasonText: parsed.data.reasonText,
+          occurredAt: roundedAt
+        }
+      });
+      return { duplicate: false as const, entry: created };
+    } finally {
+      await tx.$queryRaw`DO RELEASE_LOCK(${lockKey})`;
+    }
+  });
+  if (txResult.duplicate) {
     res.status(400).json({ message: "Doppelte Folge-Buchung ist nicht erlaubt." });
     return;
   }
-  const entry = await prisma.timeEntry.create({
-    data: {
-      userId: req.auth.userId,
-      type: parsed.data.type,
-      source: TimeEntrySource.WEB,
-      reasonCode: parsed.data.reasonCode,
-      reasonText: parsed.data.reasonText,
-      occurredAt: roundedAt
-    }
-  });
+  const entry = txResult.entry;
 
   await writeAuditLog({
     actorUserId: req.auth.userId,

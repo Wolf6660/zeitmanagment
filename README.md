@@ -137,6 +137,36 @@ Hinweis Admin-Bootstrap:
 - `POST /api/admin/terminals/:id/regenerate-key`
 - `POST /api/terminal/punch`
 
+## Mobile App (Android + iOS, native)
+
+Es gibt jetzt ein eigenes Native-App-Projekt unter:
+- `apps/mobile` (Expo / React Native, keine WebView-App)
+
+### Zielbild der App
+- Erststart nur per QR-Provisioning
+- QR-Inhalt ist verschluesselt (API-URL + optional Loginname/Passwort)
+- Provisioning ist nach Scan gesperrt und in der App nicht einsehbar/aenderbar
+- Aenderung nur durch kompletten App-Reset und erneuten QR-Scan
+- Rollenbasierte App-Navigation fuer `AZUBI`, `EMPLOYEE`, `SUPERVISOR`, `ADMIN`
+- Startseite zeigt nur Kommen/Gehen, Nachtrag und bei `AZUBI` Berufsschule
+- Weitere Funktionen ueber Bottom-Tabs
+
+### Mobile Setup lokal
+1. Abhaengigkeiten installieren:
+   - `npm install`
+2. Mobile App starten:
+   - `npm run dev:mobile`
+3. Android:
+   - `npm run android -w apps/mobile`
+4. iOS:
+   - `npm run ios -w apps/mobile`
+
+### QR-Code Inhalt erzeugen
+Provisioning-String erzeugen:
+- `npm run qr:encode -w apps/mobile -- --api https://deine-domain.tld --login max --password Mitarbeiter123!`
+
+Der ausgegebene String wird als QR-Code codiert und in der App beim Erststart gescannt.
+
 ## Noch offen fuer die naechste Ausbaustufe
 
 - PDF-Export im finalen Stundenzettel-Design
