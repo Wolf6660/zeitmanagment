@@ -401,6 +401,10 @@ export const api = {
       colorNavMainInactive: string;
       colorNavSubActive: string;
       colorNavSubInactive: string;
+      colorNavTextActive: string;
+      colorNavTextInactive: string;
+      colorNavSubTextActive: string;
+      colorNavSubTextInactive: string;
       colorApprovedEnabled?: boolean;
       colorRejectedEnabled?: boolean;
       colorManualCorrectionEnabled?: boolean;
@@ -416,6 +420,10 @@ export const api = {
       colorNavMainInactiveEnabled?: boolean;
       colorNavSubActiveEnabled?: boolean;
       colorNavSubInactiveEnabled?: boolean;
+      colorNavTextActiveEnabled?: boolean;
+      colorNavTextInactiveEnabled?: boolean;
+      colorNavSubTextActiveEnabled?: boolean;
+      colorNavSubTextInactiveEnabled?: boolean;
       smtpEnabled?: boolean;
       smtpHost?: string | null;
       smtpPort?: number;

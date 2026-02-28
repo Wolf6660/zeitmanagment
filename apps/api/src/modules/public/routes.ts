@@ -26,6 +26,10 @@ publicRouter.get("/config", async (_req, res) => {
       colorNavMainInactive: true,
       colorNavSubActive: true,
       colorNavSubInactive: true,
+      colorNavTextActive: true,
+      colorNavTextInactive: true,
+      colorNavSubTextActive: true,
+      colorNavSubTextInactive: true,
       colorApprovedEnabled: true,
       colorRejectedEnabled: true,
       colorManualCorrectionEnabled: true,
@@ -40,7 +44,11 @@ publicRouter.get("/config", async (_req, res) => {
       colorNavMainActiveEnabled: true,
       colorNavMainInactiveEnabled: true,
       colorNavSubActiveEnabled: true,
-      colorNavSubInactiveEnabled: true
+      colorNavSubInactiveEnabled: true,
+      colorNavTextActiveEnabled: true,
+      colorNavTextInactiveEnabled: true,
+      colorNavSubTextActiveEnabled: true,
+      colorNavSubTextInactiveEnabled: true
     }
   });
 
@@ -65,6 +73,10 @@ publicRouter.get("/config", async (_req, res) => {
       colorNavMainInactive: "#0B1324",
       colorNavSubActive: "#99F6E4",
       colorNavSubInactive: "#E5E7EB",
+      colorNavTextActive: "#FFFFFF",
+      colorNavTextInactive: "#FFFFFF",
+      colorNavSubTextActive: "#111827",
+      colorNavSubTextInactive: "#111827",
       colorApprovedEnabled: true,
       colorRejectedEnabled: true,
       colorManualCorrectionEnabled: true,
@@ -79,7 +91,11 @@ publicRouter.get("/config", async (_req, res) => {
       colorNavMainActiveEnabled: true,
       colorNavMainInactiveEnabled: true,
       colorNavSubActiveEnabled: true,
-      colorNavSubInactiveEnabled: true
+      colorNavSubInactiveEnabled: true,
+      colorNavTextActiveEnabled: true,
+      colorNavTextInactiveEnabled: true,
+      colorNavSubTextActiveEnabled: true,
+      colorNavSubTextInactiveEnabled: true
     });
     return;
   }

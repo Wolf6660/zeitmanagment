@@ -18,6 +18,10 @@ export type PublicConfig = {
   colorNavMainInactive: string;
   colorNavSubActive: string;
   colorNavSubInactive: string;
+  colorNavTextActive: string;
+  colorNavTextInactive: string;
+  colorNavSubTextActive: string;
+  colorNavSubTextInactive: string;
   colorApprovedEnabled?: boolean;
   colorRejectedEnabled?: boolean;
   colorManualCorrectionEnabled?: boolean;
@@ -33,6 +37,10 @@ export type PublicConfig = {
   colorNavMainInactiveEnabled?: boolean;
   colorNavSubActiveEnabled?: boolean;
   colorNavSubInactiveEnabled?: boolean;
+  colorNavTextActiveEnabled?: boolean;
+  colorNavTextInactiveEnabled?: boolean;
+  colorNavSubTextActiveEnabled?: boolean;
+  colorNavSubTextInactiveEnabled?: boolean;
 };
 
 export function applyTheme(config: PublicConfig): void {
@@ -54,4 +62,8 @@ export function applyTheme(config: PublicConfig): void {
   root.style.setProperty("--nav-main-inactive-bg", bgColor(config.colorNavMainInactiveEnabled, config.colorNavMainInactive));
   root.style.setProperty("--nav-sub-active-bg", bgColor(config.colorNavSubActiveEnabled, config.colorNavSubActive));
   root.style.setProperty("--nav-sub-inactive-bg", bgColor(config.colorNavSubInactiveEnabled, config.colorNavSubInactive));
+  root.style.setProperty("--nav-text-active", textColor(config.colorNavTextActiveEnabled, config.colorNavTextActive, "#ffffff"));
+  root.style.setProperty("--nav-text-inactive", textColor(config.colorNavTextInactiveEnabled, config.colorNavTextInactive, "#ffffff"));
+  root.style.setProperty("--nav-sub-text-active", textColor(config.colorNavSubTextActiveEnabled, config.colorNavSubTextActive, "#111827"));
+  root.style.setProperty("--nav-sub-text-inactive", textColor(config.colorNavSubTextInactiveEnabled, config.colorNavSubTextInactive, "#111827"));
 }

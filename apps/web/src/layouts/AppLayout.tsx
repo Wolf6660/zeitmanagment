@@ -28,6 +28,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       });
   }, []);
 
+  const navClass = (paths: string[]) => (paths.includes(location.pathname) ? "active" : "inactive");
+
   return (
     <div className="page">
       <div className="card" style={{ marginBottom: 12 }}>
@@ -39,31 +41,31 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           {brand?.companyLogoUrl && <img className="brand-logo" src={brand.companyLogoUrl} alt="Firmenlogo" />}
         </div>
         <div className="row" style={{ justifyContent: "space-between", marginTop: 8 }}>
-          <div className="nav" style={{ margin: 0 }}>
-            <Link to="/app"><button>Startseite</button></Link>
+          <div className="nav app-main-nav" style={{ margin: 0 }}>
+            <Link to="/app"><button className={navClass(["/app"])}>Startseite</button></Link>
             {(session?.user.role === "EMPLOYEE" || session?.user.role === "AZUBI") && (
-              <Link to="/app/month-self"><button>Monatsansicht</button></Link>
+              <Link to="/app/month-self"><button className={navClass(["/app/month-self"])}>Monatsansicht</button></Link>
             )}
             {(session?.user.role === "ADMIN" || session?.user.role === "SUPERVISOR") && (
-              <Link to="/app/month"><button>Monatsansicht</button></Link>
+              <Link to="/app/month"><button className={navClass(["/app/month"])}>Monatsansicht</button></Link>
             )}
             {(session?.user.role === "EMPLOYEE" || session?.user.role === "AZUBI" || session?.user.role === "SUPERVISOR") && (
-              <Link to="/app/my-requests"><button>Urlaub / AZ</button></Link>
+              <Link to="/app/my-requests"><button className={navClass(["/app/my-requests"])}>Urlaub / AZ</button></Link>
             )}
             {(session?.user.role === "EMPLOYEE" || session?.user.role === "AZUBI") && (
-              <Link to="/app/change-password"><button>Kennwort</button></Link>
+              <Link to="/app/change-password"><button className={navClass(["/app/change-password"])}>Kennwort</button></Link>
             )}
             {(session?.user.role === "ADMIN" || session?.user.role === "SUPERVISOR") && (
-              <Link to="/app/sickness"><button>Krankheit</button></Link>
+              <Link to="/app/sickness"><button className={navClass(["/app/sickness"])}>Krankheit</button></Link>
             )}
             {(session?.user.role === "ADMIN" || session?.user.role === "SUPERVISOR") && (
-              <Link to="/app/settings"><button>Einstellungen</button></Link>
+              <Link to="/app/settings"><button className={navClass(["/app/settings", "/app/holidays", "/app/requests", "/app/team"])}>Einstellungen</button></Link>
             )}
             {session?.user.role === "ADMIN" && (
-              <Link to="/app/guides"><button>Anleitungen</button></Link>
+              <Link to="/app/guides"><button className={navClass(["/app/guides"])}>Anleitungen</button></Link>
             )}
             {session?.user.role === "ADMIN" && (
-              <Link to="/app/admin"><button>Admin</button></Link>
+              <Link to="/app/admin"><button className={navClass(["/app/admin"])}>Admin</button></Link>
             )}
           </div>
           <div className="row">
@@ -81,10 +83,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
         {showSettingsSubmenu && (
           <div className="card" style={{ marginTop: 10, padding: 10 }}>
-            <div className="nav" style={{ margin: 0 }}>
-              <Link to="/app/holidays"><button>Feiertage</button></Link>
-              <Link to="/app/requests"><button>Antraege</button></Link>
-              <Link to="/app/team"><button>Mitarbeiter</button></Link>
+            <div className="nav app-sub-nav" style={{ margin: 0 }}>
+              <Link to="/app/holidays"><button className={navClass(["/app/holidays"])}>Feiertage</button></Link>
+              <Link to="/app/requests"><button className={navClass(["/app/requests"])}>Antraege</button></Link>
+              <Link to="/app/team"><button className={navClass(["/app/team"])}>Mitarbeiter</button></Link>
             </div>
           </div>
         )}

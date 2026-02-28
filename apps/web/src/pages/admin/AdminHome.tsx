@@ -44,6 +44,10 @@ type AdminConfig = {
   colorNavMainInactive: string;
   colorNavSubActive: string;
   colorNavSubInactive: string;
+  colorNavTextActive: string;
+  colorNavTextInactive: string;
+  colorNavSubTextActive: string;
+  colorNavSubTextInactive: string;
   colorApprovedEnabled?: boolean;
   colorRejectedEnabled?: boolean;
   colorManualCorrectionEnabled?: boolean;
@@ -59,6 +63,10 @@ type AdminConfig = {
   colorNavMainInactiveEnabled?: boolean;
   colorNavSubActiveEnabled?: boolean;
   colorNavSubInactiveEnabled?: boolean;
+  colorNavTextActiveEnabled?: boolean;
+  colorNavTextInactiveEnabled?: boolean;
+  colorNavSubTextActiveEnabled?: boolean;
+  colorNavSubTextInactiveEnabled?: boolean;
   smtpEnabled?: boolean;
   smtpHost?: string | null;
   smtpPort?: number;
@@ -139,7 +147,11 @@ const COLOR_FIELDS: Array<{ key: keyof AdminConfig; enabledKey: keyof AdminConfi
   { key: "colorNavMainActive", enabledKey: "colorNavMainActiveEnabled", label: "Menue Hauptbereich aktiv" },
   { key: "colorNavMainInactive", enabledKey: "colorNavMainInactiveEnabled", label: "Menue Hauptbereich inaktiv" },
   { key: "colorNavSubActive", enabledKey: "colorNavSubActiveEnabled", label: "Menue Unterbereich aktiv" },
-  { key: "colorNavSubInactive", enabledKey: "colorNavSubInactiveEnabled", label: "Menue Unterbereich inaktiv" }
+  { key: "colorNavSubInactive", enabledKey: "colorNavSubInactiveEnabled", label: "Menue Unterbereich inaktiv" },
+  { key: "colorNavTextActive", enabledKey: "colorNavTextActiveEnabled", label: "Menue Hauptbereich Text aktiv" },
+  { key: "colorNavTextInactive", enabledKey: "colorNavTextInactiveEnabled", label: "Menue Hauptbereich Text inaktiv" },
+  { key: "colorNavSubTextActive", enabledKey: "colorNavSubTextActiveEnabled", label: "Menue Unterbereich Text aktiv" },
+  { key: "colorNavSubTextInactive", enabledKey: "colorNavSubTextInactiveEnabled", label: "Menue Unterbereich Text inaktiv" }
 ];
 
 function toBoolLiteral(v: unknown): string {

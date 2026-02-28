@@ -20,6 +20,10 @@
   --nav-main-inactive-bg: #0b1324;
   --nav-sub-active-bg: #99f6e4;
   --nav-sub-inactive-bg: #e5e7eb;
+  --nav-text-active: #ffffff;
+  --nav-text-inactive: #ffffff;
+  --nav-sub-text-active: #111827;
+  --nav-sub-text-inactive: #111827;
 }
 
 * {
@@ -168,26 +172,44 @@ td {
   background: #111827;
 }
 
-.admin-main-nav button {
-  color: #ffffff;
-}
-
 .admin-main-nav button.active {
   background: var(--nav-main-active-bg);
+  color: var(--nav-text-active);
 }
 
 .admin-main-nav button.inactive {
   background: var(--nav-main-inactive-bg);
+  color: var(--nav-text-inactive);
 }
 
 .admin-sub-nav button.active {
   background: var(--nav-sub-active-bg);
-  color: #111827;
+  color: var(--nav-sub-text-active);
 }
 
 .admin-sub-nav button.inactive {
   background: var(--nav-sub-inactive-bg);
-  color: #111827;
+  color: var(--nav-sub-text-inactive);
+}
+
+.app-main-nav button.active {
+  background: var(--nav-main-active-bg);
+  color: var(--nav-text-active);
+}
+
+.app-main-nav button.inactive {
+  background: var(--nav-main-inactive-bg);
+  color: var(--nav-text-inactive);
+}
+
+.app-sub-nav button.active {
+  background: var(--nav-sub-active-bg);
+  color: var(--nav-sub-text-active);
+}
+
+.app-sub-nav button.inactive {
+  background: var(--nav-sub-inactive-bg);
+  color: var(--nav-sub-text-inactive);
 }
 
 .brand-wrap {

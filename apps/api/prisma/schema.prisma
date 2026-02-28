@@ -316,6 +316,10 @@ model SystemConfig {
   colorNavMainInactive              String   @default("#0B1324")
   colorNavSubActive                 String   @default("#99F6E4")
   colorNavSubInactive               String   @default("#E5E7EB")
+  colorNavTextActive                String   @default("#FFFFFF")
+  colorNavTextInactive              String   @default("#FFFFFF")
+  colorNavSubTextActive             String   @default("#111827")
+  colorNavSubTextInactive           String   @default("#111827")
   colorApprovedEnabled              Boolean  @default(true)
   colorRejectedEnabled              Boolean  @default(true)
   colorManualCorrectionEnabled      Boolean  @default(true)
@@ -331,6 +335,10 @@ model SystemConfig {
   colorNavMainInactiveEnabled       Boolean  @default(true)
   colorNavSubActiveEnabled          Boolean  @default(true)
   colorNavSubInactiveEnabled        Boolean  @default(true)
+  colorNavTextActiveEnabled         Boolean  @default(true)
+  colorNavTextInactiveEnabled       Boolean  @default(true)
+  colorNavSubTextActiveEnabled      Boolean  @default(true)
+  colorNavSubTextInactiveEnabled    Boolean  @default(true)
 
   smtpEnabled                       Boolean  @default(false)
   smtpHost                          String?
