@@ -10,6 +10,7 @@ type AdminConfig = {
   companyName: string;
   systemName: string;
   companyLogoUrl?: string | null;
+  mobileAppApiBaseUrl?: string | null;
   defaultDailyHours: number;
   defaultWeeklyWorkingDays?: string;
   selfCorrectionMaxDays?: number;
@@ -365,6 +366,17 @@ export function AdminHome() {
             Systemname
             <input value={config.systemName || ""} onChange={(e) => setConfig({ ...config, systemName: e.target.value })} />
           </label>
+          <label>
+            DYNDNS / API-Basisadresse fuer App-QR
+            <input
+              placeholder="https://wolf.dyndns-bellheim.de"
+              value={config.mobileAppApiBaseUrl || ""}
+              onChange={(e) => setConfig({ ...config, mobileAppApiBaseUrl: e.target.value })}
+            />
+          </label>
+          <div style={{ gridColumn: "1 / -1", color: "var(--muted)", fontSize: 12 }}>
+            Diese Adresse wird fuer QR-Code und App-Login verwendet (z. B. deine DYNDNS-Adresse mit HTTPS).
+          </div>
           <label>
             Firmenlogo hochladen (PNG/JPG)
             <input type="file" accept="image/png,image/jpeg" onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)} />
@@ -1304,50 +1316,6 @@ export function AdminHome() {
 
       {section === "employees" && (
         <div className="grid admin-section">
-          {mobileQrPreview && (
-            <div className="card admin-section-card" style={{ padding: 12 }}>
-              <h4>Mobile QR Login</h4>
-              <div><strong>Mitarbeiter:</strong> {mobileQrPreview.employeeName} ({mobileQrPreview.loginName})</div>
-              <div><strong>Gueltig bis:</strong> {new Date(mobileQrPreview.expiresAt).toLocaleString("de-DE")}</div>
-              <div className="row" style={{ alignItems: "flex-start", marginTop: 8 }}>
-                <img src={mobileQrPreview.qrDataUrl} alt="Mobile Login QR" style={{ width: 220, height: 220, border: "1px solid var(--border)", borderRadius: 8, background: "#fff", padding: 6 }} />
-                <div className="grid" style={{ minWidth: 320, flex: 1 }}>
-                  <label>
-                    QR Payload
-                    <textarea readOnly value={mobileQrPreview.payload} />
-                  </label>
-                  <label>
-                    Token
-                    <input readOnly value={mobileQrPreview.token} />
-                  </label>
-                  <div className="row">
-                    <button
-                      className="secondary"
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          await navigator.clipboard.writeText(mobileQrPreview.payload);
-                          setMsg("QR Payload in Zwischenablage kopiert.");
-                        } catch {
-                          setMsg("Konnte nicht in Zwischenablage kopieren.");
-                        }
-                      }}
-                    >
-                      Payload kopieren
-                    </button>
-                    <button
-                      className="secondary"
-                      type="button"
-                      onClick={() => setMobileQrPreview(null)}
-                    >
-                      Schliessen
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
           <div className="card admin-section-card admin-uniform" style={{ padding: 12 }}>
             <h4>Neuen Mitarbeiter anlegen</h4>
             <div className="grid admin-uniform">
@@ -2305,6 +2273,80 @@ export function AdminHome() {
                 style={{ minHeight: 240, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
               />
             </label>
+          </div>
+        </div>
+      )}
+
+      {mobileQrPreview && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.55)",
+            zIndex: 1200,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16
+          }}
+          onClick={() => setMobileQrPreview(null)}
+        >
+          <div
+            className="card"
+            style={{ width: "min(920px, 100%)", maxHeight: "92vh", overflow: "auto" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ marginTop: 0 }}>Mobile QR Login</h3>
+            <div><strong>Mitarbeiter:</strong> {mobileQrPreview.employeeName} ({mobileQrPreview.loginName})</div>
+            <div><strong>Gueltig bis:</strong> {new Date(mobileQrPreview.expiresAt).toLocaleString("de-DE")}</div>
+            <div className="row" style={{ alignItems: "flex-start", marginTop: 10 }}>
+              <img src={mobileQrPreview.qrDataUrl} alt="Mobile Login QR" style={{ width: 260, height: 260, border: "1px solid var(--border)", borderRadius: 8, background: "#fff", padding: 8 }} />
+              <div className="grid" style={{ minWidth: 320, flex: 1 }}>
+                <label>
+                  QR Payload
+                  <textarea readOnly value={mobileQrPreview.payload} />
+                </label>
+                <label>
+                  Token
+                  <input readOnly value={mobileQrPreview.token} />
+                </label>
+                <div className="row">
+                  <button
+                    className="secondary"
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(mobileQrPreview.payload);
+                        setMsg("QR Payload in Zwischenablage kopiert.");
+                      } catch {
+                        setMsg("Konnte nicht in Zwischenablage kopieren.");
+                      }
+                    }}
+                  >
+                    Payload kopieren
+                  </button>
+                  <button
+                    className="secondary"
+                    type="button"
+                    onClick={() => {
+                      const w = window.open("", "_blank", "noopener,noreferrer,width=820,height=980");
+                      if (!w) {
+                        setMsg("Druckfenster konnte nicht geoeffnet werden.");
+                        return;
+                      }
+                      const payloadSafe = mobileQrPreview.payload.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+                      w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Mobile QR - ${mobileQrPreview.employeeName}</title><style>body{font-family:Arial,sans-serif;padding:24px}h1{margin:0 0 8px}img{width:320px;height:320px;border:1px solid #ddd;padding:8px;border-radius:8px;background:#fff}.meta{margin:8px 0 16px;color:#111}.payload{margin-top:14px;font-family:monospace;white-space:pre-wrap;word-break:break-all;border:1px solid #ddd;padding:10px;border-radius:8px}</style></head><body><h1>Mobile QR Login</h1><div class="meta"><strong>Mitarbeiter:</strong> ${mobileQrPreview.employeeName} (${mobileQrPreview.loginName})<br/><strong>Gueltig bis:</strong> ${new Date(mobileQrPreview.expiresAt).toLocaleString("de-DE")}</div><img src="${mobileQrPreview.qrDataUrl}" alt="QR"/><div class="payload">${payloadSafe}</div><script>window.onload=function(){window.print();}</script></body></html>`);
+                      w.document.close();
+                    }}
+                  >
+                    Drucken
+                  </button>
+                  <button className="secondary" type="button" onClick={() => setMobileQrPreview(null)}>
+                    Schliessen
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

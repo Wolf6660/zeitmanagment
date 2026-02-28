@@ -25,6 +25,7 @@ const configSchema = z.object({
   companyName: z.string().min(1).optional(),
   systemName: z.string().min(1).optional(),
   companyLogoUrl: z.string().nullable().optional(),
+  mobileAppApiBaseUrl: z.preprocess((v) => (v === "" ? null : v), z.string().nullable()).optional(),
   defaultDailyHours: z.number().min(1).max(24).optional(),
   defaultWeeklyWorkingDays: z.string().optional(),
   selfCorrectionMaxDays: z.number().int().min(0).max(60).optional(),
@@ -1141,7 +1142,13 @@ adminRouter.post("/mobile-qr/generate", async (req: AuthRequest, res) => {
       mobileQrExpiresAt: expiresAt
     }
   });
-  const apiBase = env.WEB_ORIGIN === "*" ? "" : env.WEB_ORIGIN;
+  const cfg = await prisma.systemConfig.findUnique({
+    where: { id: 1 },
+    select: { mobileAppApiBaseUrl: true }
+  });
+  const apiBase =
+    (cfg?.mobileAppApiBaseUrl || "").trim()
+    || (env.WEB_ORIGIN === "*" ? "" : env.WEB_ORIGIN);
   const payload = JSON.stringify({
     kind: "ZEITMANAGMENT_MOBILE_LOGIN",
     apiBase,

@@ -367,6 +367,7 @@ export const api = {
       systemName: string;
       companyName: string;
       companyLogoUrl?: string | null;
+      mobileAppApiBaseUrl?: string | null;
       defaultDailyHours: number;
       defaultWeeklyWorkingDays?: string;
       selfCorrectionMaxDays?: number;

@@ -281,6 +281,7 @@ model SystemConfig {
   companyName                       String   @default("Meine Firma")
   systemName                        String   @default("Zeitmanagment")
   companyLogoUrl                    String?
+  mobileAppApiBaseUrl               String?
   defaultDailyHours                 Float    @default(8)
   defaultWeeklyWorkingDays          String   @default("MON,TUE,WED,THU,FRI")
   selfCorrectionMaxDays             Int      @default(3)
