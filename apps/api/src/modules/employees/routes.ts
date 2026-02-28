@@ -1,10 +1,12 @@
 import { Prisma, Role } from "@prisma/client";
 import bcrypt from "bcrypt";
+import crypto from "node:crypto";
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../../db/prisma.js";
 import { AuthRequest, requireAuth, requireRole } from "../../utils/auth.js";
 import { resolveActorLoginName, writeAuditLog } from "../../utils/audit.js";
+import { env } from "../../config/env.js";
 
 export const employeesRouter = Router();
 
@@ -217,6 +219,10 @@ const supervisorResetPasswordSchema = z.object({
     .regex(/^(?=.*([0-9]|[^A-Za-z0-9])).+$/, "Passwort braucht mindestens eine Zahl oder ein Sonderzeichen.")
 });
 
+const mobileQrGenerateSchema = z.object({
+  expiresInDays: z.number().int().min(1).max(3650).optional()
+});
+
 employeesRouter.patch("/:id", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
   const parsed = updateEmployeeSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -332,6 +338,138 @@ employeesRouter.post("/:id/reset-password", requireRole([Role.SUPERVISOR, Role.A
     });
   } catch {
     // Passwort wurde erfolgreich gesetzt; Logging-Fehler ignorieren.
+  }
+  res.json({ ok: true });
+});
+
+employeesRouter.post("/:id/mobile-qr/generate", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+  const parsed = mobileQrGenerateSchema.safeParse(req.body);
+  if (!parsed.success || !req.auth) {
+    res.status(400).json({ message: "Ungueltige Eingaben." });
+    return;
+  }
+
+  const userId = String(req.params.id);
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, name: true, loginName: true, role: true, isActive: true, webLoginEnabled: true }
+  });
+  if (!target) {
+    res.status(404).json({ message: "Mitarbeiter nicht gefunden." });
+    return;
+  }
+
+  if (req.auth.role === Role.SUPERVISOR) {
+    const isOwnAccount = req.auth.userId === target.id;
+    const isEmployeeOrAzubi = target.role === Role.EMPLOYEE || target.role === Role.AZUBI;
+    if (!isOwnAccount && !isEmployeeOrAzubi) {
+      res.status(403).json({ message: "Vorgesetzte duerfen nur eigenes Konto oder Mitarbeiter/AZUBI verwalten." });
+      return;
+    }
+  }
+
+  if (!target.isActive) {
+    res.status(400).json({ message: "Mitarbeiter ist deaktiviert." });
+    return;
+  }
+  if (!target.webLoginEnabled) {
+    res.status(400).json({ message: "Weblogin ist fuer diesen Mitarbeiter deaktiviert." });
+    return;
+  }
+
+  const expiresInDays = parsed.data.expiresInDays ?? 180;
+  const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
+  const token = crypto.randomBytes(24).toString("base64url");
+  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+
+  await prisma.user.update({
+    where: { id: target.id },
+    data: {
+      mobileQrTokenHash: tokenHash,
+      mobileQrEnabled: true,
+      mobileQrExpiresAt: expiresAt
+    }
+  });
+
+  const cfg = await prisma.systemConfig.findUnique({
+    where: { id: 1 },
+    select: { mobileAppApiBaseUrl: true }
+  });
+  const apiBase =
+    (cfg?.mobileAppApiBaseUrl || "").trim()
+    || (env.WEB_ORIGIN === "*" ? "" : env.WEB_ORIGIN);
+  const payload = JSON.stringify({
+    kind: "ZEITMANAGMENT_MOBILE_LOGIN",
+    apiBase,
+    token,
+    loginName: target.loginName
+  });
+
+  try {
+    await writeAuditLog({
+      actorUserId: req.auth.userId,
+      actorLoginName: await resolveActorLoginName(req.auth.userId),
+      action: "MOBILE_QR_GENERATED",
+      targetType: "User",
+      targetId: target.id,
+      payload: { loginName: target.loginName, expiresAt: expiresAt.toISOString() }
+    });
+  } catch {
+    // QR wurde erstellt; Logging-Fehler darf den Request nicht fehlschlagen lassen.
+  }
+
+  res.json({
+    userId: target.id,
+    loginName: target.loginName,
+    employeeName: target.name,
+    expiresAt: expiresAt.toISOString(),
+    token,
+    payload
+  });
+});
+
+employeesRouter.post("/:id/mobile-qr/revoke", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
+  if (!req.auth) {
+    res.status(401).json({ message: "Nicht authentifiziert." });
+    return;
+  }
+  const userId = String(req.params.id);
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, role: true, loginName: true }
+  });
+  if (!target) {
+    res.status(404).json({ message: "Mitarbeiter nicht gefunden." });
+    return;
+  }
+  if (req.auth.role === Role.SUPERVISOR) {
+    const isOwnAccount = req.auth.userId === target.id;
+    const isEmployeeOrAzubi = target.role === Role.EMPLOYEE || target.role === Role.AZUBI;
+    if (!isOwnAccount && !isEmployeeOrAzubi) {
+      res.status(403).json({ message: "Vorgesetzte duerfen nur eigenes Konto oder Mitarbeiter/AZUBI verwalten." });
+      return;
+    }
+  }
+
+  await prisma.user.update({
+    where: { id: target.id },
+    data: {
+      mobileQrTokenHash: null,
+      mobileQrEnabled: false,
+      mobileQrExpiresAt: null
+    }
+  });
+  try {
+    await writeAuditLog({
+      actorUserId: req.auth.userId,
+      actorLoginName: await resolveActorLoginName(req.auth.userId),
+      action: "MOBILE_QR_REVOKED",
+      targetType: "User",
+      targetId: target.id,
+      payload: { loginName: target.loginName }
+    });
+  } catch {
+    // QR wurde deaktiviert; Logging-Fehler ignorieren.
   }
   res.json({ ok: true });
 });

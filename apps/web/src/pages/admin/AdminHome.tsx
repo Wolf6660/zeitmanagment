@@ -1661,14 +1661,14 @@ export function AdminHome() {
                                   payload: generated.payload,
                                   qrDataUrl
                                 });
-                                setMsg(`Mobile QR fuer ${e.name} erstellt.`);
+                                setMsg(e.mobileQrEnabled ? `QR-Code fuer ${e.name} neu angezeigt.` : `QR-Code fuer ${e.name} erstellt.`);
                                 setEmployees((await api.employees()) as Employee[]);
                               } catch (err) {
                                 setMsg((err as Error).message);
                               }
                             }}
                           >
-                            Mobile QR erstellen
+                            {e.mobileQrEnabled ? "QR-Code anzeigen" : "QR-Code erstellen"}
                           </button>
                           {e.mobileQrEnabled && (
                             <button
@@ -1686,7 +1686,7 @@ export function AdminHome() {
                                 }
                               }}
                             >
-                              Mobile QR deaktivieren
+                              QR-Code loeschen
                             </button>
                           )}
                         </div>
@@ -2304,7 +2304,7 @@ export function AdminHome() {
               <div className="grid" style={{ minWidth: 320, flex: 1 }}>
                 <label>
                   QR Payload
-                  <textarea readOnly value={mobileQrPreview.payload} />
+                  <textarea readOnly value={mobileQrPreview.payload} style={{ minHeight: 180 }} />
                 </label>
                 <label>
                   Token
@@ -2329,14 +2329,21 @@ export function AdminHome() {
                     className="secondary"
                     type="button"
                     onClick={() => {
-                      const w = window.open("", "_blank", "noopener,noreferrer,width=820,height=980");
+                      const w = window.open("", "_blank", "width=820,height=980");
                       if (!w) {
                         setMsg("Druckfenster konnte nicht geoeffnet werden.");
                         return;
                       }
-                      const payloadSafe = mobileQrPreview.payload.replace(/&/g, "&amp;").replace(/</g, "&lt;");
-                      w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Mobile QR - ${mobileQrPreview.employeeName}</title><style>body{font-family:Arial,sans-serif;padding:24px}h1{margin:0 0 8px}img{width:320px;height:320px;border:1px solid #ddd;padding:8px;border-radius:8px;background:#fff}.meta{margin:8px 0 16px;color:#111}.payload{margin-top:14px;font-family:monospace;white-space:pre-wrap;word-break:break-all;border:1px solid #ddd;padding:10px;border-radius:8px}</style></head><body><h1>Mobile QR Login</h1><div class="meta"><strong>Mitarbeiter:</strong> ${mobileQrPreview.employeeName} (${mobileQrPreview.loginName})<br/><strong>Gueltig bis:</strong> ${new Date(mobileQrPreview.expiresAt).toLocaleString("de-DE")}</div><img src="${mobileQrPreview.qrDataUrl}" alt="QR"/><div class="payload">${payloadSafe}</div><script>window.onload=function(){window.print();}</script></body></html>`);
+                      const esc = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                      const employeeSafe = esc(mobileQrPreview.employeeName);
+                      const loginSafe = esc(mobileQrPreview.loginName);
+                      const expiresSafe = esc(new Date(mobileQrPreview.expiresAt).toLocaleString("de-DE"));
+                      const payloadSafe = esc(mobileQrPreview.payload);
+                      w.document.open();
+                      w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Mobile QR</title><style>body{font-family:Arial,sans-serif;padding:24px}h1{margin:0 0 8px}img{width:320px;height:320px;border:1px solid #ddd;padding:8px;border-radius:8px;background:#fff}.meta{margin:8px 0 16px;color:#111}.payload{margin-top:14px;font-family:monospace;white-space:pre-wrap;word-break:break-all;border:1px solid #ddd;padding:10px;border-radius:8px}</style></head><body><h1>Mobile QR Login</h1><div class="meta"><strong>Mitarbeiter:</strong> ${employeeSafe} (${loginSafe})<br/><strong>Gueltig bis:</strong> ${expiresSafe}</div><img src="${mobileQrPreview.qrDataUrl}" alt="QR"/><div class="payload">${payloadSafe}</div></body></html>`);
                       w.document.close();
+                      w.focus();
+                      setTimeout(() => w.print(), 250);
                     }}
                   >
                     Drucken

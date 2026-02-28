@@ -610,12 +610,12 @@ export const api = {
 
   generateMobileQr: (payload: { userId: string; expiresInDays?: number }) =>
     request<{ userId: string; loginName: string; employeeName: string; expiresAt: string; token: string; payload: string }>(
-      "/api/admin/mobile-qr/generate",
-      { method: "POST", body: JSON.stringify(payload) }
+      `/api/employees/${payload.userId}/mobile-qr/generate`,
+      { method: "POST", body: JSON.stringify({ expiresInDays: payload.expiresInDays }) }
     ),
 
   revokeMobileQr: (payload: { userId: string }) =>
-    request<{ ok: boolean }>("/api/admin/mobile-qr/revoke", { method: "POST", body: JSON.stringify(payload) }),
+    request<{ ok: boolean }>(`/api/employees/${payload.userId}/mobile-qr/revoke`, { method: "POST" }),
 
   adminSystemReset: (payload: { mode: "FULL" | "TIMES_ONLY" | "EMPLOYEES_AND_TIMES_KEEP_SETTINGS"; companyNameConfirmation: string }) =>
     request<{ ok: boolean; mode: string; deleted?: Record<string, number>; message?: string }>("/api/admin/system-reset", {
