@@ -14,6 +14,10 @@ export type PublicConfig = {
   colorVacationWarning: string;
   colorWebEntry: string;
   colorOvertime: string;
+  colorNavMainActive: string;
+  colorNavMainInactive: string;
+  colorNavSubActive: string;
+  colorNavSubInactive: string;
   colorApprovedEnabled?: boolean;
   colorRejectedEnabled?: boolean;
   colorManualCorrectionEnabled?: boolean;
@@ -25,6 +29,10 @@ export type PublicConfig = {
   colorVacationWarningEnabled?: boolean;
   colorWebEntryEnabled?: boolean;
   colorOvertimeEnabled?: boolean;
+  colorNavMainActiveEnabled?: boolean;
+  colorNavMainInactiveEnabled?: boolean;
+  colorNavSubActiveEnabled?: boolean;
+  colorNavSubInactiveEnabled?: boolean;
 };
 
 export function applyTheme(config: PublicConfig): void {
@@ -42,4 +50,8 @@ export function applyTheme(config: PublicConfig): void {
   root.style.setProperty("--warning", bgColor(config.colorVacationWarningEnabled, config.colorVacationWarning));
   root.style.setProperty("--web-entry", bgColor(config.colorWebEntryEnabled, config.colorWebEntry));
   root.style.setProperty("--overtime", textColor(config.colorOvertimeEnabled, config.colorOvertime));
+  root.style.setProperty("--nav-main-active-bg", bgColor(config.colorNavMainActiveEnabled, config.colorNavMainActive));
+  root.style.setProperty("--nav-main-inactive-bg", bgColor(config.colorNavMainInactiveEnabled, config.colorNavMainInactive));
+  root.style.setProperty("--nav-sub-active-bg", bgColor(config.colorNavSubActiveEnabled, config.colorNavSubActive));
+  root.style.setProperty("--nav-sub-inactive-bg", bgColor(config.colorNavSubInactiveEnabled, config.colorNavSubInactive));
 }

@@ -312,6 +312,10 @@ model SystemConfig {
   colorVacationWarning              String   @default("#F59E0B")
   colorWebEntry                     String   @default("#7DD3FC")
   colorOvertime                     String   @default("#0EA5E9")
+  colorNavMainActive                String   @default("#0F766E")
+  colorNavMainInactive              String   @default("#0B1324")
+  colorNavSubActive                 String   @default("#99F6E4")
+  colorNavSubInactive               String   @default("#E5E7EB")
   colorApprovedEnabled              Boolean  @default(true)
   colorRejectedEnabled              Boolean  @default(true)
   colorManualCorrectionEnabled      Boolean  @default(true)
@@ -323,6 +327,10 @@ model SystemConfig {
   colorVacationWarningEnabled       Boolean  @default(true)
   colorWebEntryEnabled              Boolean  @default(true)
   colorOvertimeEnabled              Boolean  @default(true)
+  colorNavMainActiveEnabled         Boolean  @default(true)
+  colorNavMainInactiveEnabled       Boolean  @default(true)
+  colorNavSubActiveEnabled          Boolean  @default(true)
+  colorNavSubInactiveEnabled        Boolean  @default(true)
 
   smtpEnabled                       Boolean  @default(false)
   smtpHost                          String?

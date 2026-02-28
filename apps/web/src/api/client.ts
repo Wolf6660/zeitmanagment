@@ -397,6 +397,10 @@ export const api = {
       colorVacationWarning: string;
       colorWebEntry: string;
       colorOvertime: string;
+      colorNavMainActive: string;
+      colorNavMainInactive: string;
+      colorNavSubActive: string;
+      colorNavSubInactive: string;
       colorApprovedEnabled?: boolean;
       colorRejectedEnabled?: boolean;
       colorManualCorrectionEnabled?: boolean;
@@ -408,6 +412,10 @@ export const api = {
       colorVacationWarningEnabled?: boolean;
       colorWebEntryEnabled?: boolean;
       colorOvertimeEnabled?: boolean;
+      colorNavMainActiveEnabled?: boolean;
+      colorNavMainInactiveEnabled?: boolean;
+      colorNavSubActiveEnabled?: boolean;
+      colorNavSubInactiveEnabled?: boolean;
       smtpEnabled?: boolean;
       smtpHost?: string | null;
       smtpPort?: number;

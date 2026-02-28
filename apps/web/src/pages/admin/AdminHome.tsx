@@ -40,6 +40,10 @@ type AdminConfig = {
   colorVacationWarning: string;
   colorWebEntry: string;
   colorOvertime: string;
+  colorNavMainActive: string;
+  colorNavMainInactive: string;
+  colorNavSubActive: string;
+  colorNavSubInactive: string;
   colorApprovedEnabled?: boolean;
   colorRejectedEnabled?: boolean;
   colorManualCorrectionEnabled?: boolean;
@@ -51,6 +55,10 @@ type AdminConfig = {
   colorVacationWarningEnabled?: boolean;
   colorWebEntryEnabled?: boolean;
   colorOvertimeEnabled?: boolean;
+  colorNavMainActiveEnabled?: boolean;
+  colorNavMainInactiveEnabled?: boolean;
+  colorNavSubActiveEnabled?: boolean;
+  colorNavSubInactiveEnabled?: boolean;
   smtpEnabled?: boolean;
   smtpHost?: string | null;
   smtpPort?: number;
@@ -127,7 +135,11 @@ const COLOR_FIELDS: Array<{ key: keyof AdminConfig; enabledKey: keyof AdminConfi
   { key: "colorHolidayOrWeekend", enabledKey: "colorHolidayOrWeekendEnabled", label: "Wochenende / Feiertag" },
   { key: "colorHolidayOrWeekendWork", enabledKey: "colorHolidayOrWeekendWorkEnabled", label: "Arbeit Feiertag/Wochenende" },
   { key: "colorVacationWarning", enabledKey: "colorVacationWarningEnabled", label: "Urlaub" },
-  { key: "colorOvertime", enabledKey: "colorOvertimeEnabled", label: "Ueberstunden" }
+  { key: "colorOvertime", enabledKey: "colorOvertimeEnabled", label: "Ueberstunden" },
+  { key: "colorNavMainActive", enabledKey: "colorNavMainActiveEnabled", label: "Menue Hauptbereich aktiv" },
+  { key: "colorNavMainInactive", enabledKey: "colorNavMainInactiveEnabled", label: "Menue Hauptbereich inaktiv" },
+  { key: "colorNavSubActive", enabledKey: "colorNavSubActiveEnabled", label: "Menue Unterbereich aktiv" },
+  { key: "colorNavSubInactive", enabledKey: "colorNavSubInactiveEnabled", label: "Menue Unterbereich inaktiv" }
 ];
 
 function toBoolLiteral(v: unknown): string {
@@ -347,34 +359,34 @@ export function AdminHome() {
   return (
     <div className="card">
       <h2>Admin</h2>
-      <div className="row" style={{ marginBottom: 12 }}>
-        <button className={activeGroup === "general" ? "" : "secondary"} onClick={() => setSearchParams({ section: "company" })}>Allgemein</button>
-        <button className={activeGroup === "people" ? "" : "secondary"} onClick={() => setSearchParams({ section: "employees" })}>Personal</button>
-        <button className={activeGroup === "rfid" ? "" : "secondary"} onClick={() => setSearchParams({ section: "terminals" })}>RFID</button>
-        <button className={activeGroup === "logs" ? "" : "secondary"} onClick={() => setSearchParams({ section: "logs" })}>Logs</button>
+      <div className="row admin-main-nav" style={{ marginBottom: 12 }}>
+        <button className={activeGroup === "general" ? "active" : "inactive"} onClick={() => setSearchParams({ section: "company" })}>Allgemein</button>
+        <button className={activeGroup === "people" ? "active" : "inactive"} onClick={() => setSearchParams({ section: "employees" })}>Personal</button>
+        <button className={activeGroup === "rfid" ? "active" : "inactive"} onClick={() => setSearchParams({ section: "terminals" })}>RFID</button>
+        <button className={activeGroup === "logs" ? "active" : "inactive"} onClick={() => setSearchParams({ section: "logs" })}>Logs</button>
       </div>
       {activeGroup !== "logs" && (
-        <div className="row" style={{ marginBottom: 12 }}>
+        <div className="row admin-sub-nav" style={{ marginBottom: 12 }}>
           {activeGroup === "general" && (
             <>
-              <button className={section === "company" ? "" : "secondary"} onClick={() => setSearchParams({ section: "company" })}>Firmenstammdaten</button>
-              <button className={section === "colors" ? "" : "secondary"} onClick={() => setSearchParams({ section: "colors" })}>Farben</button>
-              <button className={section === "rules" ? "" : "secondary"} onClick={() => setSearchParams({ section: "rules" })}>Regeln</button>
-              <button className={section === "system" ? "" : "secondary"} onClick={() => setSearchParams({ section: "system" })}>Backup</button>
-              <button className={section === "mail" ? "" : "secondary"} onClick={() => setSearchParams({ section: "mail" })}>E-Mail</button>
+              <button className={section === "company" ? "active" : "inactive"} onClick={() => setSearchParams({ section: "company" })}>Firmenstammdaten</button>
+              <button className={section === "colors" ? "active" : "inactive"} onClick={() => setSearchParams({ section: "colors" })}>Farben</button>
+              <button className={section === "rules" ? "active" : "inactive"} onClick={() => setSearchParams({ section: "rules" })}>Regeln</button>
+              <button className={section === "system" ? "active" : "inactive"} onClick={() => setSearchParams({ section: "system" })}>Backup</button>
+              <button className={section === "mail" ? "active" : "inactive"} onClick={() => setSearchParams({ section: "mail" })}>E-Mail</button>
             </>
           )}
           {activeGroup === "people" && (
             <>
-              <button className={section === "employees" ? "" : "secondary"} onClick={() => setSearchParams({ section: "employees" })}>Mitarbeiter</button>
-              <button className={section === "bulk" ? "" : "secondary"} onClick={() => setSearchParams({ section: "bulk" })}>Stapelerfassung</button>
-              <button className={section === "overtime" ? "" : "secondary"} onClick={() => setSearchParams({ section: "overtime" })}>Ueberstunden</button>
+              <button className={section === "employees" ? "active" : "inactive"} onClick={() => setSearchParams({ section: "employees" })}>Mitarbeiter</button>
+              <button className={section === "bulk" ? "active" : "inactive"} onClick={() => setSearchParams({ section: "bulk" })}>Stapelerfassung</button>
+              <button className={section === "overtime" ? "active" : "inactive"} onClick={() => setSearchParams({ section: "overtime" })}>Ueberstunden</button>
             </>
           )}
           {activeGroup === "rfid" && (
             <>
-              <button className={section === "terminals" ? "" : "secondary"} onClick={() => setSearchParams({ section: "terminals" })}>RFID Tags</button>
-              <button className={section === "esp" ? "" : "secondary"} onClick={() => setSearchParams({ section: "esp" })}>ESP Terminals</button>
+              <button className={section === "terminals" ? "active" : "inactive"} onClick={() => setSearchParams({ section: "terminals" })}>RFID Tags</button>
+              <button className={section === "esp" ? "active" : "inactive"} onClick={() => setSearchParams({ section: "esp" })}>ESP Terminals</button>
             </>
           )}
         </div>

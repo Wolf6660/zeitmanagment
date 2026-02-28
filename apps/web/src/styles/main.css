@@ -16,6 +16,10 @@
   --warning: #f59e0b;
   --web-entry: #7dd3fc;
   --overtime: #0ea5e9;
+  --nav-main-active-bg: #0f766e;
+  --nav-main-inactive-bg: #0b1324;
+  --nav-sub-active-bg: #99f6e4;
+  --nav-sub-inactive-bg: #e5e7eb;
 }
 
 * {
@@ -162,6 +166,28 @@ td {
 
 .nav button {
   background: #111827;
+}
+
+.admin-main-nav button {
+  color: #ffffff;
+}
+
+.admin-main-nav button.active {
+  background: var(--nav-main-active-bg);
+}
+
+.admin-main-nav button.inactive {
+  background: var(--nav-main-inactive-bg);
+}
+
+.admin-sub-nav button.active {
+  background: var(--nav-sub-active-bg);
+  color: #111827;
+}
+
+.admin-sub-nav button.inactive {
+  background: var(--nav-sub-inactive-bg);
+  color: #111827;
 }
 
 .brand-wrap {
