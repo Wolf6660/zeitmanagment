@@ -201,6 +201,7 @@ export function AdminHome() {
   const [logs, setLogs] = useState<Array<{ id: string; actorLoginName: string; action: string; targetType?: string; createdAt: string; payloadJson?: string }>>([]);
   const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<Partial<Employee>>({});
+  const [expandedEmployeeActionsId, setExpandedEmployeeActionsId] = useState<string | null>(null);
   const [terminalName, setTerminalName] = useState("");
   const [terminalLocation, setTerminalLocation] = useState("");
   const [espTerminalId, setEspTerminalId] = useState("");
@@ -369,7 +370,7 @@ export function AdminHome() {
           <label>
             DYNDNS / API-Basisadresse fuer App-QR
             <input
-              placeholder="https://wolf.dyndns-bellheim.de"
+              placeholder="https://deine.dyndns-adresse.de/"
               value={config.mobileAppApiBaseUrl || ""}
               onChange={(e) => setConfig({ ...config, mobileAppApiBaseUrl: e.target.value })}
             />
@@ -1468,8 +1469,17 @@ export function AdminHome() {
               <tbody>
                 {employees.map((e) => {
                 const editing = editingEmployeeId === e.id;
+                const expanded = expandedEmployeeActionsId === e.id;
                 return (
-                  <tr key={e.id}>
+                  <React.Fragment key={e.id}>
+                  <tr
+                    onClick={(ev) => {
+                      const tag = (ev.target as HTMLElement).tagName;
+                      if (["INPUT", "SELECT", "TEXTAREA", "BUTTON", "OPTION"].includes(tag)) return;
+                      setExpandedEmployeeActionsId((prev) => (prev === e.id ? null : e.id));
+                    }}
+                    style={{ cursor: "pointer" }}
+                  >
                     <td>{editing ? <input value={editingEmployee.name ?? e.name} onChange={(ev) => setEditingEmployee({ ...editingEmployee, name: ev.target.value })} /> : e.name}</td>
                     <td>{e.loginName}</td>
                     <td>{editing ? <input value={editingEmployee.email ?? e.email} onChange={(ev) => setEditingEmployee({ ...editingEmployee, email: ev.target.value })} /> : e.email}</td>
@@ -1580,150 +1590,162 @@ export function AdminHome() {
                       ) : e.isActive ? "Ja" : "Nein"}
                     </td>
                     <td>
-                      {!editing && (
-                        <div className="row">
-                          <button
-                            className="secondary"
-                            onClick={() => {
-                              setEditingEmployeeId(e.id);
-                              setEditingEmployee({
-                                name: e.name,
-                                email: e.email,
-                                role: e.role,
-                                annualVacationDays: e.annualVacationDays,
-                                dailyWorkHours: e.dailyWorkHours,
-                                carryOverVacationDays: e.carryOverVacationDays,
-                                isActive: e.isActive,
-                                mailNotificationsEnabled: e.mailNotificationsEnabled,
-                                webLoginEnabled: e.webLoginEnabled,
-                                timeTrackingEnabled: e.timeTrackingEnabled,
-                                rfidTag: e.rfidTag
-                              });
-                            }}
-                          >
-                            Bearbeiten
-                          </button>
-                          <button
-                            className="secondary"
-                            onClick={async () => {
-                              try {
-                                await api.testMailEmployee(e.id);
-                                setMsg(`Testmail an ${e.name} wurde versendet.`);
-                              } catch (err) {
-                                setMsg((err as Error).message);
-                              }
-                            }}
-                          >
-                            TestMail
-                          </button>
-                          <button
-                            className="secondary"
-                            onClick={async () => {
-                              try {
-                                const p1 = window.prompt(`Neues Passwort fuer ${e.name} eingeben:`, "");
-                                if (!p1) return;
-                                const p2 = window.prompt("Passwort wiederholen:", "");
-                                if (p1 !== p2) {
-                                  setMsg("Passwoerter stimmen nicht ueberein.");
-                                  return;
-                                }
-                                if (!/^.{8,}$/.test(p1) || !/([0-9]|[^A-Za-z0-9])/.test(p1)) {
-                                  setMsg("Passwort muss mindestens 8 Zeichen und mindestens eine Zahl oder ein Sonderzeichen enthalten.");
-                                  return;
-                                }
-                                await api.resetEmployeePassword(e.id, { newPassword: p1 });
-                                setMsg(`Passwort fuer ${e.name} wurde zurueckgesetzt.`);
-                              } catch (err) {
-                                setMsg((err as Error).message);
-                              }
-                            }}
-                          >
-                            Passwort reset
-                          </button>
-                          <button
-                            className="secondary"
-                            onClick={async () => {
-                              try {
-                                const generated = await api.generateMobileQr({
-                                  userId: e.id,
-                                  expiresInDays: mobileQrDays
-                                });
-                                const qrDataUrl = await QRCode.toDataURL(generated.payload, {
-                                  margin: 1,
-                                  width: 512
-                                });
-                                setMobileQrPreview({
-                                  userId: e.id,
-                                  employeeName: generated.employeeName,
-                                  loginName: generated.loginName,
-                                  expiresAt: generated.expiresAt,
-                                  token: generated.token,
-                                  payload: generated.payload,
-                                  qrDataUrl
-                                });
-                                setMsg(e.mobileQrEnabled ? `QR-Code fuer ${e.name} neu angezeigt.` : `QR-Code fuer ${e.name} erstellt.`);
-                                setEmployees((await api.employees()) as Employee[]);
-                              } catch (err) {
-                                setMsg((err as Error).message);
-                              }
-                            }}
-                          >
-                            {e.mobileQrEnabled ? "QR-Code anzeigen" : "QR-Code erstellen"}
-                          </button>
-                          {e.mobileQrEnabled && (
-                            <button
-                              className="secondary"
-                              onClick={async () => {
-                                try {
-                                  const ok = window.confirm(`Mobile QR fuer ${e.name} wirklich deaktivieren?`);
-                                  if (!ok) return;
-                                  await api.revokeMobileQr({ userId: e.id });
-                                  setMsg(`Mobile QR fuer ${e.name} deaktiviert.`);
-                                  setEmployees((await api.employees()) as Employee[]);
-                                  if (mobileQrPreview?.userId === e.id) setMobileQrPreview(null);
-                                } catch (err) {
-                                  setMsg((err as Error).message);
-                                }
-                              }}
-                            >
-                              QR-Code loeschen
-                            </button>
-                          )}
-                        </div>
-                      )}
-                      {editing && (
-                        <div className="row">
-                          <button
-                            onClick={async () => {
-                              try {
-                                await api.updateEmployee(e.id, {
-                                  ...editingEmployee,
-                                  rfidTag: typeof editingEmployee.rfidTag === "string" && editingEmployee.rfidTag.trim() === "" ? null : editingEmployee.rfidTag
-                                });
-                                setMsg("Mitarbeiter aktualisiert.");
-                                setEditingEmployeeId(null);
-                                setEditingEmployee({});
-                                setEmployees((await api.employees()) as Employee[]);
-                              } catch (err) {
-                                setMsg((err as Error).message);
-                              }
-                            }}
-                          >
-                            Speichern
-                          </button>
-                          <button
-                            className="secondary"
-                            onClick={() => {
-                              setEditingEmployeeId(null);
-                              setEditingEmployee({});
-                            }}
-                          >
-                            Abbrechen
-                          </button>
-                        </div>
-                      )}
+                      <button className="secondary" onClick={() => setExpandedEmployeeActionsId((prev) => (prev === e.id ? null : e.id))}>
+                        {expanded ? "Aktionen einklappen" : "Aktionen anzeigen"}
+                      </button>
                     </td>
                   </tr>
+                  {expanded && (
+                    <tr>
+                      <td colSpan={14}>
+                        <div className="row" style={{ width: "100%", padding: "8px 4px" }}>
+                          {!editing && (
+                            <>
+                              <button
+                                className="secondary"
+                                onClick={() => {
+                                  setEditingEmployeeId(e.id);
+                                  setEditingEmployee({
+                                    name: e.name,
+                                    email: e.email,
+                                    role: e.role,
+                                    annualVacationDays: e.annualVacationDays,
+                                    dailyWorkHours: e.dailyWorkHours,
+                                    carryOverVacationDays: e.carryOverVacationDays,
+                                    isActive: e.isActive,
+                                    mailNotificationsEnabled: e.mailNotificationsEnabled,
+                                    webLoginEnabled: e.webLoginEnabled,
+                                    timeTrackingEnabled: e.timeTrackingEnabled,
+                                    rfidTag: e.rfidTag
+                                  });
+                                }}
+                              >
+                                Bearbeiten
+                              </button>
+                              <button
+                                className="secondary"
+                                onClick={async () => {
+                                  try {
+                                    await api.testMailEmployee(e.id);
+                                    setMsg(`Testmail an ${e.name} wurde versendet.`);
+                                  } catch (err) {
+                                    setMsg((err as Error).message);
+                                  }
+                                }}
+                              >
+                                TestMail
+                              </button>
+                              <button
+                                className="secondary"
+                                onClick={async () => {
+                                  try {
+                                    const p1 = window.prompt(`Neues Passwort fuer ${e.name} eingeben:`, "");
+                                    if (!p1) return;
+                                    const p2 = window.prompt("Passwort wiederholen:", "");
+                                    if (p1 !== p2) {
+                                      setMsg("Passwoerter stimmen nicht ueberein.");
+                                      return;
+                                    }
+                                    if (!/^.{8,}$/.test(p1) || !/([0-9]|[^A-Za-z0-9])/.test(p1)) {
+                                      setMsg("Passwort muss mindestens 8 Zeichen und mindestens eine Zahl oder ein Sonderzeichen enthalten.");
+                                      return;
+                                    }
+                                    await api.resetEmployeePassword(e.id, { newPassword: p1 });
+                                    setMsg(`Passwort fuer ${e.name} wurde zurueckgesetzt.`);
+                                  } catch (err) {
+                                    setMsg((err as Error).message);
+                                  }
+                                }}
+                              >
+                                Passwort reset
+                              </button>
+                              <button
+                                className="secondary"
+                                onClick={async () => {
+                                  try {
+                                    const generated = await api.generateMobileQr({
+                                      userId: e.id,
+                                      expiresInDays: mobileQrDays
+                                    });
+                                    const qrDataUrl = await QRCode.toDataURL(generated.payload, {
+                                      margin: 1,
+                                      width: 512
+                                    });
+                                    setMobileQrPreview({
+                                      userId: e.id,
+                                      employeeName: generated.employeeName,
+                                      loginName: generated.loginName,
+                                      expiresAt: generated.expiresAt,
+                                      token: generated.token,
+                                      payload: generated.payload,
+                                      qrDataUrl
+                                    });
+                                    setMsg(e.mobileQrEnabled ? `QR-Code fuer ${e.name} neu angezeigt.` : `QR-Code fuer ${e.name} erstellt.`);
+                                    setEmployees((await api.employees()) as Employee[]);
+                                  } catch (err) {
+                                    setMsg((err as Error).message);
+                                  }
+                                }}
+                              >
+                                {e.mobileQrEnabled ? "QR-Code anzeigen" : "QR-Code erstellen"}
+                              </button>
+                              {e.mobileQrEnabled && (
+                                <button
+                                  className="secondary"
+                                  onClick={async () => {
+                                    try {
+                                      const ok = window.confirm(`QR-Code fuer ${e.name} wirklich loeschen?`);
+                                      if (!ok) return;
+                                      await api.revokeMobileQr({ userId: e.id });
+                                      setMsg(`QR-Code fuer ${e.name} geloescht.`);
+                                      setEmployees((await api.employees()) as Employee[]);
+                                      if (mobileQrPreview?.userId === e.id) setMobileQrPreview(null);
+                                    } catch (err) {
+                                      setMsg((err as Error).message);
+                                    }
+                                  }}
+                                >
+                                  QR-Code loeschen
+                                </button>
+                              )}
+                            </>
+                          )}
+                          {editing && (
+                            <>
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await api.updateEmployee(e.id, {
+                                      ...editingEmployee,
+                                      rfidTag: typeof editingEmployee.rfidTag === "string" && editingEmployee.rfidTag.trim() === "" ? null : editingEmployee.rfidTag
+                                    });
+                                    setMsg("Mitarbeiter aktualisiert.");
+                                    setEditingEmployeeId(null);
+                                    setEditingEmployee({});
+                                    setEmployees((await api.employees()) as Employee[]);
+                                  } catch (err) {
+                                    setMsg((err as Error).message);
+                                  }
+                                }}
+                              >
+                                Speichern
+                              </button>
+                              <button
+                                className="secondary"
+                                onClick={() => {
+                                  setEditingEmployeeId(null);
+                                  setEditingEmployee({});
+                                }}
+                              >
+                                Abbrechen
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                 );
                 })}
               </tbody>
