@@ -8,10 +8,10 @@ import { RequestsScreen } from "./src/screens/RequestsScreen";
 import { MonthScreen } from "./src/screens/MonthScreen";
 import { TeamScreen } from "./src/screens/TeamScreen";
 import { AccountScreen } from "./src/screens/AccountScreen";
-import type { ProvisioningPayload, Session, StoredProvisioning } from "./src/types/app";
+import type { ProvisioningPayload, Session, StoredProvisioning, UiColors } from "./src/types/app";
 import { clearSession, getProvisioning, getSession, resetAll, setProvisioning, setSession } from "./src/storage/secureStore";
 import { ApiClient } from "./src/services/api";
-import { colors } from "./src/theme/colors";
+import { colors, resolveUiColors } from "./src/theme/colors";
 
 type TabKey = "Start" | "Antraege" | "Monat" | "Team" | "Konto";
 
@@ -30,6 +30,12 @@ export default function App() {
   const [prefilledLoginName, setPrefilledLoginName] = useState<string>("");
   const [loginInfoText, setLoginInfoText] = useState<string>("");
   const [activeTab, setActiveTab] = useState<TabKey>("Start");
+  const [uiColors, setUiColors] = useState<UiColors>({
+    primary: colors.primary,
+    success: colors.success,
+    danger: colors.danger,
+    warning: colors.warning
+  });
 
   useEffect(() => {
     Promise.all([getProvisioning(), getSession()])
@@ -48,6 +54,21 @@ export default function App() {
   useEffect(() => {
     api?.setSession(session);
   }, [api, session]);
+
+  useEffect(() => {
+    if (!api) return;
+    api
+      .publicConfig()
+      .then((cfg) => setUiColors(resolveUiColors(cfg)))
+      .catch(() =>
+        setUiColors({
+          primary: colors.primary,
+          success: colors.success,
+          danger: colors.danger,
+          warning: colors.warning
+        })
+      );
+  }, [api]);
 
   if (booting) {
     return (
@@ -69,18 +90,20 @@ export default function App() {
         <HomeScreen
           api={api}
           user={session.user}
+          uiColors={uiColors}
           onOpenPendingRequests={() => {
             setActiveTab(isLead ? "Team" : "Antraege");
           }}
         />
       );
     }
-    if (activeTab === "Antraege") return <RequestsScreen api={api} user={session.user} />;
-    if (activeTab === "Monat") return <MonthScreen api={api} user={session.user} />;
-    if (activeTab === "Team" && isLead) return <TeamScreen api={api} />;
+    if (activeTab === "Antraege") return <RequestsScreen api={api} user={session.user} uiColors={uiColors} />;
+    if (activeTab === "Monat") return <MonthScreen api={api} user={session.user} uiColors={uiColors} />;
+    if (activeTab === "Team" && isLead) return <TeamScreen api={api} uiColors={uiColors} />;
     return (
       <AccountScreen
         user={session.user}
+        uiColors={uiColors}
         onLogout={async () => {
           await clearSession();
           setSessionState(null);
@@ -154,8 +177,8 @@ export default function App() {
                 onPress={() => setActiveTab(tab)}
                 style={[styles.tabButton, activeTab === tab && styles.tabButtonActive]}
               >
-                <Text style={[styles.tabIcon, activeTab === tab && styles.tabIconActive]}>{tabIcon(tab)}</Text>
-                <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
+                <Text style={[styles.tabIcon, activeTab === tab && styles.tabIconActive, activeTab === tab && { color: uiColors.primary }]}>{tabIcon(tab)}</Text>
+                <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive, activeTab === tab && { color: uiColors.primary }]}>{tab}</Text>
               </Pressable>
             ))}
           </View>

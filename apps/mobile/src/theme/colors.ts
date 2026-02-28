@@ -9,3 +9,22 @@ export const colors = {
   danger: "#DC2626",
   warning: "#D97706"
 };
+
+type PublicConfigColors = {
+  colorWebEntry?: string;
+  colorWebEntryEnabled?: boolean;
+  colorApproved?: string;
+  colorApprovedEnabled?: boolean;
+  colorRejected?: string;
+  colorRejectedEnabled?: boolean;
+  colorVacationWarning?: string;
+  colorVacationWarningEnabled?: boolean;
+};
+
+export function resolveUiColors(cfg?: PublicConfigColors | null): { primary: string; success: string; danger: string; warning: string } {
+  const primary = cfg?.colorWebEntryEnabled && cfg.colorWebEntry ? cfg.colorWebEntry : colors.primary;
+  const success = cfg?.colorApprovedEnabled && cfg.colorApproved ? cfg.colorApproved : colors.success;
+  const danger = cfg?.colorRejectedEnabled && cfg.colorRejected ? cfg.colorRejected : colors.danger;
+  const warning = cfg?.colorVacationWarningEnabled && cfg.colorVacationWarning ? cfg.colorVacationWarning : colors.warning;
+  return { primary, success, danger, warning };
+}

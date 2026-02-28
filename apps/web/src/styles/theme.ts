@@ -22,6 +22,12 @@ export type PublicConfig = {
   colorNavTextInactive: string;
   colorNavSubTextActive: string;
   colorNavSubTextInactive: string;
+  colorButtonClockIn: string;
+  colorButtonClockOut: string;
+  colorButtonManual: string;
+  colorButtonClockInText: string;
+  colorButtonClockOutText: string;
+  colorButtonManualText: string;
   colorApprovedEnabled?: boolean;
   colorRejectedEnabled?: boolean;
   colorManualCorrectionEnabled?: boolean;
@@ -41,6 +47,12 @@ export type PublicConfig = {
   colorNavTextInactiveEnabled?: boolean;
   colorNavSubTextActiveEnabled?: boolean;
   colorNavSubTextInactiveEnabled?: boolean;
+  colorButtonClockInEnabled?: boolean;
+  colorButtonClockOutEnabled?: boolean;
+  colorButtonManualEnabled?: boolean;
+  colorButtonClockInTextEnabled?: boolean;
+  colorButtonClockOutTextEnabled?: boolean;
+  colorButtonManualTextEnabled?: boolean;
 };
 
 export function applyTheme(config: PublicConfig): void {
@@ -66,4 +78,10 @@ export function applyTheme(config: PublicConfig): void {
   root.style.setProperty("--nav-text-inactive", textColor(config.colorNavTextInactiveEnabled, config.colorNavTextInactive, "#ffffff"));
   root.style.setProperty("--nav-sub-text-active", textColor(config.colorNavSubTextActiveEnabled, config.colorNavSubTextActive, "#111827"));
   root.style.setProperty("--nav-sub-text-inactive", textColor(config.colorNavSubTextInactiveEnabled, config.colorNavSubTextInactive, "#111827"));
+  root.style.setProperty("--btn-clock-in-bg", bgColor(config.colorButtonClockInEnabled, config.colorButtonClockIn));
+  root.style.setProperty("--btn-clock-out-bg", bgColor(config.colorButtonClockOutEnabled, config.colorButtonClockOut));
+  root.style.setProperty("--btn-manual-bg", bgColor(config.colorButtonManualEnabled, config.colorButtonManual));
+  root.style.setProperty("--btn-clock-in-text", textColor(config.colorButtonClockInTextEnabled, config.colorButtonClockInText, "#ffffff"));
+  root.style.setProperty("--btn-clock-out-text", textColor(config.colorButtonClockOutTextEnabled, config.colorButtonClockOutText, "#ffffff"));
+  root.style.setProperty("--btn-manual-text", textColor(config.colorButtonManualTextEnabled, config.colorButtonManualText, "#ffffff"));
 }

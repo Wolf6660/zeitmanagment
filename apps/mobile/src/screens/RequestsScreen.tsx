@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { DropdownField } from "../components/DropdownField";
 import type { ApiClient } from "../services/api";
-import type { EmployeeRow, LeaveKind, LeaveRequestRow, SessionUser } from "../types/app";
+import type { EmployeeRow, LeaveKind, LeaveRequestRow, SessionUser, UiColors } from "../types/app";
 import { colors } from "../theme/colors";
 import { DateTimePickerField } from "../components/DateTimePickerField";
 
@@ -12,9 +12,10 @@ type RequestView = "MENU" | RequestMode;
 type Props = {
   api: ApiClient;
   user: SessionUser;
+  uiColors: UiColors;
 };
 
-export function RequestsScreen({ api, user }: Props) {
+export function RequestsScreen({ api, user, uiColors }: Props) {
   const isLead = user.role === "SUPERVISOR" || user.role === "ADMIN";
 
   const [view, setView] = useState<RequestView>("MENU");
@@ -156,7 +157,7 @@ export function RequestsScreen({ api, user }: Props) {
             <Pressable style={styles.secondaryButton} onPress={closeDetail}>
               <Text style={styles.secondaryButtonText}>Abbrechen</Text>
             </Pressable>
-            <Pressable style={styles.button} onPress={() => void submit(mode)}>
+            <Pressable style={[styles.button, { backgroundColor: uiColors.primary }]} onPress={() => void submit(mode)}>
               <Text style={styles.buttonText}>{submitLabel(mode, isLead, selectedUserId !== user.id)}</Text>
             </Pressable>
           </View>
@@ -248,7 +249,7 @@ const styles = StyleSheet.create({
   employeeHint: { color: colors.muted, fontSize: 12 },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: "#fff", paddingHorizontal: 10, paddingVertical: 9 },
   actionRow: { flexDirection: "row", gap: 8 },
-  button: { flex: 1, backgroundColor: colors.primary, borderRadius: 10, alignItems: "center", paddingVertical: 11 },
+  button: { flex: 1, borderRadius: 10, alignItems: "center", paddingVertical: 11 },
   buttonText: { color: "#fff", fontWeight: "700", textAlign: "center" },
   secondaryButton: { flex: 1, backgroundColor: "#E2E8F0", borderRadius: 10, alignItems: "center", paddingVertical: 11 },
   secondaryButtonText: { color: colors.text, fontWeight: "700", textAlign: "center" },

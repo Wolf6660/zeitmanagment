@@ -101,7 +101,7 @@ export function SupervisorHome() {
         <div className="grid">
           <input value={reasonText} onChange={(e) => setReasonText(e.target.value)} placeholder="Grund / Kommentar (Pflicht)" />
           <div className="row">
-            <button onClick={async () => {
+            <button className="btn-clock-in" onClick={async () => {
               try {
                 if (!reasonText.trim()) { setMsg("Grund ist Pflicht."); return; }
                 await api.clock({ type: "CLOCK_IN", reasonText });
@@ -109,7 +109,7 @@ export function SupervisorHome() {
                 setMsg("Kommen gestempelt.");
               } catch (e) { setMsg((e as Error).message); }
             }}>Kommen</button>
-            <button className="secondary" onClick={async () => {
+            <button className="btn-clock-out" onClick={async () => {
               try {
                 if (!reasonText.trim()) { setMsg("Grund ist Pflicht."); return; }
                 await api.clock({ type: "CLOCK_OUT", reasonText });
@@ -118,7 +118,7 @@ export function SupervisorHome() {
               } catch (e) { setMsg((e as Error).message); }
             }}>Gehen</button>
           </div>
-          <button className="secondary" onClick={() => setManualMode((m) => !m)}>
+          <button className="btn-manual" onClick={() => setManualMode((m) => !m)}>
             {manualMode ? "Nachtragen schliessen" : "Nachtrag"}
           </button>
           {manualMode && (
@@ -146,6 +146,7 @@ export function SupervisorHome() {
                 </label>
                 <textarea placeholder="Notiz (Pflichtfeld)" value={manualNote} onChange={(e) => setManualNote(e.target.value)} />
                 <button
+                  className="btn-manual"
                   onClick={async () => {
                     try {
                       if (!manualNote.trim()) { setMsg("Notiz ist Pflicht."); return; }

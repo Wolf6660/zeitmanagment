@@ -48,6 +48,12 @@ type AdminConfig = {
   colorNavTextInactive: string;
   colorNavSubTextActive: string;
   colorNavSubTextInactive: string;
+  colorButtonClockIn: string;
+  colorButtonClockOut: string;
+  colorButtonManual: string;
+  colorButtonClockInText: string;
+  colorButtonClockOutText: string;
+  colorButtonManualText: string;
   colorApprovedEnabled?: boolean;
   colorRejectedEnabled?: boolean;
   colorManualCorrectionEnabled?: boolean;
@@ -67,6 +73,12 @@ type AdminConfig = {
   colorNavTextInactiveEnabled?: boolean;
   colorNavSubTextActiveEnabled?: boolean;
   colorNavSubTextInactiveEnabled?: boolean;
+  colorButtonClockInEnabled?: boolean;
+  colorButtonClockOutEnabled?: boolean;
+  colorButtonManualEnabled?: boolean;
+  colorButtonClockInTextEnabled?: boolean;
+  colorButtonClockOutTextEnabled?: boolean;
+  colorButtonManualTextEnabled?: boolean;
   smtpEnabled?: boolean;
   smtpHost?: string | null;
   smtpPort?: number;
@@ -151,7 +163,13 @@ const COLOR_FIELDS: Array<{ key: keyof AdminConfig; enabledKey: keyof AdminConfi
   { key: "colorNavTextActive", enabledKey: "colorNavTextActiveEnabled", label: "Menue Hauptbereich Text aktiv" },
   { key: "colorNavTextInactive", enabledKey: "colorNavTextInactiveEnabled", label: "Menue Hauptbereich Text inaktiv" },
   { key: "colorNavSubTextActive", enabledKey: "colorNavSubTextActiveEnabled", label: "Menue Unterbereich Text aktiv" },
-  { key: "colorNavSubTextInactive", enabledKey: "colorNavSubTextInactiveEnabled", label: "Menue Unterbereich Text inaktiv" }
+  { key: "colorNavSubTextInactive", enabledKey: "colorNavSubTextInactiveEnabled", label: "Menue Unterbereich Text inaktiv" },
+  { key: "colorButtonClockIn", enabledKey: "colorButtonClockInEnabled", label: "Button Kommen" },
+  { key: "colorButtonClockOut", enabledKey: "colorButtonClockOutEnabled", label: "Button Gehen" },
+  { key: "colorButtonManual", enabledKey: "colorButtonManualEnabled", label: "Button Nachtrag" },
+  { key: "colorButtonClockInText", enabledKey: "colorButtonClockInTextEnabled", label: "Button Kommen Text" },
+  { key: "colorButtonClockOutText", enabledKey: "colorButtonClockOutTextEnabled", label: "Button Gehen Text" },
+  { key: "colorButtonManualText", enabledKey: "colorButtonManualTextEnabled", label: "Button Nachtrag Text" }
 ];
 
 function toBoolLiteral(v: unknown): string {

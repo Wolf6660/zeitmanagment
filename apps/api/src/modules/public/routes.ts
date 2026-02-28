@@ -30,6 +30,12 @@ publicRouter.get("/config", async (_req, res) => {
       colorNavTextInactive: true,
       colorNavSubTextActive: true,
       colorNavSubTextInactive: true,
+      colorButtonClockIn: true,
+      colorButtonClockOut: true,
+      colorButtonManual: true,
+      colorButtonClockInText: true,
+      colorButtonClockOutText: true,
+      colorButtonManualText: true,
       colorApprovedEnabled: true,
       colorRejectedEnabled: true,
       colorManualCorrectionEnabled: true,
@@ -48,7 +54,13 @@ publicRouter.get("/config", async (_req, res) => {
       colorNavTextActiveEnabled: true,
       colorNavTextInactiveEnabled: true,
       colorNavSubTextActiveEnabled: true,
-      colorNavSubTextInactiveEnabled: true
+      colorNavSubTextInactiveEnabled: true,
+      colorButtonClockInEnabled: true,
+      colorButtonClockOutEnabled: true,
+      colorButtonManualEnabled: true,
+      colorButtonClockInTextEnabled: true,
+      colorButtonClockOutTextEnabled: true,
+      colorButtonManualTextEnabled: true
     }
   });
 
@@ -77,6 +89,12 @@ publicRouter.get("/config", async (_req, res) => {
       colorNavTextInactive: "#FFFFFF",
       colorNavSubTextActive: "#111827",
       colorNavSubTextInactive: "#111827",
+      colorButtonClockIn: "#0F766E",
+      colorButtonClockOut: "#334155",
+      colorButtonManual: "#1D4ED8",
+      colorButtonClockInText: "#FFFFFF",
+      colorButtonClockOutText: "#FFFFFF",
+      colorButtonManualText: "#FFFFFF",
       colorApprovedEnabled: true,
       colorRejectedEnabled: true,
       colorManualCorrectionEnabled: true,
@@ -95,7 +113,13 @@ publicRouter.get("/config", async (_req, res) => {
       colorNavTextActiveEnabled: true,
       colorNavTextInactiveEnabled: true,
       colorNavSubTextActiveEnabled: true,
-      colorNavSubTextInactiveEnabled: true
+      colorNavSubTextInactiveEnabled: true,
+      colorButtonClockInEnabled: true,
+      colorButtonClockOutEnabled: true,
+      colorButtonManualEnabled: true,
+      colorButtonClockInTextEnabled: true,
+      colorButtonClockOutTextEnabled: true,
+      colorButtonManualTextEnabled: true
     });
     return;
   }

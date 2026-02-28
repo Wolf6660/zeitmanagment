@@ -46,3 +46,10 @@ export type EmployeeRow = {
   role: Role;
   isActive: boolean;
 };
+
+export type UiColors = {
+  primary: string;
+  success: string;
+  danger: string;
+  warning: string;
+};

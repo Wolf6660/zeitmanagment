@@ -1,17 +1,18 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { ApiClient } from "../services/api";
-import type { ClockType, SessionUser } from "../types/app";
+import type { ClockType, SessionUser, UiColors } from "../types/app";
 import { colors } from "../theme/colors";
 import { DateTimePickerField } from "../components/DateTimePickerField";
 
 type Props = {
   api: ApiClient;
   user: SessionUser;
+  uiColors: UiColors;
   onOpenPendingRequests?: () => void;
 };
 
-export function HomeScreen({ api, user, onOpenPendingRequests }: Props) {
+export function HomeScreen({ api, user, uiColors, onOpenPendingRequests }: Props) {
   const isLead = user.role === "SUPERVISOR" || user.role === "ADMIN";
   const [reasonText, setReasonText] = useState("");
   const [corrType, setCorrType] = useState<ClockType>("CLOCK_IN");
@@ -68,10 +69,10 @@ export function HomeScreen({ api, user, onOpenPendingRequests }: Props) {
           style={styles.input}
         />
         <View style={styles.row}>
-          <Pressable style={[styles.button, { backgroundColor: colors.success }]} onPress={() => submitClock("CLOCK_IN")}>
+          <Pressable style={[styles.button, { backgroundColor: uiColors.success }]} onPress={() => submitClock("CLOCK_IN")}>
             <Text style={styles.buttonText}>Kommen</Text>
           </Pressable>
-          <Pressable style={[styles.button, { backgroundColor: colors.danger }]} onPress={() => submitClock("CLOCK_OUT")}>
+          <Pressable style={[styles.button, { backgroundColor: uiColors.danger }]} onPress={() => submitClock("CLOCK_OUT")}>
             <Text style={styles.buttonText}>Gehen</Text>
           </Pressable>
         </View>
@@ -107,7 +108,7 @@ export function HomeScreen({ api, user, onOpenPendingRequests }: Props) {
               style={styles.input}
             />
             <Pressable
-              style={[styles.fullButton, busy && { opacity: 0.6 }]}
+              style={[styles.fullButton, { backgroundColor: uiColors.primary }, busy && { opacity: 0.6 }]}
               disabled={busy}
               onPress={async () => {
                 try {
@@ -142,7 +143,7 @@ export function HomeScreen({ api, user, onOpenPendingRequests }: Props) {
         <View style={styles.card}>
           <Text style={styles.section}>Berufsschule (Azubi)</Text>
           <Pressable
-            style={styles.fullButton}
+            style={[styles.fullButton, { backgroundColor: uiColors.primary }]}
             onPress={async () => {
               try {
                 const today = new Date().toISOString().slice(0, 10);
@@ -161,7 +162,7 @@ export function HomeScreen({ api, user, onOpenPendingRequests }: Props) {
       {isLead && (
         <View style={styles.card}>
           <Text style={styles.section}>Antragsuebersicht</Text>
-          <Pressable style={styles.fullButton} onPress={onOpenPendingRequests}>
+          <Pressable style={[styles.fullButton, { backgroundColor: uiColors.primary }]} onPress={onOpenPendingRequests}>
             <Text style={styles.buttonText}>{pendingLabel}</Text>
           </Pressable>
         </View>
@@ -197,7 +198,7 @@ const styles = StyleSheet.create({
   },
   row: { flexDirection: "row", gap: 8 },
   button: { flex: 1, borderRadius: 10, paddingVertical: 11, alignItems: "center" },
-  fullButton: { borderRadius: 10, paddingVertical: 11, alignItems: "center", backgroundColor: colors.primary },
+  fullButton: { borderRadius: 10, paddingVertical: 11, alignItems: "center" },
   buttonText: { color: "#fff", fontWeight: "700" },
   chip: {
     flex: 1,

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { DropdownField } from "../components/DropdownField";
 import type { ApiClient } from "../services/api";
-import type { ClockType, EmployeeRow, SessionUser } from "../types/app";
+import type { ClockType, EmployeeRow, SessionUser, UiColors } from "../types/app";
 import { colors } from "../theme/colors";
 import { DateTimePickerField } from "../components/DateTimePickerField";
 
@@ -22,6 +22,7 @@ type DayRow = {
 type Props = {
   api: ApiClient;
   user: SessionUser;
+  uiColors: UiColors;
 };
 
 function formatHHMM(d: Date): string {
@@ -37,7 +38,7 @@ function parseDayTime(dateIso: string, hhmm: string): Date {
   return out;
 }
 
-export function MonthScreen({ api, user }: Props) {
+export function MonthScreen({ api, user, uiColors }: Props) {
   const isLead = user.role === "SUPERVISOR" || user.role === "ADMIN";
   const [selfCorrectionMaxDays, setSelfCorrectionMaxDays] = useState(3);
 
@@ -161,10 +162,10 @@ export function MonthScreen({ api, user }: Props) {
               />
 
               <Pressable
-                style={styles.deleteButton}
+                style={[styles.deleteButton, { borderColor: uiColors.danger }]}
                 onPress={() => setEvents((prev) => prev.filter((e) => e.localId !== item.localId))}
               >
-                <Text style={styles.deleteText}>Loeschen</Text>
+                <Text style={[styles.deleteText, { color: uiColors.danger }]}>Loeschen</Text>
               </Pressable>
             </View>
           )}
@@ -208,7 +209,7 @@ export function MonthScreen({ api, user }: Props) {
                   <Text style={styles.secondaryButtonText}>Abbrechen</Text>
                 </Pressable>
                 <Pressable
-                  style={styles.button}
+                  style={[styles.button, { backgroundColor: uiColors.primary }]}
                   onPress={async () => {
                     try {
                       if (events.length === 0) {
@@ -341,12 +342,12 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: "#D1FAE5", borderColor: "#10B981" },
   chipText: { color: colors.text, fontWeight: "600" },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: "#fff", paddingHorizontal: 10, paddingVertical: 9 },
-  button: { flex: 1, backgroundColor: colors.primary, borderRadius: 10, alignItems: "center", paddingVertical: 11 },
+  button: { flex: 1, borderRadius: 10, alignItems: "center", paddingVertical: 11 },
   buttonText: { color: "#fff", fontWeight: "700" },
   secondaryButton: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 10, alignItems: "center", paddingVertical: 11, backgroundColor: "#fff" },
   secondaryButtonText: { color: colors.text, fontWeight: "700" },
-  deleteButton: { borderWidth: 1, borderColor: colors.danger, borderRadius: 8, paddingVertical: 8, alignItems: "center" },
-  deleteText: { color: colors.danger, fontWeight: "700" },
+  deleteButton: { borderWidth: 1, borderRadius: 8, paddingVertical: 8, alignItems: "center" },
+  deleteText: { fontWeight: "700" },
   error: { color: colors.danger },
   status: { color: colors.text, fontWeight: "600" }
 });

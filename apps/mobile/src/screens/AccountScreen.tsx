@@ -1,16 +1,17 @@
 import React from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import Constants from "expo-constants";
-import type { SessionUser } from "../types/app";
+import type { SessionUser, UiColors } from "../types/app";
 import { colors } from "../theme/colors";
 
 type Props = {
   user: SessionUser;
+  uiColors: UiColors;
   onLogout: () => Promise<void>;
   onResetApp: () => Promise<void>;
 };
 
-export function AccountScreen({ user, onLogout, onResetApp }: Props) {
+export function AccountScreen({ user, uiColors, onLogout, onResetApp }: Props) {
   const isAdmin = user.role === "ADMIN";
   const appVersion = Constants.expoConfig?.version ?? "0.0.0";
   const appBuild = Constants.expoConfig?.ios?.buildNumber ?? Constants.expoConfig?.android?.versionCode ?? "?";
@@ -30,12 +31,12 @@ export function AccountScreen({ user, onLogout, onResetApp }: Props) {
         </View>
       )}
 
-      <Pressable style={[styles.button, { backgroundColor: colors.primary }]} onPress={() => void onLogout()}>
+      <Pressable style={[styles.button, { backgroundColor: uiColors.primary }]} onPress={() => void onLogout()}>
         <Text style={styles.buttonText}>Abmelden</Text>
       </Pressable>
 
       <Pressable
-        style={[styles.button, { backgroundColor: colors.danger }]}
+        style={[styles.button, { backgroundColor: uiColors.danger }]}
         onPress={() => {
           Alert.alert(
             "App zuruecksetzen",

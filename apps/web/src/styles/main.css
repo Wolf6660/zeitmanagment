@@ -24,6 +24,12 @@
   --nav-text-inactive: #ffffff;
   --nav-sub-text-active: #111827;
   --nav-sub-text-inactive: #111827;
+  --btn-clock-in-bg: #0f766e;
+  --btn-clock-out-bg: #334155;
+  --btn-manual-bg: #1d4ed8;
+  --btn-clock-in-text: #ffffff;
+  --btn-clock-out-text: #ffffff;
+  --btn-manual-text: #ffffff;
 }
 
 * {
@@ -210,6 +216,21 @@ td {
 .app-sub-nav button.inactive {
   background: var(--nav-sub-inactive-bg);
   color: var(--nav-sub-text-inactive);
+}
+
+button.btn-clock-in {
+  background: var(--btn-clock-in-bg);
+  color: var(--btn-clock-in-text);
+}
+
+button.btn-clock-out {
+  background: var(--btn-clock-out-bg);
+  color: var(--btn-clock-out-text);
+}
+
+button.btn-manual {
+  background: var(--btn-manual-bg);
+  color: var(--btn-manual-text);
 }
 
 .brand-wrap {

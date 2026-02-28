@@ -80,6 +80,7 @@ export function EmployeeHome() {
           <input value={reasonText} onChange={(e) => setReasonText(e.target.value)} placeholder="Grund / Kommentar (Pflicht)" />
           <div className="row">
             <button
+              className="btn-clock-in"
               onClick={async () => {
                 try {
                   if (!reasonText.trim()) {
@@ -97,7 +98,7 @@ export function EmployeeHome() {
               Kommen
             </button>
             <button
-              className="secondary"
+              className="btn-clock-out"
               onClick={async () => {
                 try {
                   if (!reasonText.trim()) {
@@ -115,7 +116,7 @@ export function EmployeeHome() {
               Gehen
             </button>
           </div>
-          <button className="secondary" onClick={() => setManualMode((m) => !m)}>
+          <button className="btn-manual" onClick={() => setManualMode((m) => !m)}>
             {manualMode ? "Nachtragen schliessen" : "Nachtragen"}
           </button>
           {isAzubi && (
@@ -131,7 +132,7 @@ export function EmployeeHome() {
                   min={new Date(Date.now() - 3 * 86400000).toISOString().slice(0, 10)}
                 />
                 <button
-                  className="secondary"
+                  className="btn-manual"
                   onClick={async () => {
                     try {
                       if (!schoolDate) {
@@ -178,6 +179,7 @@ export function EmployeeHome() {
                 </label>
                 <textarea placeholder="Notiz (Pflichtfeld)" value={manualNote} onChange={(e) => setManualNote(e.target.value)} />
                 <button
+                  className="btn-manual"
                   onClick={async () => {
                     try {
                       if (!manualNote.trim()) {

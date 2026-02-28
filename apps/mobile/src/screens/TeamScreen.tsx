@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { ApiClient } from "../services/api";
+import type { UiColors } from "../types/app";
 import { colors } from "../theme/colors";
 
 type LeavePending = {
@@ -22,9 +23,10 @@ type BreakPending = {
 
 type Props = {
   api: ApiClient;
+  uiColors: UiColors;
 };
 
-export function TeamScreen({ api }: Props) {
+export function TeamScreen({ api, uiColors }: Props) {
   const [today, setToday] = useState<Array<{ id: string; userName: string; type: string; occurredAt: string }>>([]);
   const [pendingLeave, setPendingLeave] = useState<LeavePending[]>([]);
   const [pendingBreak, setPendingBreak] = useState<BreakPending[]>([]);
@@ -91,7 +93,7 @@ export function TeamScreen({ api }: Props) {
             />
             <View style={styles.actionRow}>
               <Pressable
-                style={[styles.button, { backgroundColor: colors.success }]}
+                style={[styles.button, { backgroundColor: uiColors.success }]}
                 onPress={async () => {
                   try {
                     const note = ensureNote(item.id);
@@ -106,7 +108,7 @@ export function TeamScreen({ api }: Props) {
                 <Text style={styles.buttonText}>Genehmigen</Text>
               </Pressable>
               <Pressable
-                style={[styles.button, { backgroundColor: colors.danger }]}
+                style={[styles.button, { backgroundColor: uiColors.danger }]}
                 onPress={async () => {
                   try {
                     const note = ensureNote(item.id);
@@ -143,7 +145,7 @@ export function TeamScreen({ api }: Props) {
             />
             <View style={styles.actionRow}>
               <Pressable
-                style={[styles.button, { backgroundColor: colors.success }]}
+                style={[styles.button, { backgroundColor: uiColors.success }]}
                 onPress={async () => {
                   try {
                     const note = ensureNote(item.id);
@@ -158,7 +160,7 @@ export function TeamScreen({ api }: Props) {
                 <Text style={styles.buttonText}>Genehmigen</Text>
               </Pressable>
               <Pressable
-                style={[styles.button, { backgroundColor: colors.danger }]}
+                style={[styles.button, { backgroundColor: uiColors.danger }]}
                 onPress={async () => {
                   try {
                     const note = ensureNote(item.id);

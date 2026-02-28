@@ -52,7 +52,17 @@ export class ApiClient {
   }
 
   publicConfig() {
-    return this.request<{ selfCorrectionMaxDays?: number }>("/api/public/config");
+    return this.request<{
+      selfCorrectionMaxDays?: number;
+      colorWebEntry?: string;
+      colorWebEntryEnabled?: boolean;
+      colorApproved?: string;
+      colorApprovedEnabled?: boolean;
+      colorRejected?: string;
+      colorRejectedEnabled?: boolean;
+      colorVacationWarning?: string;
+      colorVacationWarningEnabled?: boolean;
+    }>("/api/public/config");
   }
 
   clock(type: ClockType, reasonText: string) {

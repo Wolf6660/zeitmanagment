@@ -405,6 +405,12 @@ export const api = {
       colorNavTextInactive: string;
       colorNavSubTextActive: string;
       colorNavSubTextInactive: string;
+      colorButtonClockIn: string;
+      colorButtonClockOut: string;
+      colorButtonManual: string;
+      colorButtonClockInText: string;
+      colorButtonClockOutText: string;
+      colorButtonManualText: string;
       colorApprovedEnabled?: boolean;
       colorRejectedEnabled?: boolean;
       colorManualCorrectionEnabled?: boolean;
@@ -424,6 +430,12 @@ export const api = {
       colorNavTextInactiveEnabled?: boolean;
       colorNavSubTextActiveEnabled?: boolean;
       colorNavSubTextInactiveEnabled?: boolean;
+      colorButtonClockInEnabled?: boolean;
+      colorButtonClockOutEnabled?: boolean;
+      colorButtonManualEnabled?: boolean;
+      colorButtonClockInTextEnabled?: boolean;
+      colorButtonClockOutTextEnabled?: boolean;
+      colorButtonManualTextEnabled?: boolean;
       smtpEnabled?: boolean;
       smtpHost?: string | null;
       smtpPort?: number;
