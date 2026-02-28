@@ -1065,8 +1065,7 @@ const logoUploadSchema = z.object({
 });
 
 const mobileQrGenerateSchema = z.object({
-  userId: z.string().min(1),
-  expiresInDays: z.number().int().min(1).max(3650).optional()
+  userId: z.string().min(1)
 });
 
 const mobileQrRevokeSchema = z.object({
@@ -1130,8 +1129,6 @@ adminRouter.post("/mobile-qr/generate", async (req: AuthRequest, res) => {
     res.status(400).json({ message: "Weblogin ist fuer diesen Mitarbeiter deaktiviert." });
     return;
   }
-  const expiresInDays = parsed.data.expiresInDays ?? 180;
-  const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
   const token = crypto.randomBytes(24).toString("base64url");
   const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
   await prisma.user.update({
@@ -1139,7 +1136,7 @@ adminRouter.post("/mobile-qr/generate", async (req: AuthRequest, res) => {
     data: {
       mobileQrTokenHash: tokenHash,
       mobileQrEnabled: true,
-      mobileQrExpiresAt: expiresAt
+      mobileQrExpiresAt: null
     }
   });
   const cfg = await prisma.systemConfig.findUnique({
@@ -1161,13 +1158,13 @@ adminRouter.post("/mobile-qr/generate", async (req: AuthRequest, res) => {
     action: "MOBILE_QR_GENERATED",
     targetType: "User",
     targetId: user.id,
-    payload: { loginName: user.loginName, expiresAt: expiresAt.toISOString() }
+    payload: { loginName: user.loginName, expiresAt: null }
   });
   res.json({
     userId: user.id,
     loginName: user.loginName,
     employeeName: user.name,
-    expiresAt: expiresAt.toISOString(),
+    expiresAt: null,
     token,
     payload
   });

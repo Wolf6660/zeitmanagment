@@ -233,12 +233,11 @@ export function AdminHome() {
   const [editingAssignedTargetUserId, setEditingAssignedTargetUserId] = useState<string>("");
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [msg, setMsg] = useState("");
-  const [mobileQrDays, setMobileQrDays] = useState(180);
   const [mobileQrPreview, setMobileQrPreview] = useState<{
     userId: string;
     employeeName: string;
     loginName: string;
-    expiresAt: string;
+    expiresAt: string | null;
     token: string;
     payload: string;
     qrDataUrl: string;
@@ -322,16 +321,23 @@ export function AdminHome() {
   const sectionTitle = useMemo(() => {
     if (section === "company") return "Firmenstammdaten";
     if (section === "rules") return "Regeln";
-    if (section === "system") return "System";
+    if (section === "system") return "Backup";
     if (section === "colors") return "Farben";
     if (section === "mail") return "E-Mail";
     if (section === "employees") return "Mitarbeiter";
     if (section === "overtime") return "Ueberstunden";
     if (section === "bulk") return "Stapelerfassung";
-    if (section === "terminals") return "RFID-Terminals";
-    if (section === "esp") return "ESP32 Provisioning";
+    if (section === "terminals") return "RFID Tags";
+    if (section === "esp") return "ESP Terminals";
     if (section === "logs") return "Log";
     return "Admin";
+  }, [section]);
+
+  const activeGroup = useMemo(() => {
+    if (["company", "colors", "rules", "system", "mail"].includes(section)) return "general";
+    if (["employees", "bulk", "overtime"].includes(section)) return "people";
+    if (["terminals", "esp"].includes(section)) return "rfid";
+    return "logs";
   }, [section]);
 
   if (!config) {
@@ -342,18 +348,37 @@ export function AdminHome() {
     <div className="card">
       <h2>Admin</h2>
       <div className="row" style={{ marginBottom: 12 }}>
-        <button onClick={() => setSearchParams({ section: "company" })}>Firmenstammdaten</button>
-        <button onClick={() => setSearchParams({ section: "rules" })}>Regeln</button>
-        <button onClick={() => setSearchParams({ section: "system" })}>System</button>
-        <button onClick={() => setSearchParams({ section: "colors" })}>Farben</button>
-        <button onClick={() => setSearchParams({ section: "mail" })}>E-Mail</button>
-        <button onClick={() => setSearchParams({ section: "employees" })}>Mitarbeiter</button>
-        <button onClick={() => setSearchParams({ section: "overtime" })}>Ueberstunden</button>
-        <button onClick={() => setSearchParams({ section: "bulk" })}>Stapelerfassung</button>
-        <button onClick={() => setSearchParams({ section: "terminals" })}>RFID-Terminals</button>
-        <button onClick={() => setSearchParams({ section: "esp" })}>ESP32 Provisioning</button>
-        <button onClick={() => setSearchParams({ section: "logs" })}>Log</button>
+        <button className={activeGroup === "general" ? "" : "secondary"} onClick={() => setSearchParams({ section: "company" })}>Allgemein</button>
+        <button className={activeGroup === "people" ? "" : "secondary"} onClick={() => setSearchParams({ section: "employees" })}>Personal</button>
+        <button className={activeGroup === "rfid" ? "" : "secondary"} onClick={() => setSearchParams({ section: "terminals" })}>RFID</button>
+        <button className={activeGroup === "logs" ? "" : "secondary"} onClick={() => setSearchParams({ section: "logs" })}>Logs</button>
       </div>
+      {activeGroup !== "logs" && (
+        <div className="row" style={{ marginBottom: 12 }}>
+          {activeGroup === "general" && (
+            <>
+              <button className={section === "company" ? "" : "secondary"} onClick={() => setSearchParams({ section: "company" })}>Firmenstammdaten</button>
+              <button className={section === "colors" ? "" : "secondary"} onClick={() => setSearchParams({ section: "colors" })}>Farben</button>
+              <button className={section === "rules" ? "" : "secondary"} onClick={() => setSearchParams({ section: "rules" })}>Regeln</button>
+              <button className={section === "system" ? "" : "secondary"} onClick={() => setSearchParams({ section: "system" })}>Backup</button>
+              <button className={section === "mail" ? "" : "secondary"} onClick={() => setSearchParams({ section: "mail" })}>E-Mail</button>
+            </>
+          )}
+          {activeGroup === "people" && (
+            <>
+              <button className={section === "employees" ? "" : "secondary"} onClick={() => setSearchParams({ section: "employees" })}>Mitarbeiter</button>
+              <button className={section === "bulk" ? "" : "secondary"} onClick={() => setSearchParams({ section: "bulk" })}>Stapelerfassung</button>
+              <button className={section === "overtime" ? "" : "secondary"} onClick={() => setSearchParams({ section: "overtime" })}>Ueberstunden</button>
+            </>
+          )}
+          {activeGroup === "rfid" && (
+            <>
+              <button className={section === "terminals" ? "" : "secondary"} onClick={() => setSearchParams({ section: "terminals" })}>RFID Tags</button>
+              <button className={section === "esp" ? "" : "secondary"} onClick={() => setSearchParams({ section: "esp" })}>ESP Terminals</button>
+            </>
+          )}
+        </div>
+      )}
 
       <h3>{sectionTitle}</h3>
 
@@ -1434,19 +1459,6 @@ export function AdminHome() {
           </div>
 
           <div className="card admin-section-card admin-table-wrap">
-            <div className="row" style={{ padding: "8px 8px 0 8px" }}>
-              <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                Mobile QR Gueltigkeit (Tage)
-                <input
-                  type="number"
-                  min={1}
-                  max={3650}
-                  value={mobileQrDays}
-                  onChange={(e) => setMobileQrDays(Math.min(3650, Math.max(1, Number(e.target.value) || 180)))}
-                  style={{ width: 110 }}
-                />
-              </label>
-            </div>
             <table>
               <thead>
                 <tr>
@@ -1542,8 +1554,7 @@ export function AdminHome() {
                       )}
                     </td>
                     <td>
-                      {e.mobileQrEnabled
-                        ? `Aktiv bis ${e.mobileQrExpiresAt ? new Date(e.mobileQrExpiresAt).toLocaleDateString("de-DE") : "-"}` : "Deaktiviert"}
+                      {e.mobileQrEnabled ? "Aktiv" : "Deaktiviert"}
                     </td>
                     <td>
                       {editing ? (
@@ -1663,10 +1674,7 @@ export function AdminHome() {
                                 className="secondary"
                                 onClick={async () => {
                                   try {
-                                    const generated = await api.generateMobileQr({
-                                      userId: e.id,
-                                      expiresInDays: mobileQrDays
-                                    });
+                                    const generated = await api.generateMobileQr({ userId: e.id });
                                     const qrDataUrl = await QRCode.toDataURL(generated.payload, {
                                       margin: 1,
                                       width: 512
@@ -2320,7 +2328,7 @@ export function AdminHome() {
           >
             <h3 style={{ marginTop: 0 }}>Mobile QR Login</h3>
             <div><strong>Mitarbeiter:</strong> {mobileQrPreview.employeeName} ({mobileQrPreview.loginName})</div>
-            <div><strong>Gueltig bis:</strong> {new Date(mobileQrPreview.expiresAt).toLocaleString("de-DE")}</div>
+            <div><strong>Gueltig:</strong> Unbegrenzt</div>
             <div className="row" style={{ alignItems: "flex-start", marginTop: 10 }}>
               <img src={mobileQrPreview.qrDataUrl} alt="Mobile Login QR" style={{ width: 260, height: 260, border: "1px solid var(--border)", borderRadius: 8, background: "#fff", padding: 8 }} />
               <div className="grid" style={{ minWidth: 320, flex: 1 }}>
@@ -2359,10 +2367,9 @@ export function AdminHome() {
                       const esc = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
                       const employeeSafe = esc(mobileQrPreview.employeeName);
                       const loginSafe = esc(mobileQrPreview.loginName);
-                      const expiresSafe = esc(new Date(mobileQrPreview.expiresAt).toLocaleString("de-DE"));
                       const payloadSafe = esc(mobileQrPreview.payload);
                       w.document.open();
-                      w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Mobile QR</title><style>body{font-family:Arial,sans-serif;padding:24px}h1{margin:0 0 8px}img{width:320px;height:320px;border:1px solid #ddd;padding:8px;border-radius:8px;background:#fff}.meta{margin:8px 0 16px;color:#111}.payload{margin-top:14px;font-family:monospace;white-space:pre-wrap;word-break:break-all;border:1px solid #ddd;padding:10px;border-radius:8px}</style></head><body><h1>Mobile QR Login</h1><div class="meta"><strong>Mitarbeiter:</strong> ${employeeSafe} (${loginSafe})<br/><strong>Gueltig bis:</strong> ${expiresSafe}</div><img src="${mobileQrPreview.qrDataUrl}" alt="QR"/><div class="payload">${payloadSafe}</div></body></html>`);
+                      w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Mobile QR</title><style>body{font-family:Arial,sans-serif;padding:24px}h1{margin:0 0 8px}img{width:320px;height:320px;border:1px solid #ddd;padding:8px;border-radius:8px;background:#fff}.meta{margin:8px 0 16px;color:#111}.payload{margin-top:14px;font-family:monospace;white-space:pre-wrap;word-break:break-all;border:1px solid #ddd;padding:10px;border-radius:8px}</style></head><body><h1>Mobile QR Login</h1><div class="meta"><strong>Mitarbeiter:</strong> ${employeeSafe} (${loginSafe})<br/><strong>Gueltig:</strong> Unbegrenzt</div><img src="${mobileQrPreview.qrDataUrl}" alt="QR"/><div class="payload">${payloadSafe}</div></body></html>`);
                       w.document.close();
                       w.focus();
                       setTimeout(() => w.print(), 250);

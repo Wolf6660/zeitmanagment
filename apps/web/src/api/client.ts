@@ -608,10 +608,10 @@ export const api = {
   uploadLogo: (payload: { filename: string; contentBase64: string }) =>
     request<{ logoUrl: string }>("/api/admin/logo-upload", { method: "POST", body: JSON.stringify(payload) }),
 
-  generateMobileQr: (payload: { userId: string; expiresInDays?: number }) =>
-    request<{ userId: string; loginName: string; employeeName: string; expiresAt: string; token: string; payload: string }>(
+  generateMobileQr: (payload: { userId: string }) =>
+    request<{ userId: string; loginName: string; employeeName: string; expiresAt: string | null; token: string; payload: string }>(
       `/api/employees/${payload.userId}/mobile-qr/generate`,
-      { method: "POST", body: JSON.stringify({ expiresInDays: payload.expiresInDays }) }
+      { method: "POST", body: JSON.stringify({}) }
     ),
 
   revokeMobileQr: (payload: { userId: string }) =>

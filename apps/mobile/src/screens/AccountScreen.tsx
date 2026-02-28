@@ -1,5 +1,6 @@
 import React from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import Constants from "expo-constants";
 import type { SessionUser } from "../types/app";
 import { colors } from "../theme/colors";
 
@@ -11,6 +12,8 @@ type Props = {
 
 export function AccountScreen({ user, onLogout, onResetApp }: Props) {
   const isAdmin = user.role === "ADMIN";
+  const appVersion = Constants.expoConfig?.version ?? "0.0.0";
+  const appBuild = Constants.expoConfig?.ios?.buildNumber ?? Constants.expoConfig?.android?.versionCode ?? "?";
 
   return (
     <View style={styles.container}>
@@ -56,6 +59,7 @@ export function AccountScreen({ user, onLogout, onResetApp }: Props) {
       <Text style={styles.hint}>
         Aus Sicherheitsgruenden sind die Einrichtungsdaten nicht einsehbar und nicht aenderbar.
       </Text>
+      <Text style={styles.version}>Version {appVersion} (Build {String(appBuild)}) - Beta</Text>
     </View>
   );
 }
@@ -67,9 +71,9 @@ const styles = StyleSheet.create({
   name: { fontSize: 18, fontWeight: "700", color: colors.text },
   meta: { color: colors.muted },
   adminTitle: { color: colors.text, fontWeight: "700", marginBottom: 6 },
-  adminItem: { color: colors.text },
   adminHint: { color: colors.muted, marginTop: 6, fontSize: 12 },
   button: { borderRadius: 10, paddingVertical: 12, alignItems: "center" },
   buttonText: { color: "#fff", fontWeight: "700" },
-  hint: { color: colors.muted }
+  hint: { color: colors.muted },
+  version: { color: colors.muted, fontSize: 12, marginTop: 8 }
 });

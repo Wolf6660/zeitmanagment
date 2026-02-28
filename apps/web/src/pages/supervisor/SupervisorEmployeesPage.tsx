@@ -24,12 +24,12 @@ export function SupervisorEmployeesPage() {
   const [msg, setMsg] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Partial<Employee>>({});
-  const [mobileQrDays, setMobileQrDays] = useState(180);
+  const [expandedEmployeeActionsId, setExpandedEmployeeActionsId] = useState<string | null>(null);
   const [mobileQrPreview, setMobileQrPreview] = useState<{
     userId: string;
     employeeName: string;
     loginName: string;
-    expiresAt: string;
+    expiresAt: string | null;
     token: string;
     payload: string;
     qrDataUrl: string;
@@ -177,11 +177,20 @@ export function SupervisorEmployeesPage() {
         <tbody>
           {employees.map((e) => {
             const isEdit = editingId === e.id;
+            const expanded = expandedEmployeeActionsId === e.id;
             const canEdit = e.role === "EMPLOYEE" || e.role === "AZUBI";
             const canResetPassword = session?.user.role === "ADMIN" || canEdit || e.id === session?.user.id;
             const canManageQr = session?.user.role === "ADMIN" || canEdit || e.id === session?.user.id;
             return (
-              <tr key={e.id}>
+              <React.Fragment key={e.id}>
+              <tr
+                onClick={(ev) => {
+                  const tag = (ev.target as HTMLElement).tagName;
+                  if (["INPUT", "SELECT", "TEXTAREA", "BUTTON", "OPTION"].includes(tag)) return;
+                  setExpandedEmployeeActionsId((prev) => (prev === e.id ? null : e.id));
+                }}
+                style={{ cursor: "pointer" }}
+              >
                 <td>{isEdit ? <input value={editing.name ?? e.name} onChange={(ev) => setEditing({ ...editing, name: ev.target.value })} /> : e.name}</td>
                 <td>{e.role}</td>
                 <td>{e.loginName}</td>
@@ -206,15 +215,25 @@ export function SupervisorEmployeesPage() {
                   ) : e.isActive ? "Ja" : "Nein"}
                 </td>
                 <td>
-                  {e.mobileQrEnabled
-                    ? `Aktiv bis ${e.mobileQrExpiresAt ? new Date(e.mobileQrExpiresAt).toLocaleDateString("de-DE") : "-"}`
-                    : "Deaktiviert"}
+                  {e.mobileQrEnabled ? "Aktiv" : "Deaktiviert"}
                 </td>
                 <td>
-                  {!isEdit && canEdit && (
-                    <div className="row">
-                      <button className="secondary" onClick={() => { setEditingId(e.id); setEditing(e); }}>Bearbeiten</button>
-                      {canResetPassword && (
+                  <button className="secondary" onClick={() => setExpandedEmployeeActionsId((prev) => (prev === e.id ? null : e.id))}>
+                    {expanded ? "Aktionen einklappen" : "Aktionen anzeigen"}
+                  </button>
+                </td>
+              </tr>
+              {expanded && (
+                <tr>
+                  <td colSpan={11}>
+                    <div className="row" style={{ width: "100%", padding: "8px 4px" }}>
+                      {!isEdit && canEdit && (
+                        <button className="secondary" onClick={() => { setEditingId(e.id); setEditing(e); }}>
+                          Bearbeiten
+                        </button>
+                      )}
+                      {!isEdit && !canEdit && !canResetPassword && <span>Nur Ansicht</span>}
+                      {!isEdit && canResetPassword && (
                         <button
                           className="secondary"
                           onClick={async () => {
@@ -240,15 +259,12 @@ export function SupervisorEmployeesPage() {
                           Passwort reset
                         </button>
                       )}
-                      {canManageQr && (
+                      {!isEdit && canManageQr && (
                         <button
                           className="secondary"
                           onClick={async () => {
                             try {
-                              const generated = await api.generateMobileQr({
-                                userId: e.id,
-                                expiresInDays: mobileQrDays
-                              });
+                              const generated = await api.generateMobileQr({ userId: e.id });
                               const qrDataUrl = await QRCode.toDataURL(generated.payload, { margin: 1, width: 512 });
                               setMobileQrPreview({
                                 userId: e.id,
@@ -269,7 +285,7 @@ export function SupervisorEmployeesPage() {
                           {e.mobileQrEnabled ? "QR-Code anzeigen" : "QR-Code erstellen"}
                         </button>
                       )}
-                      {canManageQr && e.mobileQrEnabled && (
+                      {!isEdit && canManageQr && e.mobileQrEnabled && (
                         <button
                           className="secondary"
                           onClick={async () => {
@@ -288,115 +304,32 @@ export function SupervisorEmployeesPage() {
                           QR-Code loeschen
                         </button>
                       )}
-                    </div>
-                  )}
-                  {!isEdit && !canEdit && canResetPassword && (
-                    <div className="row">
-                      <button
-                        className="secondary"
-                        onClick={async () => {
-                          try {
-                            const p1 = window.prompt(`Neues Passwort fuer ${e.name} eingeben:`, "");
-                            if (!p1) return;
-                            const p2 = window.prompt("Passwort wiederholen:", "");
-                            if (p1 !== p2) {
-                              setMsg("Passwoerter stimmen nicht ueberein.");
-                              return;
-                            }
-                            if (!/^.{8,}$/.test(p1) || !/([0-9]|[^A-Za-z0-9])/.test(p1)) {
-                              setMsg("Passwort muss mindestens 8 Zeichen und mindestens eine Zahl oder ein Sonderzeichen enthalten.");
-                              return;
-                            }
-                            await api.resetEmployeePassword(e.id, { newPassword: p1 });
-                            setMsg(`Passwort fuer ${e.name} wurde zurueckgesetzt.`);
-                          } catch (err) {
-                            setMsg((err as Error).message);
-                          }
-                        }}
-                      >
-                        Passwort reset
-                      </button>
-                      {canManageQr && (
-                        <button
-                          className="secondary"
-                          onClick={async () => {
+                      {isEdit && (
+                        <>
+                          <button onClick={async () => {
                             try {
-                              const generated = await api.generateMobileQr({
-                                userId: e.id,
-                                expiresInDays: mobileQrDays
-                              });
-                              const qrDataUrl = await QRCode.toDataURL(generated.payload, { margin: 1, width: 512 });
-                              setMobileQrPreview({
-                                userId: e.id,
-                                employeeName: generated.employeeName,
-                                loginName: generated.loginName,
-                                expiresAt: generated.expiresAt,
-                                token: generated.token,
-                                payload: generated.payload,
-                                qrDataUrl
-                              });
-                              setMsg(e.mobileQrEnabled ? `QR-Code fuer ${e.name} neu angezeigt.` : `QR-Code fuer ${e.name} erstellt.`);
+                              await api.updateEmployee(e.id, editing);
+                              setEditingId(null);
+                              setEditing({});
+                              setMsg("Mitarbeiter aktualisiert.");
                               await load();
                             } catch (err) {
                               setMsg((err as Error).message);
                             }
-                          }}
-                        >
-                          {e.mobileQrEnabled ? "QR-Code anzeigen" : "QR-Code erstellen"}
-                        </button>
-                      )}
-                      {canManageQr && e.mobileQrEnabled && (
-                        <button
-                          className="secondary"
-                          onClick={async () => {
-                            try {
-                              const ok = window.confirm(`QR-Code fuer ${e.name} wirklich loeschen?`);
-                              if (!ok) return;
-                              await api.revokeMobileQr({ userId: e.id });
-                              setMsg(`QR-Code fuer ${e.name} geloescht.`);
-                              if (mobileQrPreview?.userId === e.id) setMobileQrPreview(null);
-                              await load();
-                            } catch (err) {
-                              setMsg((err as Error).message);
-                            }
-                          }}
-                        >
-                          QR-Code loeschen
-                        </button>
+                          }}>Speichern</button>
+                          <button className="secondary" onClick={() => { setEditingId(null); setEditing({}); }}>Abbrechen</button>
+                        </>
                       )}
                     </div>
-                  )}
-                  {!isEdit && !canEdit && !canResetPassword && <span>Nur Ansicht</span>}
-                  {isEdit && (
-                    <div className="row">
-                      <button onClick={async () => {
-                        try {
-                          await api.updateEmployee(e.id, editing);
-                          setEditingId(null);
-                          setEditing({});
-                          setMsg("Mitarbeiter aktualisiert.");
-                          await load();
-                        } catch (err) {
-                          setMsg((err as Error).message);
-                        }
-                      }}>Speichern</button>
-                      <button className="secondary" onClick={() => { setEditingId(null); setEditing({}); }}>Abbrechen</button>
-                    </div>
-                  )}
-                </td>
-              </tr>
+                  </td>
+                </tr>
+              )}
+              </React.Fragment>
             );
           })}
           {employees.length === 0 && <tr><td colSpan={11}>Keine Mitarbeiter.</td></tr>}
         </tbody>
       </table>
-
-      <div className="row" style={{ marginTop: 10 }}>
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-          QR Gueltigkeit (Tage)
-          <input type="number" min={1} max={3650} value={mobileQrDays} onChange={(e) => setMobileQrDays(Math.min(3650, Math.max(1, Number(e.target.value) || 180)))} style={{ width: 110 }} />
-        </label>
-      </div>
 
       {mobileQrPreview && (
         <div
@@ -415,7 +348,7 @@ export function SupervisorEmployeesPage() {
           <div className="card" style={{ width: "min(920px, 100%)", maxHeight: "92vh", overflow: "auto" }} onClick={(e) => e.stopPropagation()}>
             <h3 style={{ marginTop: 0 }}>Mobile QR Login</h3>
             <div><strong>Mitarbeiter:</strong> {mobileQrPreview.employeeName} ({mobileQrPreview.loginName})</div>
-            <div><strong>Gueltig bis:</strong> {new Date(mobileQrPreview.expiresAt).toLocaleString("de-DE")}</div>
+            <div><strong>Gueltig:</strong> Unbegrenzt</div>
             <div className="row" style={{ alignItems: "flex-start", marginTop: 10 }}>
               <img src={mobileQrPreview.qrDataUrl} alt="Mobile Login QR" style={{ width: 260, height: 260, border: "1px solid var(--border)", borderRadius: 8, background: "#fff", padding: 8 }} />
               <div className="grid" style={{ minWidth: 320, flex: 1 }}>
@@ -434,7 +367,7 @@ export function SupervisorEmployeesPage() {
                       if (!w) { setMsg("Druckfenster konnte nicht geoeffnet werden."); return; }
                       const esc = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
                       w.document.open();
-                      w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Mobile QR</title><style>body{font-family:Arial,sans-serif;padding:24px}h1{margin:0 0 8px}img{width:320px;height:320px;border:1px solid #ddd;padding:8px;border-radius:8px;background:#fff}.meta{margin:8px 0 16px;color:#111}.payload{margin-top:14px;font-family:monospace;white-space:pre-wrap;word-break:break-all;border:1px solid #ddd;padding:10px;border-radius:8px}</style></head><body><h1>Mobile QR Login</h1><div class="meta"><strong>Mitarbeiter:</strong> ${esc(mobileQrPreview.employeeName)} (${esc(mobileQrPreview.loginName)})<br/><strong>Gueltig bis:</strong> ${esc(new Date(mobileQrPreview.expiresAt).toLocaleString("de-DE"))}</div><img src="${mobileQrPreview.qrDataUrl}" alt="QR"/><div class="payload">${esc(mobileQrPreview.payload)}</div></body></html>`);
+                      w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Mobile QR</title><style>body{font-family:Arial,sans-serif;padding:24px}h1{margin:0 0 8px}img{width:320px;height:320px;border:1px solid #ddd;padding:8px;border-radius:8px;background:#fff}.meta{margin:8px 0 16px;color:#111}.payload{margin-top:14px;font-family:monospace;white-space:pre-wrap;word-break:break-all;border:1px solid #ddd;padding:10px;border-radius:8px}</style></head><body><h1>Mobile QR Login</h1><div class="meta"><strong>Mitarbeiter:</strong> ${esc(mobileQrPreview.employeeName)} (${esc(mobileQrPreview.loginName)})<br/><strong>Gueltig:</strong> Unbegrenzt</div><img src="${mobileQrPreview.qrDataUrl}" alt="QR"/><div class="payload">${esc(mobileQrPreview.payload)}</div></body></html>`);
                       w.document.close();
                       w.focus();
                       setTimeout(() => w.print(), 250);
