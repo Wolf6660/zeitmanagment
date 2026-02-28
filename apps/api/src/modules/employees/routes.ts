@@ -219,9 +219,7 @@ const supervisorResetPasswordSchema = z.object({
     .regex(/^(?=.*([0-9]|[^A-Za-z0-9])).+$/, "Passwort braucht mindestens eine Zahl oder ein Sonderzeichen.")
 });
 
-const mobileQrGenerateSchema = z.object({
-  expiresInDays: z.number().int().min(1).max(3650).optional()
-});
+const mobileQrGenerateSchema = z.object({});
 
 employeesRouter.patch("/:id", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
   const parsed = updateEmployeeSchema.safeParse(req.body);
@@ -377,8 +375,6 @@ employeesRouter.post("/:id/mobile-qr/generate", requireRole([Role.SUPERVISOR, Ro
     return;
   }
 
-  const expiresInDays = parsed.data.expiresInDays ?? 180;
-  const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
   const token = crypto.randomBytes(24).toString("base64url");
   const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
 
@@ -387,7 +383,7 @@ employeesRouter.post("/:id/mobile-qr/generate", requireRole([Role.SUPERVISOR, Ro
     data: {
       mobileQrTokenHash: tokenHash,
       mobileQrEnabled: true,
-      mobileQrExpiresAt: expiresAt
+      mobileQrExpiresAt: null
     }
   });
 
@@ -412,7 +408,7 @@ employeesRouter.post("/:id/mobile-qr/generate", requireRole([Role.SUPERVISOR, Ro
       action: "MOBILE_QR_GENERATED",
       targetType: "User",
       targetId: target.id,
-      payload: { loginName: target.loginName, expiresAt: expiresAt.toISOString() }
+      payload: { loginName: target.loginName, expiresAt: null }
     });
   } catch {
     // QR wurde erstellt; Logging-Fehler darf den Request nicht fehlschlagen lassen.
@@ -422,7 +418,7 @@ employeesRouter.post("/:id/mobile-qr/generate", requireRole([Role.SUPERVISOR, Ro
     userId: target.id,
     loginName: target.loginName,
     employeeName: target.name,
-    expiresAt: expiresAt.toISOString(),
+    expiresAt: null,
     token,
     payload
   });
