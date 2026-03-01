@@ -12,26 +12,37 @@
       "policy": "appVersion"
     },
     "updates": {
-      "fallbackToCacheTimeout": 0
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/d33bc00d-ec8d-47fc-aea5-add4d1c4b545"
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "de.zeitmanagment.mobile",
       "buildNumber": "1",
       "infoPlist": {
-        "NSCameraUsageDescription": "Die Kamera wird nur genutzt, um den verschluesselten Einrichtungs-QR-Code zu scannen."
+        "NSCameraUsageDescription": "Die Kamera wird nur genutzt, um den verschluesselten Einrichtungs-QR-Code zu scannen.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "package": "de.zeitmanagment.mobile",
-      "versionCode": 1
+      "versionCode": 1,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "plugins": [
       "expo-secure-store",
       "expo-camera"
     ],
     "extra": {
-      "releaseChannel": "beta"
+      "releaseChannel": "beta",
+      "eas": {
+        "projectId": "d33bc00d-ec8d-47fc-aea5-add4d1c4b545"
+      }
     }
   }
 }

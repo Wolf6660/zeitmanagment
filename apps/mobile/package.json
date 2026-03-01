@@ -18,12 +18,14 @@
     "expo-camera": "~16.0.8",
     "expo-secure-store": "~14.0.1",
     "expo-status-bar": "~2.0.0",
+    "expo-updates": "~0.28.18",
     "react": "19.0.0",
     "react-native": "0.79.0"
   },
   "devDependencies": {
     "@types/crypto-js": "^4.2.2",
     "@types/react": "~19.0.10",
+    "eas-cli": "^18.0.6",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3"
   }
