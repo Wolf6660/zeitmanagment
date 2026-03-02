@@ -1,5 +1,6 @@
 import { Prisma, Role } from "@prisma/client";
 import bcrypt from "bcrypt";
+import CryptoJS from "crypto-js";
 import crypto from "node:crypto";
 import { Router } from "express";
 import { z } from "zod";
@@ -220,6 +221,8 @@ const supervisorResetPasswordSchema = z.object({
 });
 
 const mobileQrGenerateSchema = z.object({});
+const MOBILE_QR_PREFIX = "ZMOBILE1:";
+const MOBILE_QR_SECRET = "zm-mobile-bootstrap-v1";
 
 employeesRouter.patch("/:id", requireRole([Role.SUPERVISOR, Role.ADMIN]), async (req: AuthRequest, res) => {
   const parsed = updateEmployeeSchema.safeParse(req.body);
@@ -394,12 +397,12 @@ employeesRouter.post("/:id/mobile-qr/generate", requireRole([Role.SUPERVISOR, Ro
   const apiBase =
     (cfg?.mobileAppApiBaseUrl || "").trim()
     || (env.WEB_ORIGIN === "*" ? "" : env.WEB_ORIGIN);
-  const payload = JSON.stringify({
-    kind: "ZEITMANAGMENT_MOBILE_LOGIN",
-    apiBase,
-    token,
+  const payloadObj = {
+    apiBaseUrl: apiBase,
     loginName: target.loginName
-  });
+  };
+  const encrypted = CryptoJS.AES.encrypt(JSON.stringify(payloadObj), MOBILE_QR_SECRET).toString();
+  const payload = `${MOBILE_QR_PREFIX}${encrypted}`;
 
   try {
     await writeAuditLog({

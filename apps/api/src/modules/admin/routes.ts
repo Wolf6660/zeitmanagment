@@ -1,4 +1,5 @@
 import { Role } from "@prisma/client";
+import CryptoJS from "crypto-js";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -13,6 +14,8 @@ import { env } from "../../config/env.js";
 import { buildBackupPayload, type BackupMode } from "../../utils/backup.js";
 
 export const adminRouter = Router();
+const MOBILE_QR_PREFIX = "ZMOBILE1:";
+const MOBILE_QR_SECRET = "zm-mobile-bootstrap-v1";
 
 adminRouter.use(requireAuth, requireRole([Role.ADMIN]));
 
@@ -1174,12 +1177,12 @@ adminRouter.post("/mobile-qr/generate", async (req: AuthRequest, res) => {
   const apiBase =
     (cfg?.mobileAppApiBaseUrl || "").trim()
     || (env.WEB_ORIGIN === "*" ? "" : env.WEB_ORIGIN);
-  const payload = JSON.stringify({
-    kind: "ZEITMANAGMENT_MOBILE_LOGIN",
-    apiBase,
-    token,
+  const payloadObj = {
+    apiBaseUrl: apiBase,
     loginName: user.loginName
-  });
+  };
+  const encrypted = CryptoJS.AES.encrypt(JSON.stringify(payloadObj), MOBILE_QR_SECRET).toString();
+  const payload = `${MOBILE_QR_PREFIX}${encrypted}`;
   await writeAuditLog({
     actorUserId: req.auth.userId,
     actorLoginName: await resolveActorLoginName(req.auth.userId),
